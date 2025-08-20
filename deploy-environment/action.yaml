@@ -56,7 +56,7 @@ runs:
         --subscription ${{ inputs.subscription-id }} \
         --query "id" \
         --output tsv)"
-        echo "resource-id=$resource-id" >> "$GITHUB_OUTPUT"
+        echo "resource-id=$(echo $resource-id)" >> "$GITHUB_OUTPUT"
         echo "environment-ref=$(\
         echo "$resource-id" | awk -F '/' '{printf("azureml:%s:%s\n"),$11,$13 }'
         )" >> "$GITHUB_OUTPUT"
