@@ -1,0 +1,64 @@
+name: Deploy Environment
+description: Deploy an Environment to AzureML
+inputs:
+  tenant-id:
+    description: 'Tenant id'
+    required: true
+  subscription-id:
+    description: 'Azure subscription id'
+    required: true
+  resource-group:
+    description: 'Azure resource group'
+    required: true
+  workspace-name:
+    description: 'Azure Machine Learning workspace name'
+    required: true
+  client-id:
+    description: 'Client id configured with Federated Credentials'
+    required: true
+  environment-path:
+    description: 'Environment definition file with full path'
+    required: true
+
+outputs:
+  environment-id:
+    description: 'resource id of the environment'
+    value: ${{ steps.create_environment.outputs.environment-id }}
+  environment-ref:
+    description: 'reference string of environment within AzureML workspace'
+    value: ${{ steps.create_environment.outputs.environment-ref }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        enable-AzPSSession: true
+        auth-type: SERVICE_PRINCIPAL
+
+    - name: Create Environment
+      shell: bash
+      id: create_environment
+      run: |
+        az extension add -n ml -y
+        echo "environment-id=$(\
+        az ml environment create \
+        --file ${{ inputs.environment-path }} \
+        -g ${{ inputs.resource-group }} \
+        -w ${{ inputs.workspace-name }} \
+        --subscription ${{ inputs.subscription-id }} \
+        --query "id" \
+        --output tsv \
+        )" >> "$GITHUB_OUTPUT"
+        echo "environment-ref=$(\
+        echo "${{ steps.create_environment.outputs.environment-id }}" | awk -F '/' '{printf("azureml:%s:%s\n"),$11,$13 }'
+        )" >> "$GITHUB_OUTPUT"
+    - name: Print Result
+      shell: bash
+      run: |
+        echo "Resource ID of AzureML Environment: ${{ steps.create_environment.outputs.environment-id }}"
+        echo "Reference url of AzureML Environment within workspace: ${{ steps.create_environment.outputs.environment-ref }}"
