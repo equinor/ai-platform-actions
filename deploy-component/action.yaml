@@ -1,0 +1,81 @@
+name: Deploy Component
+description: Deploy a Component to AzureML
+inputs:
+  tenant-id:
+    description: 'Tenant id'
+    required: true
+  subscription-id:
+    description: 'Azure subscription id'
+    required: true
+  resource-group:
+    description: 'Azure resource group'
+    required: true
+  workspace-name:
+    description: 'Azure Machine Learning workspace name'
+    required: true
+  client-id:
+    description: 'Client id configured with Federated Credentials'
+    required: true
+  component-path:
+    description: 'Component definition file with full path'
+    required: true
+
+outputs:
+  resource-id:
+    description: 'resource id of the component'
+    value: ${{ steps.create_component.outputs.resource-id }}
+  component-ref:
+    description: 'reference string of component within AzureML workspace'
+    value: ${{ steps.ref_ver.outputs.component-ref }}
+  component-version:
+    description: 'The registered version of the component within the workspace'
+    value: ${{ steps.ref_ver.outputs.component-version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        enable-AzPSSession: true
+        auth-type: SERVICE_PRINCIPAL
+
+    - name: Az ml
+      shell: bash
+      run: |
+        az extension add -n ml -y
+
+    - name: Create Component
+      shell: bash
+      id: create_component
+      run: |
+        echo "resource-id=$(\
+        az ml component create \
+        --file ${{ inputs.component-path }} \
+        -g ${{ inputs.resource-group }} \
+        -w ${{ inputs.workspace-name }} \
+        --subscription ${{ inputs.subscription-id }} \
+        --query "id" \
+        --output tsv \
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Ref and version
+      shell: bash
+      id: ref_ver
+      run: |
+        echo "component-ref=$(\
+        echo "${{ steps.create_component.outputs.resource-id }}" | awk -F '/' '{printf("azureml:%s:%s\n"),$11,$13 }'
+        )" >> "$GITHUB_OUTPUT"
+        echo "component-version=$(\
+        echo "${{ steps.create_component.outputs.resource-id }}" | awk -F '/' '{print $13}'
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Print Result
+      shell: bash
+      run: |
+        echo "Resource ID of AzureML Component: ${{ steps.create_component.outputs.resource-id }}"
+        echo "Reference uri of AzureML Component within workspace: ${{ steps.ref_ver.outputs.component-ref }}"
+        echo "Version of AzureML Component within workspace: ${{ steps.ref_ver.outputs.component-version }}"
