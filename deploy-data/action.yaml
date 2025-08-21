@@ -1,0 +1,151 @@
+name: Deploy Data
+description: Deploy a Data asset to AzureML
+inputs:
+  tenant-id:
+    description: 'Tenant id'
+    required: true
+  subscription-id:
+    description: 'Azure subscription id'
+    required: true
+  resource-group:
+    description: 'Azure resource group'
+    required: true
+  workspace-name:
+    description: 'Azure Machine Learning workspace name'
+    required: true
+  client-id:
+    description: 'Client id configured with Federated Credentials'
+    required: true
+  data-path:
+    description: 'Data asset definition file with full path'
+    required: true
+  type:
+    description: 'Type of data assets. Valid values: data, datastore, mltable'
+    required: true
+
+
+outputs:
+  resource-id:
+    description: 'resource id of the data asset'
+    value: ${{ steps.create_data.outputs.resource-id || steps.create_datastore.outputs.resource-id || steps.create_mltable.outputs.resource-id }}
+  data-ref:
+    description: 'reference string of data asset within AzureML workspace'
+    value: ${{ steps.ref_ver.outputs.data-ref }}
+  data-version:
+    description: 'The registered version of the data asset within the workspace'
+    value: ${{ steps.ref_ver.outputs.data-version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        enable-AzPSSession: true
+        auth-type: SERVICE_PRINCIPAL
+
+    - name: Az ml
+      shell: bash
+      run: |
+        az extension add -n ml -y
+
+    - name: Validate input type
+      shell: bash
+      run: |
+        case "${{ inputs.type }}" in
+          data|datastore|mltable)
+            echo "Valid type: ${{ inputs.type }}"
+            ;;
+          *)
+            echo "Error: Invalid type '${{ inputs.type }}'. Valid values are: data, datastore, mltable"
+            exit 1
+            ;;
+        esac
+
+    - name: Create Data Asset
+      shell: bash
+      id: create_data
+      if: ${{ inputs.type == 'data' }}
+      run: |
+        echo "resource-id=$(\
+        az ml data create \
+        --file ${{ inputs.data-path }} \
+        -g ${{ inputs.resource-group }} \
+        -w ${{ inputs.workspace-name }} \
+        --subscription ${{ inputs.subscription-id }} \
+        --query "id" \
+        --output tsv \
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Create Datastore
+      shell: bash
+      id: create_datastore
+      if: ${{ inputs.type == 'datastore' }}
+      run: |
+        echo "resource-id=$(\
+        az ml datastore create \
+        --file ${{ inputs.data-path }} \
+        -g ${{ inputs.resource-group }} \
+        -w ${{ inputs.workspace-name }} \
+        --subscription ${{ inputs.subscription-id }} \
+        --query "id" \
+        --output tsv \
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Create MLTable
+      shell: bash
+      id: create_mltable
+      if: ${{ inputs.type == 'mltable' }}
+      run: |
+        echo "resource-id=$(\
+        az ml data create \
+        --type mltable \
+        --file ${{ inputs.data-path }} \
+        -g ${{ inputs.resource-group }} \
+        -w ${{ inputs.workspace-name }} \
+        --subscription ${{ inputs.subscription-id }} \
+        --query "id" \
+        --output tsv \
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Ref and version
+      shell: bash
+      id: ref_ver
+      run: |
+        # Determine which step ran and get the resource-id
+        if [ "${{ inputs.type }}" = "data" ]; then
+          RESOURCE_ID="${{ steps.create_data.outputs.resource-id }}"
+        elif [ "${{ inputs.type }}" = "datastore" ]; then
+          RESOURCE_ID="${{ steps.create_datastore.outputs.resource-id }}"
+        elif [ "${{ inputs.type }}" = "mltable" ]; then
+          RESOURCE_ID="${{ steps.create_mltable.outputs.resource-id }}"
+        fi
+        
+        echo "data-ref=$(\
+        echo "$RESOURCE_ID" | awk -F '/' '{printf("azureml:%s:%s\n"),$11,$13 }'
+        )" >> "$GITHUB_OUTPUT"
+        echo "data-version=$(\
+        echo "$RESOURCE_ID" | awk -F '/' '{print $13}'
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Print Result
+      shell: bash
+      run: |
+        # Determine which step ran and get the resource-id
+        if [ "${{ inputs.type }}" = "data" ]; then
+          RESOURCE_ID="${{ steps.create_data.outputs.resource-id }}"
+          RESOURCE_TYPE="Data Asset"
+        elif [ "${{ inputs.type }}" = "datastore" ]; then
+          RESOURCE_ID="${{ steps.create_datastore.outputs.resource-id }}"
+          RESOURCE_TYPE="Datastore"
+        elif [ "${{ inputs.type }}" = "mltable" ]; then
+          RESOURCE_ID="${{ steps.create_mltable.outputs.resource-id }}"
+          RESOURCE_TYPE="MLTable"
+        fi
+        
+        echo "Resource ID of AzureML $RESOURCE_TYPE: $RESOURCE_ID"
+        echo "Reference uri of AzureML $RESOURCE_TYPE within workspace: ${{ steps.ref_ver.outputs.data-ref }}"
+        echo "Version of AzureML $RESOURCE_TYPE within workspace: ${{ steps.ref_ver.outputs.data-version }}"
