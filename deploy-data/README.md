@@ -58,3 +58,42 @@ Do yourself a favour, and don't use the Data Lake Gen1. It is (or should be) dep
 
 The most important ones (``` name, path, description ```) according to the correct YAML schema.
 
+Another way to make AzureML Data Assets is to use the [azure.ai.ml.MLClient](https://learn.microsoft.com/en-us/python/api/azure-ai-ml/azure.ai.ml.mlclient?view=azure-python) to make one using Python:
+```bash
+pip install azure-identity azure-ai-ml
+```
+
+```python
+from azure.identity import DefaultAzureCredential
+from azure.ai.ml import MLClient
+from azure.ai.ml.entities import Data
+
+# Make sure your logged on account has AiDeveloper or higher role on the workspace
+credential = DefaultAzureCredential()
+
+# This is a lazy login, meaning that it will not try to use the credentials until you attempt a CRUD operation.
+mlclient = MLClient(
+    credential=credential,
+    subscription_id=THE_SUBSCRIPTION_ID,
+    resource_group_name=THE_RESOURCE_GROUP_NAME,
+    workspace_name=THE_WORKSPACE_NAME
+)
+
+# Similar to the schema definition above.
+my_data_definition = Data(
+    name="my-data-asset",
+    path="./data/my-data.csv",  # or azureml://datastores/workspaceblobstore/paths/data/
+    type="uri_file",  # or "uri_folder", "mltable"
+    description="My data asset description"
+)
+
+# Register the data asset
+updated_or_created_data = mlclient.data.create_or_update(data=my_data_definition)
+
+# Get all the details
+print(updated_or_created_data)
+```
+
+# Blob: wasbs://<container_name>@<account_name>.blob.core.windows.net/<path>
+# ADLS: abfss://<file_system>@<account_name>.dfs.core.windows.net/<path>
+

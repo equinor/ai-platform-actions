@@ -47,3 +47,48 @@ In particular, the ``` is_deterministic``` is important for the behaviour: If ``
 If ```False```, the component always executes, no matter if the input is the same.
 
 Components can be of different types (command, parallel, pipeline) and should be configured according to their specific requirements and use cases.
+
+Another way to make AzureML Components is to use the [azure.ai.ml.MLClient](https://learn.microsoft.com/en-us/python/api/azure-ai-ml/azure.ai.ml.mlclient?view=azure-python) to make one using Python:
+```bash
+pip install azure-identity azure-ai-ml
+```
+
+```python
+from azure.identity import DefaultAzureCredential
+from azure.ai.ml import MLClient
+from azure.ai.ml.entities import CommandComponent
+
+# Make sure your logged on account has AiDeveloper or higher role on the workspace
+credential = DefaultAzureCredential()
+
+# This is a lazy login, meaning that it will not try to use the credentials until you attempt a CRUD operation.
+mlclient = MLClient(
+    credential=credential,
+    subscription_id=THE_SUBSCRIPTION_ID,
+    resource_group_name=THE_RESOURCE_GROUP_NAME,
+    workspace_name=THE_WORKSPACE_NAME
+)
+
+# Similar to the schema definition above.
+my_component_definition = CommandComponent(
+    name="my-component",
+    display_name="My Component",
+    description="My component description",
+    code="./src",  # Path to your code directory
+    environment="azureml:my-environment:1",  # Reference to an environment
+    command="python main.py --input ${{inputs.input_data}} --output ${{outputs.output_data}}",
+    inputs={
+        "input_data": {"type": "uri_folder", "description": "Input data"}
+    },
+    outputs={
+        "output_data": {"type": "uri_folder", "description": "Output data"}
+    },
+    is_deterministic=True
+)
+
+# Register the component
+updated_or_created_component = mlclient.components.create_or_update(component=my_component_definition)
+
+# Get all the details
+print(updated_or_created_component)
+```
