@@ -1,0 +1,81 @@
+name: Deploy Job
+description: Deploy a Job to AzureML
+inputs:
+  tenant-id:
+    description: 'Tenant id'
+    required: true
+  subscription-id:
+    description: 'Azure subscription id'
+    required: true
+  resource-group:
+    description: 'Azure resource group'
+    required: true
+  workspace-name:
+    description: 'Azure Machine Learning workspace name'
+    required: true
+  client-id:
+    description: 'Client id configured with Federated Credentials'
+    required: true
+  job-path:
+    description: 'Job definition file with full path'
+    required: true
+
+outputs:
+  resource-id:
+    description: 'resource id of the job'
+    value: ${{ steps.create_job.outputs.resource-id }}
+  job-ref:
+    description: 'reference string of job within AzureML workspace'
+    value: ${{ steps.ref_ver.outputs.job-ref }}
+  job-name:
+    description: 'The name of the job within the workspace'
+    value: ${{ steps.ref_ver.outputs.job-name }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        enable-AzPSSession: true
+        auth-type: SERVICE_PRINCIPAL
+
+    - name: Az ml
+      shell: bash
+      run: |
+        az extension add -n ml -y
+
+    - name: Create Job
+      shell: bash
+      id: create_job
+      run: |
+        echo "resource-id=$(\
+        az ml job create \
+        --file ${{ inputs.job-path }} \
+        -g ${{ inputs.resource-group }} \
+        -w ${{ inputs.workspace-name }} \
+        --subscription ${{ inputs.subscription-id }} \
+        --query "id" \
+        --output tsv \
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Ref and name
+      shell: bash
+      id: ref_ver
+      run: |
+        echo "job-ref=$(\
+        echo "${{ steps.create_job.outputs.resource-id }}" | awk -F '/' '{printf("azureml:%s\n"),$11 }'
+        )" >> "$GITHUB_OUTPUT"
+        echo "job-name=$(\
+        echo "${{ steps.create_job.outputs.resource-id }}" | awk -F '/' '{print $11}'
+        )" >> "$GITHUB_OUTPUT"
+
+    - name: Print Result
+      shell: bash
+      run: |
+        echo "Resource ID of AzureML Job: ${{ steps.create_job.outputs.resource-id }}"
+        echo "Reference of AzureML Job within workspace: ${{ steps.ref_ver.outputs.job-ref }}"
+        echo "Name of AzureML Job within workspace: ${{ steps.ref_ver.outputs.job-name }}"
