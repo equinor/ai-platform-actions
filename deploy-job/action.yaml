@@ -19,6 +19,10 @@ inputs:
   job-path:
     description: 'Job definition file with full path'
     required: true
+  compute:
+    description: 'Name of the compute resource to use (compute or kubernetes cluster within workspace)'
+    default: 'serverless'
+    required: False
 
 outputs:
   resource-id:
@@ -52,15 +56,28 @@ runs:
       shell: bash
       id: create_job
       run: |
-        echo "resource-id=$(\
-        az ml job create \
-        --file ${{ inputs.job-path }} \
-        -g ${{ inputs.resource-group }} \
-        -w ${{ inputs.workspace-name }} \
-        --subscription ${{ inputs.subscription-id }} \
-        --query "id" \
-        --output tsv \
-        )" >> "$GITHUB_OUTPUT"
+        if [ "${{ inputs.compute }}" = "serverless" ]; then
+          echo "resource-id=$(\
+          az ml job create \
+          --file ${{ inputs.job-path }} \
+          -g ${{ inputs.resource-group }} \
+          -w ${{ inputs.workspace-name }} \
+          --subscription ${{ inputs.subscription-id }} \
+          --query "id" \
+          --output tsv \
+          )" >> "$GITHUB_OUTPUT"
+        else
+          echo "resource-id=$(\
+          az ml job create \
+          --file ${{ inputs.job-path }} \
+          --set compute=${{ inputs.compute }} \
+          -g ${{ inputs.resource-group }} \
+          -w ${{ inputs.workspace-name }} \
+          --subscription ${{ inputs.subscription-id }} \
+          --query "id" \
+          --output tsv \
+          )" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Ref and name
       shell: bash

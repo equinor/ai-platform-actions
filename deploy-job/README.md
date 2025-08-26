@@ -20,6 +20,7 @@ jobs:
           workspace-name: ${{ vars.AZURE_ML_WORKSPACE_NAME }}
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           job-path: path/to/job.yaml
+          compute: my-compute-cluster  # Optional: defaults to 'serverless'
 ```
 
 Replace the input values with the actual values required for your use case. See the action's `action.yaml` for all available inputs and configuration options.
@@ -42,8 +43,18 @@ az ml job create
 Notice that there are a number of arguments not used in the input of this action.  
 Instead, those arguments should be put in the job.yaml file that is in the input.
 
-The most important ones (``` type, compute, environment, code, command, inputs, outputs ```)  
+## Compute Configuration
+
+This action includes a `compute` input parameter that allows you to specify which compute target the job should run on:
+- **Default**: `serverless` - Uses Azure ML serverless compute (no compute override applied)
+- **Custom**: Specify the name of an existing compute cluster or Kubernetes cluster within your workspace
+- When `compute` is set to `serverless`, the action runs without setting the compute property, allowing the job to use serverless compute or any compute specified in the job YAML file
+- When `compute` is set to a custom value, the action uses `--set compute=${{ inputs.compute }}` to override any compute setting in the job YAML file
+
+The most important ones (``` type, environment, code, command, inputs, outputs ```)  
 can be set there according to the [CLI (v2) job YAML schema](https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-command?view=azureml-api-2).
+
+Note: When using a custom compute target, the action input will override any `compute` setting in your job YAML file.
 
 Jobs can be of different types (command, pipeline, sweep) and should be configured according to their specific requirements and use cases.
 
