@@ -1,0 +1,166 @@
+name: Deploy X
+description: Universal deployment action for Azure ML assets (environments, components, data, jobs)
+inputs:
+  tenant-id:
+    description: 'Tenant id (optional - falls back to vars.tenant-id)'
+    required: false
+  subscription-id:
+    description: 'Azure subscription id (optional - falls back to vars.subscription-id)'
+    required: false
+  resource-group:
+    description: 'Azure resource group (optional - falls back to vars.resource-group)'
+    required: false
+  workspace-name:
+    description: 'Azure Machine Learning workspace name (optional - falls back to vars.workspace-name)'
+    required: false
+  client-id:
+    description: 'Client id configured with Federated Credentials'
+    required: true
+  config:
+    description: 'Base64-encoded JSON configuration specifying asset-type and parameters'
+    required: true
+
+outputs:
+  resource-id:
+    description: 'resource id of the deployed asset'
+    value: ${{ steps.deploy_environment.outputs.resource-id || steps.deploy_component.outputs.resource-id || steps.deploy_data.outputs.resource-id || steps.deploy_job.outputs.resource-id }}
+  asset-ref:
+    description: 'reference string of asset within AzureML workspace'
+    value: ${{ steps.deploy_environment.outputs.environment-ref || steps.deploy_component.outputs.component-ref || steps.deploy_data.outputs.data-ref || steps.deploy_job.outputs.job-ref }}
+  asset-version:
+    description: 'The registered version/name of the asset within the workspace'
+    value: ${{ steps.deploy_environment.outputs.environment-version || steps.deploy_component.outputs.component-version || steps.deploy_data.outputs.data-version || steps.deploy_job.outputs.job-name }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Decode and parse configuration
+      shell: bash
+      id: parse_config
+      run: |
+        # Decode base64 config
+        CONFIG_JSON=$(echo "${{ inputs.config }}" | base64 -d)
+        echo "Decoded config: $CONFIG_JSON"
+        
+        # Extract asset-type
+        ASSET_TYPE=$(echo "$CONFIG_JSON" | jq -r '.["asset-type"]')
+        echo "asset-type=$ASSET_TYPE" >> "$GITHUB_OUTPUT"
+        
+        # Extract asset-path
+        ASSET_PATH=$(echo "$CONFIG_JSON" | jq -r '.["asset-path"]')
+        echo "asset-path=$ASSET_PATH" >> "$GITHUB_OUTPUT"
+        
+        # Extract optional parameters
+        COMPUTE=$(echo "$CONFIG_JSON" | jq -r '.compute // empty')
+        if [ -n "$COMPUTE" ]; then
+          echo "compute=$COMPUTE" >> "$GITHUB_OUTPUT"
+        fi
+        
+        TYPE=$(echo "$CONFIG_JSON" | jq -r '.type // empty')
+        if [ -n "$TYPE" ]; then
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Set default parameters
+      shell: bash
+      id: set_defaults
+      run: |
+        # Set tenant-id
+        if [ -n "${{ inputs.tenant-id }}" ]; then
+          echo "tenant-id=${{ inputs.tenant-id }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "tenant-id=${{ vars.tenant-id }}" >> "$GITHUB_OUTPUT"
+        fi
+        
+        # Set subscription-id
+        if [ -n "${{ inputs.subscription-id }}" ]; then
+          echo "subscription-id=${{ inputs.subscription-id }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "subscription-id=${{ vars.subscription-id }}" >> "$GITHUB_OUTPUT"
+        fi
+        
+        # Set resource-group
+        if [ -n "${{ inputs.resource-group }}" ]; then
+          echo "resource-group=${{ inputs.resource-group }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "resource-group=${{ vars.resource-group }}" >> "$GITHUB_OUTPUT"
+        fi
+        
+        # Set workspace-name
+        if [ -n "${{ inputs.workspace-name }}" ]; then
+          echo "workspace-name=${{ inputs.workspace-name }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "workspace-name=${{ vars.workspace-name }}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Deploy Environment
+      if: ${{ steps.parse_config.outputs.asset-type == 'environment' }}
+      uses: ./deploy-environment
+      id: deploy_environment
+      with:
+        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
+        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
+        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
+        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        client-id: ${{ inputs.client-id }}
+        environment-path: ${{ steps.parse_config.outputs.asset-path }}
+
+    - name: Deploy Component
+      if: ${{ steps.parse_config.outputs.asset-type == 'component' }}
+      uses: ./deploy-component
+      id: deploy_component
+      with:
+        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
+        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
+        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
+        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        client-id: ${{ inputs.client-id }}
+        component-path: ${{ steps.parse_config.outputs.asset-path }}
+
+    - name: Deploy Data
+      if: ${{ steps.parse_config.outputs.asset-type == 'data' }}
+      uses: ./deploy-data
+      id: deploy_data
+      with:
+        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
+        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
+        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
+        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        client-id: ${{ inputs.client-id }}
+        data-path: ${{ steps.parse_config.outputs.asset-path }}
+        type: ${{ steps.parse_config.outputs.type }}
+
+    - name: Deploy Job
+      if: ${{ steps.parse_config.outputs.asset-type == 'job' }}
+      uses: ./deploy-job
+      id: deploy_job
+      with:
+        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
+        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
+        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
+        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        client-id: ${{ inputs.client-id }}
+        job-path: ${{ steps.parse_config.outputs.asset-path }}
+        compute: ${{ steps.parse_config.outputs.compute || 'serverless' }}
+
+    - name: Print Result
+      shell: bash
+      run: |
+        echo "Deployed asset type: ${{ steps.parse_config.outputs.asset-type }}"
+        if [ "${{ steps.parse_config.outputs.asset-type }}" = "environment" ]; then
+          echo "Resource ID: ${{ steps.deploy_environment.outputs.resource-id }}"
+          echo "Asset Reference: ${{ steps.deploy_environment.outputs.environment-ref }}"
+          echo "Asset Version: ${{ steps.deploy_environment.outputs.environment-version }}"
+        elif [ "${{ steps.parse_config.outputs.asset-type }}" = "component" ]; then
+          echo "Resource ID: ${{ steps.deploy_component.outputs.resource-id }}"
+          echo "Asset Reference: ${{ steps.deploy_component.outputs.component-ref }}"
+          echo "Asset Version: ${{ steps.deploy_component.outputs.component-version }}"
+        elif [ "${{ steps.parse_config.outputs.asset-type }}" = "data" ]; then
+          echo "Resource ID: ${{ steps.deploy_data.outputs.resource-id }}"
+          echo "Asset Reference: ${{ steps.deploy_data.outputs.data-ref }}"
+          echo "Asset Version: ${{ steps.deploy_data.outputs.data-version }}"
+        elif [ "${{ steps.parse_config.outputs.asset-type }}" = "job" ]; then
+          echo "Resource ID: ${{ steps.deploy_job.outputs.resource-id }}"
+          echo "Asset Reference: ${{ steps.deploy_job.outputs.job-ref }}"
+          echo "Asset Name: ${{ steps.deploy_job.outputs.job-name }}"
+        fi
