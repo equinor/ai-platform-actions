@@ -1,0 +1,180 @@
+name: Changed Files
+description: Detect changed files in the repository and optionally filter by patterns
+inputs:
+  base-ref:
+    description: 'Base reference for comparison (optional - auto-detected from event)'
+    required: false
+  head-ref:
+    description: 'Head reference for comparison (optional - auto-detected from event)'
+    required: false
+  filter-pattern:
+    description: 'Pattern to filter changed files (e.g., "*.yaml", "components/**", etc.)'
+    required: false
+  ignore-pattern:
+    description: 'Pattern to ignore changed files (e.g., "test/**", "*.md", etc.) - takes precedence over filter-pattern'
+    required: false
+  output-format:
+    description: 'Output format: "space-separated", "json", "newline-separated"'
+    default: 'space-separated'
+    required: false
+
+outputs:
+  changed-files:
+    description: 'List of changed files'
+    value: ${{ steps.detect-changes.outputs.changed-files }}
+  changed-files-json:
+    description: 'List of changed files as JSON array'
+    value: ${{ steps.detect-changes.outputs.changed-files-json }}
+  has-changes:
+    description: 'Whether any files were changed'
+    value: ${{ steps.detect-changes.outputs.has-changes }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.head-ref || github.head_ref }}
+        fetch-depth: 0
+
+    - name: Detect changes
+      shell: bash
+      id: detect-changes
+      run: |
+        # Determine base and head references based on event type
+        if [ -n "${{ inputs.base-ref }}" ] && [ -n "${{ inputs.head-ref }}" ]; then
+          BASE_SHA="${{ inputs.base-ref }}"
+          HEAD_SHA="${{ inputs.head-ref }}"
+        elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+        elif [ "${{ github.event_name }}" = "merge_group" ]; then
+          BASE_SHA="${{ github.event.merge_group.base_sha }}"
+          HEAD_SHA="${{ github.event.merge_group.head_sha }}"
+        else
+          BASE_SHA="${{ github.event.before }}"
+          HEAD_SHA="${{ github.event.after }}"
+        fi
+        
+        echo "Comparing $BASE_SHA..$HEAD_SHA"
+        
+        # Get all changed files
+        CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA)
+        
+        # Apply ignore pattern first (takes precedence)
+        if [ -n "${{ inputs.ignore-pattern }}" ]; then
+          FILTERED_FILES=""
+          while IFS= read -r file; do
+            if [[ ! "$file" == ${{ inputs.ignore-pattern }} ]]; then
+              if [ -z "$FILTERED_FILES" ]; then
+                FILTERED_FILES="$file"
+              else
+                FILTERED_FILES="$FILTERED_FILES
+        $file"
+              fi
+            fi
+          done <<< "$CHANGED_FILES"
+          CHANGED_FILES="$FILTERED_FILES"
+        fi
+        
+        # Apply filter pattern (if specified and no ignore pattern conflicts)
+        if [ -n "${{ inputs.filter-pattern }}" ]; then
+          FILTERED_FILES=""
+          while IFS= read -r file; do
+            if [[ "$file" == ${{ inputs.filter-pattern }} ]]; then
+              if [ -z "$FILTERED_FILES" ]; then
+                FILTERED_FILES="$file"
+              else
+                FILTERED_FILES="$FILTERED_FILES
+        $file"
+              fi
+            fi
+          done <<< "$CHANGED_FILES"
+          CHANGED_FILES="$FILTERED_FILES"
+        fi
+        
+        # Check if any files changed
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "has-changes=false" >> "$GITHUB_OUTPUT"
+          echo "changed-files=" >> "$GITHUB_OUTPUT"
+          echo "changed-files-json=[]" >> "$GITHUB_OUTPUT"
+          echo "No files changed matching criteria"
+          exit 0
+        else
+          echo "has-changes=true" >> "$GITHUB_OUTPUT"
+        fi
+        
+        # Format output based on requested format
+        case "${{ inputs.output-format }}" in
+          "json")
+            # Convert to JSON array
+            JSON_ARRAY="["
+            FIRST=true
+            while IFS= read -r file; do
+              if [ "$FIRST" = true ]; then
+                JSON_ARRAY="$JSON_ARRAY\"$file\""
+                FIRST=false
+              else
+                JSON_ARRAY="$JSON_ARRAY,\"$file\""
+              fi
+            done <<< "$CHANGED_FILES"
+            JSON_ARRAY="$JSON_ARRAY]"
+            echo "changed-files=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            echo "changed-files-json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            ;;
+          "newline-separated")
+            # Keep newline-separated format
+            NEWLINE_SEPARATED="$CHANGED_FILES"
+            echo "changed-files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$NEWLINE_SEPARATED" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            
+            # Also create JSON version
+            JSON_ARRAY="["
+            FIRST=true
+            while IFS= read -r file; do
+              if [ "$FIRST" = true ]; then
+                JSON_ARRAY="$JSON_ARRAY\"$file\""
+                FIRST=false
+              else
+                JSON_ARRAY="$JSON_ARRAY,\"$file\""
+              fi
+            done <<< "$CHANGED_FILES"
+            JSON_ARRAY="$JSON_ARRAY]"
+            echo "changed-files-json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            # Default: space-separated
+            SPACE_SEPARATED=$(echo "$CHANGED_FILES" | xargs)
+            echo "changed-files=$SPACE_SEPARATED" >> "$GITHUB_OUTPUT"
+            
+            # Also create JSON version
+            JSON_ARRAY="["
+            FIRST=true
+            while IFS= read -r file; do
+              if [ "$FIRST" = true ]; then
+                JSON_ARRAY="$JSON_ARRAY\"$file\""
+                FIRST=false
+              else
+                JSON_ARRAY="$JSON_ARRAY,\"$file\""
+              fi
+            done <<< "$CHANGED_FILES"
+            JSON_ARRAY="$JSON_ARRAY]"
+            echo "changed-files-json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            ;;
+        esac
+
+    - name: Print results
+      shell: bash
+      run: |
+        echo "Changed files detected: ${{ steps.detect-changes.outputs.has-changes }}"
+        if [ "${{ steps.detect-changes.outputs.has-changes }}" = "true" ]; then
+          echo "Changed files: ${{ steps.detect-changes.outputs.changed-files }}"
+          if [ -n "${{ inputs.ignore-pattern }}" ]; then
+            echo "Ignore pattern applied: ${{ inputs.ignore-pattern }}"
+          fi
+          if [ -n "${{ inputs.filter-pattern }}" ]; then
+            echo "Filter pattern applied: ${{ inputs.filter-pattern }}"
+          fi
+        fi

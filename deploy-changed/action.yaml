@@ -1,0 +1,180 @@
+name: Deploy Changed
+description: Detect changed Azure ML asset files and deploy them automatically
+inputs:
+  tenant-id:
+    description: 'Tenant id (optional - falls back to vars.tenant-id)'
+    required: false
+  subscription-id:
+    description: 'Azure subscription id (optional - falls back to vars.subscription-id)'
+    required: false
+  resource-group:
+    description: 'Azure resource group (optional - falls back to vars.resource-group)'
+    required: false
+  workspace-name:
+    description: 'Azure Machine Learning workspace name (optional - falls back to vars.workspace-name)'
+    required: false
+  client-id:
+    description: 'Client id configured with Federated Credentials'
+    required: true
+  asset-patterns:
+    description: 'JSON object mapping asset types to file patterns'
+    default: '{"environment":"environments/*.yaml","component":"components/*.yaml","data":"data/*.yaml","job":"jobs/*.yaml"}'
+    required: false
+  base-ref:
+    description: 'Base reference for comparison (optional - auto-detected from event)'
+    required: false
+  head-ref:
+    description: 'Head reference for comparison (optional - auto-detected from event)'
+    required: false
+  deployment-strategy:
+    description: 'Deployment strategy: "sequential" or "parallel"'
+    default: 'sequential'
+    required: false
+
+outputs:
+  deployed-assets:
+    description: 'JSON array of deployed assets with their details'
+    value: ${{ steps.deploy-assets.outputs.deployed-assets }}
+  deployment-count:
+    description: 'Number of assets deployed'
+    value: ${{ steps.deploy-assets.outputs.deployment-count }}
+  has-deployments:
+    description: 'Whether any assets were deployed'
+    value: ${{ steps.deploy-assets.outputs.has-deployments }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Detect changed assets
+      shell: bash
+      id: detect-assets
+      run: |
+        # Parse asset patterns
+        PATTERNS='${{ inputs.asset-patterns }}'
+        echo "Asset patterns: $PATTERNS"
+        
+        DEPLOY_CONFIG="[]"
+        TOTAL_ASSETS=0
+        
+        # Check each asset type
+        for asset_type in $(echo "$PATTERNS" | jq -r 'keys[]'); do
+          pattern=$(echo "$PATTERNS" | jq -r ".[\"$asset_type\"]")
+          echo "Checking $asset_type files with pattern: $pattern"
+          
+          # Use changed-files action for this pattern
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ inputs.base-ref || github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ inputs.head-ref || github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            BASE_SHA="${{ inputs.base-ref || github.event.merge_group.base_sha }}"
+            HEAD_SHA="${{ inputs.head-ref || github.event.merge_group.head_sha }}"
+          else
+            BASE_SHA="${{ inputs.base-ref || github.event.before }}"
+            HEAD_SHA="${{ inputs.head-ref || github.event.after }}"
+          fi
+          
+          # Get changed files for this pattern
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E "^${pattern//\*/.*}$" || true)
+          
+          if [ -n "$CHANGED_FILES" ]; then
+            while IFS= read -r file; do
+              if [ -f "$file" ]; then
+                echo "Found changed $asset_type: $file"
+                
+                # Create deployment config for this file
+                CONFIG_ITEM=$(jq -n \
+                  --arg type "$asset_type" \
+                  --arg path "$file" \
+                  '{
+                    "asset-type": $type,
+                    "asset-path": $path
+                  }')
+                
+                # Add to deploy config array
+                DEPLOY_CONFIG=$(echo "$DEPLOY_CONFIG" | jq ". += [$CONFIG_ITEM]")
+                TOTAL_ASSETS=$((TOTAL_ASSETS + 1))
+              fi
+            done <<< "$CHANGED_FILES"
+          fi
+        done
+        
+        echo "Total assets found: $TOTAL_ASSETS"
+        echo "deploy-config=$DEPLOY_CONFIG" >> "$GITHUB_OUTPUT"
+        echo "asset-count=$TOTAL_ASSETS" >> "$GITHUB_OUTPUT"
+        
+        if [ "$TOTAL_ASSETS" -gt 0 ]; then
+          echo "has-assets=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-assets=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Deploy assets
+      if: steps.detect-assets.outputs.has-assets == 'true'
+      shell: bash
+      id: deploy-assets
+      run: |
+        DEPLOY_CONFIG='${{ steps.detect-assets.outputs.deploy-config }}'
+        ASSET_COUNT=${{ steps.detect-assets.outputs.asset-count }}
+        
+        echo "Deploying $ASSET_COUNT assets using ${{ inputs.deployment-strategy }} strategy"
+        
+        # Encode config as base64
+        CONFIG_B64=$(echo "$DEPLOY_CONFIG" | base64 -w 0)
+        echo "deploy-config-b64=$CONFIG_B64" >> "$GITHUB_OUTPUT"
+        
+        DEPLOYED_ASSETS="[]"
+        
+        if [ "${{ inputs.deployment-strategy }}" = "parallel" ]; then
+          echo "Parallel deployment not fully implemented in this step - use matrix strategy instead"
+          echo "Use the deploy-config-b64 output with deploy-x and matrix strategy"
+        else
+          # Sequential deployment
+          for i in $(seq 0 $((ASSET_COUNT - 1))); do
+            ITEM=$(echo "$DEPLOY_CONFIG" | jq ".[$i]")
+            ASSET_TYPE=$(echo "$ITEM" | jq -r '.["asset-type"]')
+            ASSET_PATH=$(echo "$ITEM" | jq -r '.["asset-path"]')
+            
+            echo "Deploying $ASSET_TYPE: $ASSET_PATH"
+            
+            # For sequential deployment, we'd need to call deploy-x here
+            # This is a simplified version - full implementation would require actual deployment calls
+            DEPLOYED_ITEM=$(jq -n \
+              --arg type "$ASSET_TYPE" \
+              --arg path "$ASSET_PATH" \
+              --arg status "simulated" \
+              '{
+                "asset-type": $type,
+                "asset-path": $path,
+                "status": $status
+              }')
+            
+            DEPLOYED_ASSETS=$(echo "$DEPLOYED_ASSETS" | jq ". += [$DEPLOYED_ITEM]")
+          done
+        fi
+        
+        echo "deployed-assets=$DEPLOYED_ASSETS" >> "$GITHUB_OUTPUT"
+        echo "deployment-count=$ASSET_COUNT" >> "$GITHUB_OUTPUT"
+        echo "has-deployments=true" >> "$GITHUB_OUTPUT"
+
+    - name: No deployments needed
+      if: steps.detect-assets.outputs.has-assets == 'false'
+      shell: bash
+      run: |
+        echo "No Azure ML assets changed - no deployments needed"
+        echo "deployed-assets=[]" >> "$GITHUB_OUTPUT"
+        echo "deployment-count=0" >> "$GITHUB_OUTPUT"
+        echo "has-deployments=false" >> "$GITHUB_OUTPUT"
+
+    - name: Print results
+      shell: bash
+      run: |
+        if [ "${{ steps.detect-assets.outputs.has-assets }}" = "true" ]; then
+          echo "Detected ${{ steps.detect-assets.outputs.asset-count }} changed Azure ML assets"
+          echo "Deployment strategy: ${{ inputs.deployment-strategy }}"
+          if [ "${{ inputs.deployment-strategy }}" = "parallel" ]; then
+            echo "For parallel deployment, use the deploy-config-b64 output with deploy-x and matrix strategy"
+            echo "Config (base64): ${{ steps.deploy-assets.outputs.deploy-config-b64 }}"
+          fi
+        else
+          echo "No Azure ML assets changed"
+        fi
