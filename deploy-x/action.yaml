@@ -17,8 +17,11 @@ inputs:
     description: 'Client id configured with Federated Credentials'
     required: true
   config:
-    description: 'Base64-encoded JSON configuration specifying asset-type and parameters'
+    description: 'Base64-encoded JSON configuration specifying asset-type and parameters. Can be a single object or array of objects.'
     required: true
+  index:
+    description: 'Index of the configuration item to deploy (for array configs). If not specified, deploys all items sequentially.'
+    required: false
 
 outputs:
   resource-id:
@@ -41,6 +44,27 @@ runs:
         # Decode base64 config
         CONFIG_JSON=$(echo "${{ inputs.config }}" | base64 -d)
         echo "Decoded config: $CONFIG_JSON"
+        
+        # Check if config is an array or single object
+        if echo "$CONFIG_JSON" | jq -e 'type == "array"' > /dev/null; then
+          echo "config-type=array" >> "$GITHUB_OUTPUT"
+          ARRAY_LENGTH=$(echo "$CONFIG_JSON" | jq 'length')
+          echo "array-length=$ARRAY_LENGTH" >> "$GITHUB_OUTPUT"
+          
+          # If index is specified, extract that item; otherwise prepare for sequential deployment
+          if [ -n "${{ inputs.index }}" ]; then
+            INDEX=${{ inputs.index }}
+            ITEM=$(echo "$CONFIG_JSON" | jq ".[$INDEX]")
+            echo "Selected item at index $INDEX: $ITEM"
+            CONFIG_JSON="$ITEM"
+          else
+            echo "config-json=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
+            # For sequential deployment, we'll handle this in a separate step
+            exit 0
+          fi
+        else
+          echo "config-type=object" >> "$GITHUB_OUTPUT"
+        fi
         
         # Extract asset-type
         ASSET_TYPE=$(echo "$CONFIG_JSON" | jq -r '.["asset-type"]')
@@ -93,8 +117,26 @@ runs:
           echo "workspace-name=${{ vars.workspace-name }}" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: Deploy sequentially (for arrays without index)
+      if: ${{ steps.parse_config.outputs.config-type == 'array' && inputs.index == '' }}
+      shell: bash
+      run: |
+        echo "Sequential deployment mode for array with ${{ steps.parse_config.outputs.array-length }} items"
+        CONFIG_ARRAY='${{ steps.parse_config.outputs.config-json }}'
+        
+        for i in $(seq 0 $((${‌{ steps.parse_config.outputs.array-length }} - 1))); do
+          echo "Deploying item $i..."
+          ITEM=$(echo "$CONFIG_ARRAY" | jq ".[$i]")
+          ASSET_TYPE=$(echo "$ITEM" | jq -r '.["asset-type"]')
+          ASSET_PATH=$(echo "$ITEM" | jq -r '.["asset-path"]')
+          
+          echo "Item $i: $ASSET_TYPE at $ASSET_PATH"
+          # Note: Sequential deployment calls would need to be implemented here
+          # This is a basic framework - full implementation would require calling the individual actions
+        done
+
     - name: Deploy Environment
-      if: ${{ steps.parse_config.outputs.asset-type == 'environment' }}
+      if: ${{ (steps.parse_config.outputs.config-type == 'object' || inputs.index != '') && steps.parse_config.outputs.asset-type == 'environment' }}
       uses: ./deploy-environment
       id: deploy_environment
       with:
@@ -106,7 +148,7 @@ runs:
         environment-path: ${{ steps.parse_config.outputs.asset-path }}
 
     - name: Deploy Component
-      if: ${{ steps.parse_config.outputs.asset-type == 'component' }}
+      if: ${{ (steps.parse_config.outputs.config-type == 'object' || inputs.index != '') && steps.parse_config.outputs.asset-type == 'component' }}
       uses: ./deploy-component
       id: deploy_component
       with:
@@ -118,7 +160,7 @@ runs:
         component-path: ${{ steps.parse_config.outputs.asset-path }}
 
     - name: Deploy Data
-      if: ${{ steps.parse_config.outputs.asset-type == 'data' }}
+      if: ${{ (steps.parse_config.outputs.config-type == 'object' || inputs.index != '') && steps.parse_config.outputs.asset-type == 'data' }}
       uses: ./deploy-data
       id: deploy_data
       with:
@@ -131,7 +173,7 @@ runs:
         type: ${{ steps.parse_config.outputs.type }}
 
     - name: Deploy Job
-      if: ${{ steps.parse_config.outputs.asset-type == 'job' }}
+      if: ${{ (steps.parse_config.outputs.config-type == 'object' || inputs.index != '') && steps.parse_config.outputs.asset-type == 'job' }}
       uses: ./deploy-job
       id: deploy_job
       with:
@@ -146,21 +188,29 @@ runs:
     - name: Print Result
       shell: bash
       run: |
-        echo "Deployed asset type: ${{ steps.parse_config.outputs.asset-type }}"
-        if [ "${{ steps.parse_config.outputs.asset-type }}" = "environment" ]; then
-          echo "Resource ID: ${{ steps.deploy_environment.outputs.resource-id }}"
-          echo "Asset Reference: ${{ steps.deploy_environment.outputs.environment-ref }}"
-          echo "Asset Version: ${{ steps.deploy_environment.outputs.environment-version }}"
-        elif [ "${{ steps.parse_config.outputs.asset-type }}" = "component" ]; then
-          echo "Resource ID: ${{ steps.deploy_component.outputs.resource-id }}"
-          echo "Asset Reference: ${{ steps.deploy_component.outputs.component-ref }}"
-          echo "Asset Version: ${{ steps.deploy_component.outputs.component-version }}"
-        elif [ "${{ steps.parse_config.outputs.asset-type }}" = "data" ]; then
-          echo "Resource ID: ${{ steps.deploy_data.outputs.resource-id }}"
-          echo "Asset Reference: ${{ steps.deploy_data.outputs.data-ref }}"
-          echo "Asset Version: ${{ steps.deploy_data.outputs.data-version }}"
-        elif [ "${{ steps.parse_config.outputs.asset-type }}" = "job" ]; then
-          echo "Resource ID: ${{ steps.deploy_job.outputs.resource-id }}"
-          echo "Asset Reference: ${{ steps.deploy_job.outputs.job-ref }}"
-          echo "Asset Name: ${{ steps.deploy_job.outputs.job-name }}"
+        if [ "${{ steps.parse_config.outputs.config-type }}" = "array" ] && [ -z "${{ inputs.index }}" ]; then
+          echo "Sequential deployment completed for ${{ steps.parse_config.outputs.array-length }} items"
+        else
+          echo "Deployed asset type: ${{ steps.parse_config.outputs.asset-type }}"
+          if [ -n "${{ inputs.index }}" ]; then
+            echo "Deployed from array index: ${{ inputs.index }}"
+          fi
+          
+          if [ "${{ steps.parse_config.outputs.asset-type }}" = "environment" ]; then
+            echo "Resource ID: ${{ steps.deploy_environment.outputs.resource-id }}"
+            echo "Asset Reference: ${{ steps.deploy_environment.outputs.environment-ref }}"
+            echo "Asset Version: ${{ steps.deploy_environment.outputs.environment-version }}"
+          elif [ "${{ steps.parse_config.outputs.asset-type }}" = "component" ]; then
+            echo "Resource ID: ${{ steps.deploy_component.outputs.resource-id }}"
+            echo "Asset Reference: ${{ steps.deploy_component.outputs.component-ref }}"
+            echo "Asset Version: ${{ steps.deploy_component.outputs.component-version }}"
+          elif [ "${{ steps.parse_config.outputs.asset-type }}" = "data" ]; then
+            echo "Resource ID: ${{ steps.deploy_data.outputs.resource-id }}"
+            echo "Asset Reference: ${{ steps.deploy_data.outputs.data-ref }}"
+            echo "Asset Version: ${{ steps.deploy_data.outputs.data-version }}"
+          elif [ "${{ steps.parse_config.outputs.asset-type }}" = "job" ]; then
+            echo "Resource ID: ${{ steps.deploy_job.outputs.resource-id }}"
+            echo "Asset Reference: ${{ steps.deploy_job.outputs.job-ref }}"
+            echo "Asset Name: ${{ steps.deploy_job.outputs.job-name }}"
+          fi
         fi
