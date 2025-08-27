@@ -88,6 +88,17 @@ runs:
         
         echo "✅ Input validation passed"
 
+    - name: Deployment summary
+      shell: bash
+      run: |
+        echo "🚀 About to deploy Azure ML job from: ${{ inputs.job-path }}"
+        echo "   Target workspace: ${{ inputs.workspace-name || vars.workspace-name }} (Resource Group: ${{ inputs.resource-group || vars.resource-group }})"
+        if [ -n "${{ inputs.compute }}" ]; then
+          echo "   Compute target: ${{ inputs.compute }}"
+        else
+          echo "   Compute target: serverless (default)"
+        fi
+
     - name: Azure Login
       uses: azure/login@v2
       with:

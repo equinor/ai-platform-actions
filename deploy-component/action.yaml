@@ -84,6 +84,12 @@ runs:
         
         echo "✅ Input validation passed"
 
+    - name: Deployment summary
+      shell: bash
+      run: |
+        echo "🚀 About to deploy Azure ML component from: ${{ inputs.component-path }}"
+        echo "   Target workspace: ${{ inputs.workspace-name || vars.workspace-name }} (Resource Group: ${{ inputs.resource-group || vars.resource-group }})"
+
     - name: Azure Login
       uses: azure/login@v2
       with:
