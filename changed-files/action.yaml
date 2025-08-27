@@ -32,6 +32,49 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        VALIDATION_ERRORS=0
+        
+        # Check base-ref format if provided
+        if [ -n "${{ inputs.base-ref }}" ]; then
+          if [[ ! "${{ inputs.base-ref }}" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+            echo "❌ Error: Invalid base-ref format: ${{ inputs.base-ref }}"
+            echo "   base-ref should be a valid git reference (branch, tag, or commit SHA)"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+          fi
+        fi
+        
+        # Check head-ref format if provided
+        if [ -n "${{ inputs.head-ref }}" ]; then
+          if [[ ! "${{ inputs.head-ref }}" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+            echo "❌ Error: Invalid head-ref format: ${{ inputs.head-ref }}"
+            echo "   head-ref should be a valid git reference (branch, tag, or commit SHA)"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+          fi
+        fi
+        
+        # Validate output-format
+        case "${{ inputs.output-format }}" in
+          "space-separated"|"json"|"newline-separated")
+            ;;
+          *)
+            echo "❌ Error: Invalid output-format: ${{ inputs.output-format }}"
+            echo "   Valid formats: space-separated, json, newline-separated"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+            ;;
+        esac
+        
+        # Check for validation errors and exit if any found
+        if [ $VALIDATION_ERRORS -gt 0 ]; then
+          echo ""
+          echo "❌ Validation failed with $VALIDATION_ERRORS error(s). Please fix the above issues and try again."
+          exit 1
+        fi
+        
+        echo "✅ Input validation passed"
+
     - name: Checkout
       uses: actions/checkout@v4
       with:
