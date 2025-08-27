@@ -99,15 +99,6 @@ runs:
           echo "   Compute target: serverless (default)"
         fi
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ inputs.client-id }}
-        tenant-id: ${{ inputs.tenant-id }}
-        subscription-id: ${{ inputs.subscription-id }}
-        enable-AzPSSession: true
-        auth-type: SERVICE_PRINCIPAL
-
     - name: Az ml
       shell: bash
       run: |

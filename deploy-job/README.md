@@ -1,5 +1,20 @@
 # How does it work?
 
+## Prerequisites
+
+**Important:** This action requires Azure authentication to be configured before use. Add the Azure login step to your workflow before calling this action:
+
+```yaml
+- name: Azure Login
+  uses: azure/login@v2
+  with:
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    enable-AzPSSession: true
+    auth-type: SERVICE_PRINCIPAL
+```
+
 ## Usage
 
 To use this action from another repository, add a step to your GitHub Actions workflow that references this action. For example:
@@ -11,6 +26,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+      
       - name: Deploy Azure ML Job
         uses: equinor/ai-platform-actions/deploy-job@main
         with:

@@ -90,15 +90,6 @@ runs:
         echo "🚀 About to deploy Azure ML environment from: ${{ inputs.environment-path }}"
         echo "   Target workspace: ${{ inputs.workspace-name || vars.workspace-name }} (Resource Group: ${{ inputs.resource-group || vars.resource-group }})"
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ inputs.client-id }}
-        tenant-id: ${{ inputs.tenant-id }}
-        subscription-id: ${{ inputs.subscription-id }}
-        enable-AzPSSession: true
-        auth-type: SERVICE_PRINCIPAL
-
     - name: Az ml
       shell: bash
       run: |
