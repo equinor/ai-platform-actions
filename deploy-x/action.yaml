@@ -37,6 +37,47 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        VALIDATION_ERRORS=0
+        
+        # Check required inputs
+        if [ -z "${{ inputs.client-id }}" ]; then
+          echo "❌ Error: client-id is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.config }}" ]; then
+          echo "❌ Error: config is required but not provided"
+          echo "   Please provide a base64-encoded JSON configuration"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        else
+          # Validate that config is valid base64
+          if ! echo "${{ inputs.config }}" | base64 -d > /dev/null 2>&1; then
+            echo "❌ Error: config is not valid base64 encoding"
+            echo "   Please ensure your configuration is properly base64 encoded"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+          else
+            # Validate that decoded config is valid JSON
+            DECODED_CONFIG=$(echo "${{ inputs.config }}" | base64 -d)
+            if ! echo "$DECODED_CONFIG" | jq . > /dev/null 2>&1; then
+              echo "❌ Error: config does not contain valid JSON"
+              echo "   Decoded content: $DECODED_CONFIG"
+              VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+            fi
+          fi
+        fi
+        
+        # Check for validation errors and exit if any found
+        if [ $VALIDATION_ERRORS -gt 0 ]; then
+          echo ""
+          echo "❌ Validation failed with $VALIDATION_ERRORS error(s). Please fix the above issues and try again."
+          exit 1
+        fi
+        
+        echo "✅ Input validation passed"
+
     - name: Decode and parse configuration
       shell: bash
       id: parse_config

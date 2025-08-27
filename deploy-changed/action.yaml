@@ -45,6 +45,66 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        VALIDATION_ERRORS=0
+        
+        # Check required inputs
+        if [ -z "${{ inputs.client-id }}" ]; then
+          echo "❌ Error: client-id is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        # Validate asset-patterns JSON
+        if ! echo '${{ inputs.asset-patterns }}' | jq . >/dev/null 2>&1; then
+          echo "❌ Error: asset-patterns is not valid JSON"
+          echo "   Expected format: {\"environment\":\"environments/*.yaml\",\"component\":\"components/*.yaml\"}"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        elif [ "$(echo '${{ inputs.asset-patterns }}' | jq 'length')" -eq 0 ]; then
+          echo "❌ Error: asset-patterns cannot be empty"
+          echo "   Please provide at least one asset type pattern"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        # Validate deployment-strategy
+        case "${{ inputs.deployment-strategy }}" in
+          "sequential"|"parallel")
+            ;;
+          *)
+            echo "❌ Error: Invalid deployment-strategy: ${{ inputs.deployment-strategy }}"
+            echo "   Valid strategies: sequential, parallel"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+            ;;
+        esac
+        
+        # Check base-ref format if provided
+        if [ -n "${{ inputs.base-ref }}" ]; then
+          if [[ ! "${{ inputs.base-ref }}" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+            echo "❌ Error: Invalid base-ref format: ${{ inputs.base-ref }}"
+            echo "   base-ref should be a valid git reference (branch, tag, or commit SHA)"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+          fi
+        fi
+        
+        # Check head-ref format if provided
+        if [ -n "${{ inputs.head-ref }}" ]; then
+          if [[ ! "${{ inputs.head-ref }}" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+            echo "❌ Error: Invalid head-ref format: ${{ inputs.head-ref }}"
+            echo "   head-ref should be a valid git reference (branch, tag, or commit SHA)"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+          fi
+        fi
+        
+        # Check for validation errors and exit if any found
+        if [ $VALIDATION_ERRORS -gt 0 ]; then
+          echo ""
+          echo "❌ Validation failed with $VALIDATION_ERRORS error(s). Please fix the above issues and try again."
+          exit 1
+        fi
+        
+        echo "✅ Input validation passed"
+
     - name: Detect changed assets
       shell: bash
       id: detect-assets
