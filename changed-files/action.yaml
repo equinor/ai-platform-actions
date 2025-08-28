@@ -78,8 +78,70 @@ runs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.head-ref || github.head_ref }}
+        ref: ${{ inputs.head-ref || github.head_ref || github.sha }}
         fetch-depth: 0
+        fetch-tags: true
+
+    - name: Ensure git references are available
+      shell: bash
+      run: |
+        # Determine base and head references
+        if [ -n "${{ inputs.base-ref }}" ] && [ -n "${{ inputs.head-ref }}" ]; then
+          BASE_REF="${{ inputs.base-ref }}"
+          HEAD_REF="${{ inputs.head-ref }}"
+        elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          BASE_REF="${{ github.event.pull_request.base.sha }}"
+          HEAD_REF="${{ github.event.pull_request.head.sha }}"
+        elif [ "${{ github.event_name }}" = "merge_group" ]; then
+          BASE_REF="${{ github.event.merge_group.base_sha }}"
+          HEAD_REF="${{ github.event.merge_group.head_sha }}"
+        else
+          BASE_REF="${{ github.event.before }}"
+          HEAD_REF="${{ github.event.after }}"
+        fi
+        
+        echo "Checking availability of references:"
+        echo "Base: $BASE_REF"
+        echo "Head: $HEAD_REF"
+        
+        # Try to resolve the references to ensure they exist
+        if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+          echo "Warning: Base reference '$BASE_REF' not found locally, attempting to fetch..."
+          # Try to fetch the specific reference if it's a commit SHA
+          if [[ "$BASE_REF" =~ ^[a-f0-9]{7,40}$ ]]; then
+            # It's likely a commit SHA, try to fetch more history
+            git fetch origin --unshallow 2>/dev/null || git fetch origin --depth=1000 || echo "Could not fetch additional history"
+          else
+            # It's likely a branch or tag, try to fetch it specifically
+            git fetch origin "$BASE_REF:$BASE_REF" 2>/dev/null || git fetch origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF" 2>/dev/null || echo "Could not fetch branch/tag $BASE_REF"
+          fi
+        fi
+        
+        if ! git rev-parse --verify "$HEAD_REF" >/dev/null 2>&1; then
+          echo "Warning: Head reference '$HEAD_REF' not found locally, attempting to fetch..."
+          if [[ "$HEAD_REF" =~ ^[a-f0-9]{7,40}$ ]]; then
+            git fetch origin --unshallow 2>/dev/null || git fetch origin --depth=1000 || echo "Could not fetch additional history"
+          else
+            git fetch origin "$HEAD_REF:$HEAD_REF" 2>/dev/null || git fetch origin "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF" 2>/dev/null || echo "Could not fetch branch/tag $HEAD_REF"
+          fi
+        fi
+        
+        # Final verification
+        if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+          echo "❌ Error: Cannot resolve base reference '$BASE_REF'"
+          echo "This could be because:"
+          echo "  - The commit SHA doesn't exist in this repository"
+          echo "  - The branch/tag name is incorrect"
+          echo "  - The commit is not reachable from the current checkout"
+          exit 1
+        fi
+        
+        if ! git rev-parse --verify "$HEAD_REF" >/dev/null 2>&1; then
+          echo "❌ Error: Cannot resolve head reference '$HEAD_REF'"
+          exit 1
+        fi
+        
+        echo "✅ Both references are available"
 
     - name: Detect changes
       shell: bash
@@ -100,10 +162,16 @@ runs:
           HEAD_SHA="${{ github.event.after }}"
         fi
         
-        echo "Comparing $BASE_SHA..$HEAD_SHA"
+        # Resolve references to actual commit SHAs for reliable comparison
+        BASE_COMMIT=$(git rev-parse "$BASE_SHA")
+        HEAD_COMMIT=$(git rev-parse "$HEAD_SHA")
         
-        # Get all changed files
-        CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA)
+        echo "Comparing $BASE_COMMIT..$HEAD_COMMIT"
+        echo "Base ref: $BASE_SHA -> $BASE_COMMIT"
+        echo "Head ref: $HEAD_SHA -> $HEAD_COMMIT"
+        
+        # Get all changed files using the resolved commit SHAs
+        CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT" "$HEAD_COMMIT")
         
         # Apply ignore pattern first (takes precedence)
         if [ -n "${{ inputs.ignore-pattern }}" ]; then
