@@ -108,8 +108,9 @@ runs:
         # Apply ignore pattern first (takes precedence)
         if [ -n "${{ inputs.ignore-pattern }}" ]; then
           FILTERED_FILES=""
+          IGNORE_PATTERN="${{ inputs.ignore-pattern }}"
           while IFS= read -r file; do
-            if [[ ! "$file" == ${{ inputs.ignore-pattern }} ]]; then
+            if [[ ! "$file" == $IGNORE_PATTERN ]]; then
               if [ -z "$FILTERED_FILES" ]; then
                 FILTERED_FILES="$file"
               else
@@ -124,8 +125,9 @@ runs:
         # Apply filter pattern (if specified and no ignore pattern conflicts)
         if [ -n "${{ inputs.filter-pattern }}" ]; then
           FILTERED_FILES=""
+          FILTER_PATTERN="${{ inputs.filter-pattern }}"
           while IFS= read -r file; do
-            if [[ "$file" == ${{ inputs.filter-pattern }} ]]; then
+            if [[ "$file" == $FILTER_PATTERN ]]; then
               if [ -z "$FILTERED_FILES" ]; then
                 FILTERED_FILES="$file"
               else
