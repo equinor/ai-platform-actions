@@ -73,8 +73,18 @@ runs:
           exit 1
         fi
         
+
         echo "✅ Input validation passed"
 
+    - name: Input summary
+      shell: bash
+      run: |
+        echo "🔎 changed-files input summary:"
+        echo "  base-ref:      '${{ inputs.base-ref }}'"
+        echo "  head-ref:      '${{ inputs.head-ref }}'"
+        echo "  filter-pattern:'${{ inputs.filter-pattern }}'"
+        echo "  ignore-pattern:'${{ inputs.ignore-pattern }}'"
+        echo "  output-format: '${{ inputs.output-format }}'"
     - name: Checkout
       uses: actions/checkout@v4
       with:
