@@ -109,6 +109,7 @@ runs:
           HEAD_REF="${{ github.event.after }}"
         fi
         
+        echo "Event name: ${{ github.event_name }}"
         echo "Checking availability of references:"
         echo "Base: $BASE_REF"
         echo "Head: $HEAD_REF"
