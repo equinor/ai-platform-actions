@@ -162,15 +162,14 @@ runs:
       if: ${{ steps.parse_config.outputs.config-type == 'array' && inputs.index == '' }}
       shell: bash
       run: |
-        echo "Sequential deployment mode for array with ${{ steps.parse_config.outputs.array-length }} items"
+        ARRAY_LENGTH="${{ steps.parse_config.outputs.array-length }}"
+        echo "Sequential deployment mode for array with $ARRAY_LENGTH items"
         CONFIG_ARRAY='${{ steps.parse_config.outputs.config-json }}'
-        
-        for i in $(seq 0 $((${‌{ steps.parse_config.outputs.array-length }} - 1))); do
+        for i in $(seq 0 $(($ARRAY_LENGTH - 1))); do
           echo "Deploying item $i..."
           ITEM=$(echo "$CONFIG_ARRAY" | jq ".[$i]")
           ASSET_TYPE=$(echo "$ITEM" | jq -r '.["asset-type"]')
           ASSET_PATH=$(echo "$ITEM" | jq -r '.["asset-path"]')
-          
           echo "Item $i: $ASSET_TYPE at $ASSET_PATH"
           # Note: Sequential deployment calls would need to be implemented here
           # This is a basic framework - full implementation would require calling the individual actions
@@ -229,14 +228,14 @@ runs:
     - name: Print Result
       shell: bash
       run: |
+        ARRAY_LENGTH="${{ steps.parse_config.outputs.array-length }}"
         if [ "${{ steps.parse_config.outputs.config-type }}" = "array" ] && [ -z "${{ inputs.index }}" ]; then
-          echo "Sequential deployment completed for ${{ steps.parse_config.outputs.array-length }} items"
+          echo "Sequential deployment completed for $ARRAY_LENGTH items"
         else
           echo "Deployed asset type: ${{ steps.parse_config.outputs.asset-type }}"
           if [ -n "${{ inputs.index }}" ]; then
             echo "Deployed from array index: ${{ inputs.index }}"
           fi
-          
           if [ "${{ steps.parse_config.outputs.asset-type }}" = "environment" ]; then
             echo "Resource ID: ${{ steps.deploy_environment.outputs.resource-id }}"
             echo "Asset Reference: ${{ steps.deploy_environment.outputs.environment-ref }}"
