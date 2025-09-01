@@ -1,5 +1,5 @@
 name: Changed Files
-description: Detect changed files in the repository and optionally filter by patterns
+description: Detect changed Azure ML assets by monitoring YAML definition files and their related source files (Python, Dockerfiles, etc.)
 inputs:
   base-ref:
     description: 'Base reference for comparison (optional - auto-detected from event)'
@@ -20,13 +20,13 @@ inputs:
 
 outputs:
   changed-files:
-    description: 'List of changed files'
+    description: 'List of changed Azure ML asset paths'
     value: ${{ steps.detect-changes.outputs.changed-files }}
   changed-files-json:
-    description: 'List of changed files as JSON array'
+    description: 'JSON array of Azure ML assets with asset-type and asset-path fields (deploy-x compatible)'
     value: ${{ steps.detect-changes.outputs.changed-files-json }}
   has-changes:
-    description: 'Whether any files were changed'
+    description: 'Whether any Azure ML assets were affected by changes'
     value: ${{ steps.detect-changes.outputs.has-changes }}
 
 runs:
@@ -170,18 +170,14 @@ runs:
           BASE_SHA="${{ github.event.before }}"
           HEAD_SHA="${{ github.event.after }}"
         fi
-        
         # Resolve references to actual commit SHAs for reliable comparison
         BASE_COMMIT=$(git rev-parse "$BASE_SHA")
         HEAD_COMMIT=$(git rev-parse "$HEAD_SHA")
-        
         echo "Comparing $BASE_COMMIT..$HEAD_COMMIT"
         echo "Base ref: $BASE_SHA -> $BASE_COMMIT"
         echo "Head ref: $HEAD_SHA -> $HEAD_COMMIT"
-        
         # Get all changed files using the resolved commit SHAs
         CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT" "$HEAD_COMMIT")
-        
         # Apply ignore pattern first (takes precedence)
         if [ -n "${{ inputs.ignore-pattern }}" ]; then
           FILTERED_FILES=""
@@ -191,14 +187,12 @@ runs:
               if [ -z "$FILTERED_FILES" ]; then
                 FILTERED_FILES="$file"
               else
-                FILTERED_FILES="$FILTERED_FILES
-        $file"
+                FILTERED_FILES=$(printf "%s\n%s" "$FILTERED_FILES" "$file")
               fi
             fi
           done <<< "$CHANGED_FILES"
           CHANGED_FILES="$FILTERED_FILES"
         fi
-        
         # Apply filter pattern (if specified and no ignore pattern conflicts)
         if [ -n "${{ inputs.filter-pattern }}" ]; then
           FILTERED_FILES=""
@@ -208,95 +202,162 @@ runs:
               if [ -z "$FILTERED_FILES" ]; then
                 FILTERED_FILES="$file"
               else
-                FILTERED_FILES="$FILTERED_FILES
-        $file"
+                FILTERED_FILES=$(printf "%s\n%s" "$FILTERED_FILES" "$file")
               fi
             fi
           done <<< "$CHANGED_FILES"
           CHANGED_FILES="$FILTERED_FILES"
         fi
+        # First, find all Azure ML asset YAML files in the repository to build a mapping
+        echo "Building asset file mapping..."
+        ASSET_MAP_FILE=$(mktemp)
+        find . -name "*.yaml" -o -name "*.yml" | while read -r yaml_file; do
+          if [ -f "$yaml_file" ]; then
+            SCHEMA_LINE=$(head -n 1 "$yaml_file" | grep '\$schema:' || true)
+            ASSET_TYPE="unknown"
+            if [[ "$SCHEMA_LINE" == *"commandComponent.schema.json"* ]]; then
+              ASSET_TYPE="component"
+            elif [[ "$SCHEMA_LINE" == *"environment.schema.json"* ]]; then
+              ASSET_TYPE="environment"
+            elif [[ "$SCHEMA_LINE" == *"data.schema.json"* ]]; then
+              ASSET_TYPE="data"
+            elif [[ "$SCHEMA_LINE" == *"mltable.schema.json"* ]]; then
+              ASSET_TYPE="data"
+            elif [[ "$SCHEMA_LINE" == *"commandJob.schema.json"* ]]; then
+              ASSET_TYPE="job"
+            elif [[ "$SCHEMA_LINE" == *"pipelineJob.schema.json"* ]]; then
+              ASSET_TYPE="job"
+            fi
+            if [[ "$ASSET_TYPE" != "unknown" ]]; then
+              # Store: asset_type|yaml_path|directory_path
+              YAML_DIR=$(dirname "$yaml_file")
+              echo "$ASSET_TYPE|$yaml_file|$YAML_DIR" >> "$ASSET_MAP_FILE"
+            fi
+          fi
+        done
+
+        # Process changed files and determine affected assets
+        ASSET_LIST="[]"
+        PROCESSED_ASSETS=""
         
-        # Check if any files changed
-        if [ -z "$CHANGED_FILES" ]; then
+        while IFS= read -r file; do
+          # Direct YAML asset file change
+          if [[ "$file" =~ \.(yaml|yml)$ ]] && [ -f "$file" ]; then
+            SCHEMA_LINE=$(head -n 1 "$file" | grep '\$schema:' || true)
+            ASSET_TYPE="unknown"
+            if [[ "$SCHEMA_LINE" == *"commandComponent.schema.json"* ]]; then
+              ASSET_TYPE="component"
+            elif [[ "$SCHEMA_LINE" == *"environment.schema.json"* ]]; then
+              ASSET_TYPE="environment"
+            elif [[ "$SCHEMA_LINE" == *"data.schema.json"* ]]; then
+              ASSET_TYPE="data"
+            elif [[ "$SCHEMA_LINE" == *"mltable.schema.json"* ]]; then
+              ASSET_TYPE="data"
+            elif [[ "$SCHEMA_LINE" == *"commandJob.schema.json"* ]]; then
+              ASSET_TYPE="job"
+            elif [[ "$SCHEMA_LINE" == *"pipelineJob.schema.json"* ]]; then
+              ASSET_TYPE="job"
+            fi
+            # Add to asset list if type is recognized and not already processed
+            if [[ "$ASSET_TYPE" != "unknown" ]] && [[ ! "$PROCESSED_ASSETS" =~ "$file" ]]; then
+              ASSET_LIST=$(echo "$ASSET_LIST" | jq --arg type "$ASSET_TYPE" --arg path "$file" '. += [{"asset-type": $type, "asset-path": $path}]')
+              PROCESSED_ASSETS="$PROCESSED_ASSETS $file"
+              echo "Direct asset change detected: $ASSET_TYPE at $file"
+            fi
+          else
+            # Check if this file change affects any asset directories
+            # Look for assets where the changed file is in the same directory or subdirectory
+            while IFS='|' read -r asset_type yaml_path yaml_dir; do
+              # Check if the changed file is in the asset's directory or subdirectory
+              if [[ "$file" == "$yaml_dir"* ]] && [[ ! "$PROCESSED_ASSETS" =~ "$yaml_path" ]]; then
+                # Additional filtering for relevant file types per asset type
+                SHOULD_INCLUDE=false
+                case "$asset_type" in
+                  "component")
+                    # Components: Python files, notebooks, scripts, config files
+                    if [[ "$file" =~ \.(py|ipynb|sh|ps1|yaml|yml|json|txt|md|requirements\.txt|conda\.yaml|conda\.yml)$ ]]; then
+                      SHOULD_INCLUDE=true
+                    fi
+                    ;;
+                  "environment")
+                    # Environments: Dockerfiles, Python files, conda files, requirements
+                    if [[ "$file" =~ \.(py|dockerfile|Dockerfile|yaml|yml|txt|md|requirements\.txt|conda\.yaml|conda\.yml)$ ]] || [[ "$file" == *"Dockerfile"* ]] || [[ "$file" == *"requirements.txt"* ]] || [[ "$file" == *"conda."* ]]; then
+                      SHOULD_INCLUDE=true
+                    fi
+                    ;;
+                  "job")
+                    # Jobs: Python files, config files, data files
+                    if [[ "$file" =~ \.(py|ipynb|yaml|yml|json|txt|md|csv|parquet|pkl|joblib)$ ]]; then
+                      SHOULD_INCLUDE=true
+                    fi
+                    ;;
+                  "data")
+                    # Data assets: Data files, schema files, processing scripts
+                    if [[ "$file" =~ \.(py|csv|parquet|json|txt|md|yaml|yml|pkl|joblib|tsv|xlsx)$ ]]; then
+                      SHOULD_INCLUDE=true
+                    fi
+                    ;;
+                esac
+                
+                if [ "$SHOULD_INCLUDE" = true ]; then
+                  ASSET_LIST=$(echo "$ASSET_LIST" | jq --arg type "$asset_type" --arg path "$yaml_path" '. += [{"asset-type": $type, "asset-path": $path}]')
+                  PROCESSED_ASSETS="$PROCESSED_ASSETS $yaml_path"
+                  echo "Related file change detected: $file affects $asset_type at $yaml_path"
+                fi
+              fi
+            done < "$ASSET_MAP_FILE"
+          fi
+        done <<< "$CHANGED_FILES"
+        
+        # Clean up temporary file
+        rm -f "$ASSET_MAP_FILE"
+        # Check if any assets found
+        if [ "$(echo "$ASSET_LIST" | jq 'length')" -eq 0 ]; then
           echo "has-changes=false" >> "$GITHUB_OUTPUT"
           echo "changed-files=" >> "$GITHUB_OUTPUT"
           echo "changed-files-json=[]" >> "$GITHUB_OUTPUT"
-          echo "No files changed matching criteria"
+          echo "No valid AzureML asset files changed"
           exit 0
         else
           echo "has-changes=true" >> "$GITHUB_OUTPUT"
         fi
         
+        # Remove duplicates from ASSET_LIST (in case same asset was added multiple times)
+        ASSET_LIST=$(echo "$ASSET_LIST" | jq 'unique_by(.["asset-path"])')
         # Format output based on requested format
         case "${{ inputs.output-format }}" in
           "json")
-            # Convert to JSON array
-            JSON_ARRAY="["
-            FIRST=true
-            while IFS= read -r file; do
-              if [ "$FIRST" = true ]; then
-                JSON_ARRAY="$JSON_ARRAY\"$file\""
-                FIRST=false
-              else
-                JSON_ARRAY="$JSON_ARRAY,\"$file\""
-              fi
-            done <<< "$CHANGED_FILES"
-            JSON_ARRAY="$JSON_ARRAY]"
-            echo "changed-files=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
-            echo "changed-files-json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            echo "changed-files=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
+            echo "changed-files-json=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
             ;;
           "newline-separated")
-            # Keep newline-separated format
-            NEWLINE_SEPARATED="$CHANGED_FILES"
+            # Output asset-paths, one per line
+            PATHS=$(echo "$ASSET_LIST" | jq -r '.[]."asset-path"')
             echo "changed-files<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$NEWLINE_SEPARATED" >> "$GITHUB_OUTPUT"
+            echo "$PATHS" >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
-            
-            # Also create JSON version
-            JSON_ARRAY="["
-            FIRST=true
-            while IFS= read -r file; do
-              if [ "$FIRST" = true ]; then
-                JSON_ARRAY="$JSON_ARRAY\"$file\""
-                FIRST=false
-              else
-                JSON_ARRAY="$JSON_ARRAY,\"$file\""
-              fi
-            done <<< "$CHANGED_FILES"
-            JSON_ARRAY="$JSON_ARRAY]"
-            echo "changed-files-json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            echo "changed-files-json=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
             ;;
           *)
-            # Default: space-separated
-            SPACE_SEPARATED=$(echo "$CHANGED_FILES" | xargs)
+            # Default: space-separated asset-paths
+            SPACE_SEPARATED=$(echo "$ASSET_LIST" | jq -r '.[]."asset-path"' | xargs)
             echo "changed-files=$SPACE_SEPARATED" >> "$GITHUB_OUTPUT"
-            
-            # Also create JSON version
-            JSON_ARRAY="["
-            FIRST=true
-            while IFS= read -r file; do
-              if [ "$FIRST" = true ]; then
-                JSON_ARRAY="$JSON_ARRAY\"$file\""
-                FIRST=false
-              else
-                JSON_ARRAY="$JSON_ARRAY,\"$file\""
-              fi
-            done <<< "$CHANGED_FILES"
-            JSON_ARRAY="$JSON_ARRAY]"
-            echo "changed-files-json=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+            echo "changed-files-json=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
             ;;
         esac
 
     - name: Print results
       shell: bash
       run: |
-        echo "Changed files detected: ${{ steps.detect-changes.outputs.has-changes }}"
+        echo "Azure ML assets affected: ${{ steps.detect-changes.outputs.has-changes }}"
         if [ "${{ steps.detect-changes.outputs.has-changes }}" = "true" ]; then
-          echo "Changed files: ${{ steps.detect-changes.outputs.changed-files }}"
+          echo "Affected assets: ${{ steps.detect-changes.outputs.changed-files }}"
+          echo "Asset details: ${{ steps.detect-changes.outputs.changed-files-json }}"
           if [ -n "${{ inputs.ignore-pattern }}" ]; then
             echo "Ignore pattern applied: ${{ inputs.ignore-pattern }}"
           fi
           if [ -n "${{ inputs.filter-pattern }}" ]; then
             echo "Filter pattern applied: ${{ inputs.filter-pattern }}"
           fi
+          echo "Note: Assets are included when their YAML definition or related source files change"
         fi

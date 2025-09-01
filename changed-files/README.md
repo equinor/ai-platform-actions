@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Changed Files action detects files that have been modified between two Git references (commits, branches, etc.) and provides them in various output formats. This action is particularly useful for triggering deployments or actions only when specific files have changed.
+The Changed Files action detects Azure ML asset files (environments, components, data, jobs) that have been modified between two Git references and provides them in various output formats with asset-type detection. This action inspects YAML files' `$schema` fields to automatically determine asset types, making it perfect for integration with the deploy-x action for automated Azure ML deployments.
 
 ## Usage
 
@@ -34,22 +34,34 @@ The Changed Files action detects files that have been modified between two Git r
 
 | Output | Description |
 |--------|-------------|
-| `changed-files` | List of changed files in the specified format |
-| `changed-files-json` | List of changed files as JSON array (always available) |
-| `has-changes` | Boolean indicating whether any files were changed |
+| `changed-files` | List of changed asset paths in the specified format |
+| `changed-files-json` | JSON array of objects with `asset-type` and `asset-path` fields (compatible with deploy-x) |
+| `has-changes` | Boolean indicating whether any valid Azure ML asset files were changed |
+
+## Asset Type Detection
+
+The action automatically detects Azure ML asset types by inspecting the `$schema` field in YAML files:
+
+- **Components**: Files with `commandComponent.schema.json` in `$schema`
+- **Environments**: Files with `environment.schema.json` in `$schema` 
+- **Data Assets**: Files with `data.schema.json` or `mltable.schema.json` in `$schema`
+- **Jobs**: Files with `commandJob.schema.json` or `pipelineJob.schema.json` in `$schema`
+
+Only files with recognized schemas are included in the output. Non-YAML files or YAML files without recognized schemas are ignored.
 
 ## Examples
 
 ### Basic Usage
 ```yaml
-- name: Detect all changed files
+- name: Detect changed Azure ML assets
   uses: equinor/ai-platform-actions/changed-files@main
   id: changes
 
-- name: Process if files changed
+- name: Process if assets changed
   if: steps.changes.outputs.has-changes == 'true'
   run: |
-    echo "Changed files: ${{ steps.changes.outputs.changed-files }}"
+    echo "Changed assets: ${{ steps.changes.outputs.changed-files }}"
+    echo "Asset details: ${{ steps.changes.outputs.changed-files-json }}"
 ```
 
 ### Filter by Pattern
@@ -60,7 +72,7 @@ The Changed Files action detects files that have been modified between two Git r
   with:
     filter-pattern: "*.yaml"
 
-- name: Detect changed files in components directory
+- name: Detect changed assets in components directory
   uses: equinor/ai-platform-actions/changed-files@main
   id: component-changes
   with:
@@ -94,31 +106,32 @@ The Changed Files action detects files that have been modified between two Git r
     output-format: "json"
 ```
 
-### JSON Output for Matrix
+### JSON Output with Asset Types
 ```yaml
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      changed-files: ${{ steps.changes.outputs.changed-files-json }}
+      changed-assets: ${{ steps.changes.outputs.changed-files-json }}
       has-changes: ${{ steps.changes.outputs.has-changes }}
     steps:
       - uses: equinor/ai-platform-actions/changed-files@main
         id: changes
         with:
-          filter-pattern: "components/*.yaml"
+          filter-pattern: "**/*.yaml"
           output-format: "json"
 
-  process-changes:
+  deploy-assets:
     needs: detect-changes
     if: needs.detect-changes.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        file: ${{ fromJson(needs.detect-changes.outputs.changed-files) }}
+        asset: ${{ fromJson(needs.detect-changes.outputs.changed-assets) }}
     steps:
-      - name: Process file
-        run: echo "Processing ${{ matrix.file }}"
+      - name: Deploy asset
+        run: |
+          echo "Deploying ${{ matrix.asset.asset-type }}: ${{ matrix.asset.asset-path }}"
 ```
 
 ## Filter Patterns
@@ -158,38 +171,54 @@ The action automatically detects the appropriate Git references based on the Git
 ## Output Formats
 
 ### Space-separated (default)
+Returns only the asset paths:
 ```
-file1.yaml file2.yaml components/comp1.yaml
+environments/dev.yaml components/train.yaml data/dataset.yaml
 ```
 
 ### JSON
+Returns array of objects with asset-type and asset-path:
 ```json
-["file1.yaml", "file2.yaml", "components/comp1.yaml"]
+[
+  {"asset-type": "environment", "asset-path": "environments/dev.yaml"},
+  {"asset-type": "component", "asset-path": "components/train.yaml"},
+  {"asset-type": "data", "asset-path": "data/dataset.yaml"}
+]
 ```
 
 ### Newline-separated
+Returns only the asset paths, one per line:
 ```
-file1.yaml
-file2.yaml
-components/comp1.yaml
+environments/dev.yaml
+components/train.yaml
+data/dataset.yaml
 ```
+
+**Note**: The `changed-files-json` output always contains the full object format with asset-type information, regardless of the `output-format` setting.
 
 ## Integration with Deploy-X
 
-This action pairs perfectly with deploy-x for conditional deployments:
+This action is designed to work seamlessly with deploy-x for automated Azure ML asset deployments. The `changed-files-json` output provides the exact format expected by deploy-x:
 
 ```yaml
-- name: Detect changed deployment files
+- name: Detect changed Azure ML assets
   uses: equinor/ai-platform-actions/changed-files@main
   id: changes
   with:
-    filter-pattern: "deployments/*.yaml"
-    ignore-pattern: "deployments/test/**"
+    filter-pattern: "**/*.yaml"
+    ignore-pattern: "test/**"
 
-- name: Deploy changed files
+- name: Deploy changed assets
   if: steps.changes.outputs.has-changes == 'true'
   uses: equinor/ai-platform-actions/deploy-x@main
   with:
     client-id: ${{ vars.AZURE_CLIENT_ID }}
-    config: ${{ steps.generate-config.outputs.config }}
+    config: ${{ base64(steps.changes.outputs.changed-files-json) }}
 ```
+
+### Why This Integration Works
+
+1. **Asset Type Detection**: The action automatically detects whether a YAML file is an environment, component, data asset, or job by inspecting its `$schema` field
+2. **Compatible Format**: The JSON output matches exactly what deploy-x expects: objects with `asset-type` and `asset-path` fields
+3. **Base64 Encoding**: Simply wrap the JSON output with `base64()` function to meet deploy-x's input requirements
+4. **Filtering**: Use pattern matching to target specific directories or file types for deployment
