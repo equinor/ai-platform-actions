@@ -134,28 +134,28 @@ runs:
         if [ -n "${{ inputs.tenant-id }}" ]; then
           echo "tenant-id=${{ inputs.tenant-id }}" >> "$GITHUB_OUTPUT"
         else
-          echo "tenant-id=${{ vars.tenant-id }}" >> "$GITHUB_OUTPUT"
+          echo "tenant-id=${{ env.TENANT_ID }}" >> "$GITHUB_OUTPUT"
         fi
         
         # Set subscription-id
         if [ -n "${{ inputs.subscription-id }}" ]; then
           echo "subscription-id=${{ inputs.subscription-id }}" >> "$GITHUB_OUTPUT"
         else
-          echo "subscription-id=${{ vars.subscription-id }}" >> "$GITHUB_OUTPUT"
+          echo "subscription-id=${{ env.SUBSCRIPTION_ID }}" >> "$GITHUB_OUTPUT"
         fi
         
         # Set resource-group
         if [ -n "${{ inputs.resource-group }}" ]; then
           echo "resource-group=${{ inputs.resource-group }}" >> "$GITHUB_OUTPUT"
         else
-          echo "resource-group=${{ vars.resource-group }}" >> "$GITHUB_OUTPUT"
+          echo "resource-group=${{ env.RESOURCE_GROUP }}" >> "$GITHUB_OUTPUT"
         fi
         
         # Set workspace-name
         if [ -n "${{ inputs.workspace-name }}" ]; then
           echo "workspace-name=${{ inputs.workspace-name }}" >> "$GITHUB_OUTPUT"
         else
-          echo "workspace-name=${{ vars.workspace-name }}" >> "$GITHUB_OUTPUT"
+          echo "workspace-name=${{ env.WORKSPACE_NAME }}" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Deploy sequentially (for arrays without index)
