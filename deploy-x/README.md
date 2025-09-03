@@ -2,291 +2,218 @@
 
 ## Overview
 
-Deploy X is a universal deployment action that can deploy any Azure ML asset (environments, components, data, or jobs) based on a base64-encoded JSON configuration. This action acts as a dispatcher to the specific deploy actions.
+Deploy X is a universal deployment action that can deploy any Azure ML asset (environments, components, data, or jobs) by dispatching to the appropriate specialized deployment action. This action is designed to work seamlessly with matrix strategies for parallel deployment of multiple assets.
+
+## Key Features
+
+- **Universal Dispatcher**: Works with all Azure ML asset types (environments, components, data, jobs)
+- **Matrix Strategy Compatible**: Designed for parallel deployment using GitHub Actions matrix strategies
+- **Direct Input**: Accepts asset type and path directly (no base64 encoding required)
+- **Environment Variable Fallback**: Uses environment variables for Azure credentials when inputs not provided
+- **Unified Outputs**: Consistent output format regardless of asset type
 
 ## Usage
 
-To use this action from another repository, add a step to your GitHub Actions workflow that references this action:
-
-```yaml
-jobs:
-  deploy-asset:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Deploy Azure ML Asset
-        uses: equinor/ai-platform-actions/deploy-x@main
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          config: ${{ env.DEPLOY_CONFIG }}  # Base64-encoded JSON
-```
-
-## Configuration Format
-
-The `config` input should be a base64-encoded JSON string. It can be either:
-
-1. **Single Object**: Deploy one asset
-2. **Array of Objects**: Deploy multiple assets (sequentially or in parallel using matrix strategy)
-
 ### Single Asset Deployment
 
-#### Environment Deployment
-```json
-{
-  "asset-type": "environment",
-  "asset-path": "path/to/environment.yaml"
-}
-```
-
-#### Component Deployment
-```json
-{
-  "asset-type": "component", 
-  "asset-path": "path/to/component.yaml"
-}
-```
-
-#### Data Deployment
-```json
-{
-  "asset-type": "data",
-  "asset-path": "path/to/data.yaml",
-  "type": "data"
-}
-```
-
-#### Job Deployment
-```json
-{
-  "asset-type": "job",
-  "asset-path": "path/to/job.yaml",
-  "compute": "my-compute-cluster"
-}
-```
-
-### Multiple Asset Deployment
-
-#### Array Configuration
-```json
-[
-  {
-    "asset-type": "environment",
-    "asset-path": "envs/training.yaml"
-  },
-  {
-    "asset-type": "component",
-    "asset-path": "components/preprocess.yaml"
-  },
-  {
-    "asset-type": "job",
-    "asset-path": "jobs/training.yaml",
-    "compute": "gpu-cluster"
-  }
-]
-```
-
-## Deployment Modes
-
-### 1. Single Asset
-Use a single JSON object for one asset deployment.
-
-### 2. Sequential Deployment
-Use an array without the `index` parameter to deploy all assets sequentially.
-
-### 3. Parallel Deployment (Matrix Strategy)
-Use an array with a matrix strategy to deploy assets in parallel:
-
 ```yaml
-strategy:
-  matrix:
-    index: [0, 1, 2]  # Deploy items at these array indices
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: equinor/ai-platform-actions/deploy-x@main
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          config: ${{ env.DEPLOY_CONFIG_ARRAY }}
-          index: ${{ matrix.index }}
-```
-
-## Parameter Fallback
-
-This action supports optional parameters that fall back to GitHub variables if not provided:
-
-- `tenant-id` → falls back to `${{ vars.tenant-id }}`
-- `subscription-id` → falls back to `${{ vars.subscription-id }}`
-- `resource-group` → falls back to `${{ vars.resource-group }}`
-- `workspace-name` → falls back to `${{ vars.workspace-name }}`
-
-## Examples
-
-### Creating Base64 Config
-
-You can create the base64-encoded config in various ways:
-
-#### Using bash:
-```bash
-echo '{"asset-type":"component","asset-path":"./components/my-component.yaml"}' | base64
-```
-
-#### Using PowerShell:
-```powershell
-[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{"asset-type":"job","asset-path":"./jobs/training.yaml","compute":"gpu-cluster"}'))
-```
-
-#### In GitHub Actions:
-```yaml
-- name: Prepare config
-  run: |
-    CONFIG='{"asset-type":"environment","asset-path":"./envs/training-env.yaml"}'
-    echo "DEPLOY_CONFIG=$(echo $CONFIG | base64 -w 0)" >> $GITHUB_ENV
-
-- name: Deploy Asset
-  uses: equinor/ai-platform-actions/deploy-x@main
+- uses: equinor/ai-platform-actions/deploy-x@main
   with:
-    client-id: ${{ vars.AZURE_CLIENT_ID }}
-    config: ${{ env.DEPLOY_CONFIG }}
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    asset-type: environment
+    asset-path: environments/training/environment.yaml
 ```
 
-### Complete Workflow Examples
+### Matrix Strategy with changed-files (Recommended)
 
-#### Single Asset Deployment
+The most common pattern is to use with the `changed-files` action:
+
 ```yaml
-name: Deploy Single Asset
-
-on:
-  push:
-    branches: [main]
-
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Deploy Environment
-        uses: equinor/ai-platform-actions/deploy-x@main
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          config: eyJhc3NldC10eXBlIjoiZW52aXJvbm1lbnQiLCJhc3NldC1wYXRoIjoiLi9lbnZzL3RyYWluaW5nLWVudi55YW1sIn0=
-```
-
-#### Sequential Multi-Asset Deployment
-```yaml
-name: Deploy Multiple Assets Sequentially
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Deploy All Assets
-        uses: equinor/ai-platform-actions/deploy-x@main
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          # Base64 of: [{"asset-type":"environment","asset-path":"envs/training.yaml"},{"asset-type":"component","asset-path":"components/preprocess.yaml"}]
-          config: W3siYXNzZXQtdHlwZSI6ImVudmlyb25tZW50IiwiYXNzZXQtcGF0aCI6ImVudnMvdHJhaW5pbmcueWFtbCJ9LHsiYXNzZXQtdHlwZSI6ImNvbXBvbmVudCIsImFzc2V0LXBhdGgiOiJjb21wb25lbnRzL3ByZXByb2Nlc3MueWFtbCJ9XQ==
-```
-
-#### Parallel Multi-Asset Deployment (Matrix Strategy)
-```yaml
-name: Deploy Multiple Assets in Parallel
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  prepare:
+  detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      changed-files: ${{ steps.changed-files.outputs.changed-files-json }}
+      has-changes: ${{ steps.changed-files.outputs.has-changes }}
     steps:
-      - name: Set up deployment matrix
-        id: set-matrix
-        run: |
-          # Define array of configurations
-          CONFIG_ARRAY='[
-            {"asset-type":"environment","asset-path":"envs/training.yaml"},
-            {"asset-type":"component","asset-path":"components/preprocess.yaml"},
-            {"asset-type":"job","asset-path":"jobs/training.yaml","compute":"gpu-cluster"}
-          ]'
-          
-          # Create matrix indices
-          LENGTH=$(echo "$CONFIG_ARRAY" | jq 'length')
-          INDICES=$(seq 0 $((LENGTH - 1)) | jq -R . | jq -s .)
-          echo "matrix={\"index\":$INDICES}" >> $GITHUB_OUTPUT
-          
-          # Store config as base64
-          CONFIG_B64=$(echo "$CONFIG_ARRAY" | base64 -w 0)
-          echo "DEPLOY_CONFIG=$CONFIG_B64" >> $GITHUB_ENV
+      - uses: equinor/ai-platform-actions/changed-files@main
+        id: changed-files
 
-  deploy:
-    needs: prepare
+  deploy-assets:
+    if: ${{ needs.detect-changes.outputs.has-changes == 'true' }}
+    needs: detect-changes
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      matrix:
+        asset: ${{ fromJson(needs.detect-changes.outputs.changed-files) }}
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Deploy Asset
-        uses: equinor/ai-platform-actions/deploy-x@main
+      - name: Azure Login
+        uses: azure/login@v2
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          config: ${{ env.DEPLOY_CONFIG }}
-          index: ${{ matrix.index }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+
+      - uses: equinor/ai-platform-actions/deploy-x@main
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          asset-type: ${{ matrix.asset.asset-type }}
+          asset-path: ${{ matrix.asset.asset-path }}
 ```
 
-## Supported Asset Types
+## Inputs
 
-| Asset Type | Required Fields | Optional Fields |
-|------------|----------------|-----------------|
-| `environment` | `asset-path` | - |
-| `component` | `asset-path` | - |
-| `data` | `asset-path`, `type` | - |
-| `job` | `asset-path` | `compute` |
+| Input | Required | Description | Default |
+|-------|----------|-------------|---------|
+| `client-id` | ✅ | Client ID configured with Federated Credentials | - |
+| `asset-type` | ✅ | Type of Azure ML asset (`environment`, `component`, `data`, `job`) | - |
+| `asset-path` | ✅ | Path to the asset definition YAML file | - |
+| `tenant-id` | ❌ | Azure tenant ID | `TENANT_ID` env var |
+| `subscription-id` | ❌ | Azure subscription ID | `SUBSCRIPTION_ID` env var |
+| `resource-group` | ❌ | Azure resource group | `RESOURCE_GROUP` env var |
+| `workspace-name` | ❌ | Azure ML workspace name | `WORKSPACE_NAME` env var |
+| `type` | ❌ | Type parameter for data assets | - |
+| `compute` | ❌ | Compute parameter for job assets | `serverless` |
 
 ## Outputs
 
-The action provides unified outputs that work regardless of the asset type:
+| Output | Description |
+|--------|-------------|
+| `resource-id` | Resource ID of the deployed asset |
+| `asset-ref` | Reference string of asset within AzureML workspace |
+| `asset-version` | The registered version/name of the asset within the workspace |
 
-- `resource-id`: Full Azure resource ID of the deployed asset
-- `asset-ref`: Reference string for the asset within the workspace
-- `asset-version`: Version/name of the asset within the workspace
+## Supported Asset Types
+
+| Asset Type | Description | Optional Parameters |
+|------------|-------------|-------------------|
+| `environment` | Azure ML environments | - |
+| `component` | Azure ML components | - |
+| `data` | Azure ML data assets | `type` |
+| `job` | Azure ML jobs | `compute` |
+
+## Environment Variables
+
+You can set environment variables to provide default Azure credentials:
+
+```yaml
+env:
+  TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  WORKSPACE_NAME: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
+```
+
+## Examples
+
+### Deploy Specific Asset Types
+
+```yaml
+# Deploy only environments
+- uses: equinor/ai-platform-actions/deploy-x@main
+  if: ${{ matrix.asset.asset-type == 'environment' }}
+  with:
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    asset-type: ${{ matrix.asset.asset-type }}
+    asset-path: ${{ matrix.asset.asset-path }}
+
+# Deploy data asset with type
+- uses: equinor/ai-platform-actions/deploy-x@main
+  with:
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    asset-type: data
+    asset-path: data/training-data.yaml
+    type: uri_folder
+
+# Deploy job with custom compute
+- uses: equinor/ai-platform-actions/deploy-x@main
+  with:
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    asset-type: job
+    asset-path: jobs/training-job.yaml
+    compute: gpu-cluster
+```
+
+### Complete Workflow Example
+
+```yaml
+name: Deploy Changed Azure ML Assets
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  WORKSPACE_NAME: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-files: ${{ steps.changed-files.outputs.changed-files-json }}
+      has-changes: ${{ steps.changed-files.outputs.has-changes }}
+    steps:
+      - uses: equinor/ai-platform-actions/changed-files@main
+        id: changed-files
+        with:
+          filter-pattern: "assets/**/*.yaml"
+          ignore-pattern: "test/**"
+
+  deploy-assets:
+    if: ${{ needs.detect-changes.outputs.has-changes == 'true' }}
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        asset: ${{ fromJson(needs.detect-changes.outputs.changed-files) }}
+      max-parallel: 3
+      fail-fast: false
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+
+      - uses: equinor/ai-platform-actions/deploy-x@main
+        id: deploy
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          asset-type: ${{ matrix.asset.asset-type }}
+          asset-path: ${{ matrix.asset.asset-path }}
+
+      - name: Output deployment results
+        run: |
+          echo "Deployed: ${{ matrix.asset.asset-type }} at ${{ matrix.asset.asset-path }}"
+          echo "Resource ID: ${{ steps.deploy.outputs.resource-id }}"
+          echo "Asset Reference: ${{ steps.deploy.outputs.asset-ref }}"
+```
 
 ## How It Works
 
-The action supports three deployment modes:
+The deploy-x action acts as a smart dispatcher:
 
-### 1. Single Asset Mode
-- Provide a single JSON object in the config
-- Deploys one asset directly
+1. **Input Validation**: Validates required inputs and checks that asset files exist
+2. **Default Parameters**: Sets Azure credentials from environment variables if not provided as inputs
+3. **Asset Dispatch**: Routes to the appropriate deployment action based on `asset-type`:
+   - `environment` → `deploy-environment`
+   - `component` → `deploy-component`
+   - `data` → `deploy-data`
+   - `job` → `deploy-job`
+4. **Unified Output**: Returns consistent outputs regardless of the underlying deployment action
 
-### 2. Sequential Array Mode  
-- Provide an array of JSON objects without the `index` parameter
-- Deploys all assets one after another in the same job
-- Good for dependent deployments where order matters
-
-### 3. Parallel Array Mode (Matrix Strategy)
-- Provide an array of JSON objects with the `index` parameter
-- Use GitHub Actions matrix strategy to deploy assets in parallel
-- Ideal for independent assets that can be deployed simultaneously
-- Faster deployment for multiple assets
-
-The action workflow:
-1. **Decode Configuration**: Decodes the base64 JSON config and determines if it's an object or array
-2. **Set Defaults**: Uses provided parameters or falls back to GitHub variables  
-3. **Route Deployment**: 
-   - For single objects or indexed arrays: calls the appropriate deploy action
-   - For sequential arrays: processes each item (framework provided, full implementation would require recursion)
-4. **Unified Output**: Provides consistent output format regardless of deployment mode
-
-This approach enables flexible deployment strategies from simple single-asset deployments to complex parallel multi-asset pipelines while maintaining the simplicity and features of the individual deploy actions.
+This design enables:
+- **Simplified Usage**: One action interface for all asset types
+- **Parallel Deployment**: Perfect for matrix strategies with multiple assets
+- **Consistent Experience**: Same inputs/outputs across all asset types
+- **Specialized Logic**: Leverages the specific deployment actions for each asset type
