@@ -127,7 +127,7 @@ runs:
 
     - name: Deploy Environment
       if: ${{ inputs.asset-type == 'environment' }}
-      uses: ./deploy-environment
+      uses: equinor/ai-platform-actions/deploy-environment@develop
       id: deploy_environment
       with:
         tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
@@ -139,7 +139,7 @@ runs:
 
     - name: Deploy Component
       if: ${{ inputs.asset-type == 'component' }}
-      uses: ./deploy-component
+      uses: equinor/ai-platform-actions/deploy-component@develop
       id: deploy_component
       with:
         tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
@@ -151,7 +151,7 @@ runs:
 
     - name: Deploy Data
       if: ${{ inputs.asset-type == 'data' }}
-      uses: ./deploy-data
+      uses: equinor/ai-platform-actions/deploy-data@develop
       id: deploy_data
       with:
         tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
@@ -164,7 +164,7 @@ runs:
 
     - name: Deploy Job
       if: ${{ inputs.asset-type == 'job' }}
-      uses: ./deploy-job
+      uses: equinor/ai-platform-actions/deploy-job@develop
       id: deploy_job
       with:
         tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
