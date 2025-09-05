@@ -102,7 +102,7 @@ runs:
       shell: bash
       run: |
         echo "🚀 About to deploy Azure ML ${{ inputs.data-type }} from: ${{ inputs.data-path }}"
-        echo "   Target workspace: ${{ inputs.workspace-name || vars.workspace-name }} (Resource Group: ${{ inputs.resource-group || vars.resource-group }})"
+        echo "   Target workspace: ${{ inputs.workspace-name }} (Resource Group: ${{ inputs.resource-group }})"
 
     - name: Az ml
       shell: bash

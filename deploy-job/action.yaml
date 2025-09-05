@@ -92,7 +92,7 @@ runs:
       shell: bash
       run: |
         echo "🚀 About to deploy Azure ML job from: ${{ inputs.job-path }}"
-        echo "   Target workspace: ${{ inputs.workspace-name || vars.workspace-name }} (Resource Group: ${{ inputs.resource-group || vars.resource-group }})"
+        echo "   Target workspace: ${{ inputs.workspace-name}} (Resource Group: ${{ inputs.resource-group}})"
         if [ -n "${{ inputs.compute }}" ]; then
           echo "   Compute target: ${{ inputs.compute }}"
         else
