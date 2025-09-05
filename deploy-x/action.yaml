@@ -2,19 +2,19 @@ name: Deploy X
 description: Universal deployment action for Azure ML assets. Dispatches to specific deployment actions based on asset type. Designed for use with matrix strategies for parallel deployment.
 inputs:
   tenant-id:
-    description: 'Tenant id (optional - falls back to vars.tenant-id)'
-    required: false
+    description: 'Azure tenant ID'
+    required: true
   subscription-id:
-    description: 'Azure subscription id (optional - falls back to vars.subscription-id)'
-    required: false
+    description: 'Azure subscription ID'
+    required: true
   resource-group:
-    description: 'Azure resource group (optional - falls back to vars.resource-group)'
-    required: false
+    description: 'Azure resource group name'
+    required: true
   workspace-name:
-    description: 'Azure Machine Learning workspace name (optional - falls back to vars.workspace-name)'
-    required: false
+    description: 'Azure Machine Learning workspace name'
+    required: true
   client-id:
-    description: 'Client id configured with Federated Credentials'
+    description: 'Client ID configured with Federated Credentials'
     required: true
   asset-type:
     description: 'Type of Azure ML asset to deploy (environment, component, data, job)'
@@ -43,39 +43,20 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Set default parameters
+    - name: Action Summary
       shell: bash
-      id: set_defaults
       run: |
-        # Set default parameters
-
-        # Set tenant-id
-        if [ -n "${{ inputs.tenant-id }}" ]; then
-          echo "tenant-id=${{ inputs.tenant-id }}" >> "$GITHUB_OUTPUT"
-        else
-          echo "tenant-id=${{ env.TENANT_ID }}" >> "$GITHUB_OUTPUT"
+        echo "🚀 Deploy X - Universal Azure ML Asset Deployment"
+        echo "   Asset Type: ${{ inputs.asset-type }}"
+        echo "   Asset Path: ${{ inputs.asset-path }}"
+        echo "   Target: ${{ inputs.workspace-name }} in ${{ inputs.resource-group }}"
+        if [ "${{ inputs.asset-type }}" = "data" ] && [ -n "${{ inputs.type }}" ]; then
+          echo "   Data Type: ${{ inputs.type }}"
         fi
-        
-        # Set subscription-id
-        if [ -n "${{ inputs.subscription-id }}" ]; then
-          echo "subscription-id=${{ inputs.subscription-id }}" >> "$GITHUB_OUTPUT"
-        else
-          echo "subscription-id=${{ env.SUBSCRIPTION_ID }}" >> "$GITHUB_OUTPUT"
+        if [ "${{ inputs.asset-type }}" = "job" ]; then
+          echo "   Compute: ${{ inputs.compute || 'serverless' }}"
         fi
-        
-        # Set resource-group
-        if [ -n "${{ inputs.resource-group }}" ]; then
-          echo "resource-group=${{ inputs.resource-group }}" >> "$GITHUB_OUTPUT"
-        else
-          echo "resource-group=${{ env.RESOURCE_GROUP }}" >> "$GITHUB_OUTPUT"
-        fi
-        
-        # Set workspace-name
-        if [ -n "${{ inputs.workspace-name }}" ]; then
-          echo "workspace-name=${{ inputs.workspace-name }}" >> "$GITHUB_OUTPUT"
-        else
-          echo "workspace-name=${{ env.WORKSPACE_NAME }}" >> "$GITHUB_OUTPUT"
-        fi
+        echo ""
 
     - name: Validate inputs
       shell: bash
@@ -83,61 +64,20 @@ runs:
         # Validate inputs
         VALIDATION_ERRORS=0
         
-        # Check required inputs
-        if [ -z "${{ inputs.client-id }}" ]; then
-          echo "❌ Error: client-id is required but not provided"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        fi
+        # Validate asset-type
+        case "${{ inputs.asset-type }}" in
+          "environment"|"component"|"data"|"job")
+            ;;
+          *)
+            echo "❌ Error: Invalid asset-type: ${{ inputs.asset-type }}"
+            echo "   Valid asset types: environment, component, data, job"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+            ;;
+        esac
         
-        if [ -z "${{ inputs.asset-type }}" ]; then
-          echo "❌ Error: asset-type is required but not provided"
-          echo "   Valid asset types: environment, component, data, job"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        else
-          # Validate asset-type
-          case "${{ inputs.asset-type }}" in
-            "environment"|"component"|"data"|"job")
-              ;;
-            *)
-              echo "❌ Error: Invalid asset-type: ${{ inputs.asset-type }}"
-              echo "   Valid asset types: environment, component, data, job"
-              VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-              ;;
-          esac
-        fi
-        
-        if [ -z "${{ inputs.asset-path }}" ]; then
-          echo "❌ Error: asset-path is required but not provided"
-          echo "   Please provide the path to the asset definition YAML file"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        elif [ ! -f "${{ inputs.asset-path }}" ]; then
+        if [ ! -f "${{ inputs.asset-path }}" ]; then
           echo "❌ Error: asset-path does not exist: ${{ inputs.asset-path }}"
           echo "   Please ensure the file exists and the path is correct"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        fi
-        
-        # Check Azure parameters (required for dependent actions)
-        if [ -z "${{ steps.set_defaults.outputs.tenant-id }}" ]; then
-          echo "❌ Error: tenant-id is required but not provided"
-          echo "   Please provide tenant-id as input or set TENANT_ID environment variable"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        fi
-        
-        if [ -z "${{ steps.set_defaults.outputs.subscription-id }}" ]; then
-          echo "❌ Error: subscription-id is required but not provided"
-          echo "   Please provide subscription-id as input or set SUBSCRIPTION_ID environment variable"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        fi
-        
-        if [ -z "${{ steps.set_defaults.outputs.resource-group }}" ]; then
-          echo "❌ Error: resource-group is required but not provided"
-          echo "   Please provide resource-group as input or set RESOURCE_GROUP environment variable"
-          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        fi
-        
-        if [ -z "${{ steps.set_defaults.outputs.workspace-name }}" ]; then
-          echo "❌ Error: workspace-name is required but not provided"
-          echo "   Please provide workspace-name as input or set WORKSPACE_NAME environment variable"
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
         fi
         
@@ -155,10 +95,10 @@ runs:
       uses: equinor/ai-platform-actions/deploy-environment@develop
       id: deploy_environment
       with:
-        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
-        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
-        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
-        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        resource-group: ${{ inputs.resource-group }}
+        workspace-name: ${{ inputs.workspace-name }}
         client-id: ${{ inputs.client-id }}
         environment-path: ${{ inputs.asset-path }}
 
@@ -167,10 +107,10 @@ runs:
       uses: equinor/ai-platform-actions/deploy-component@develop
       id: deploy_component
       with:
-        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
-        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
-        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
-        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        resource-group: ${{ inputs.resource-group }}
+        workspace-name: ${{ inputs.workspace-name }}
         client-id: ${{ inputs.client-id }}
         component-path: ${{ inputs.asset-path }}
 
@@ -179,10 +119,10 @@ runs:
       uses: equinor/ai-platform-actions/deploy-data@develop
       id: deploy_data
       with:
-        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
-        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
-        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
-        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        resource-group: ${{ inputs.resource-group }}
+        workspace-name: ${{ inputs.workspace-name }}
         client-id: ${{ inputs.client-id }}
         data-path: ${{ inputs.asset-path }}
         type: ${{ inputs.type }}
@@ -192,10 +132,10 @@ runs:
       uses: equinor/ai-platform-actions/deploy-job@develop
       id: deploy_job
       with:
-        tenant-id: ${{ steps.set_defaults.outputs.tenant-id }}
-        subscription-id: ${{ steps.set_defaults.outputs.subscription-id }}
-        resource-group: ${{ steps.set_defaults.outputs.resource-group }}
-        workspace-name: ${{ steps.set_defaults.outputs.workspace-name }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        resource-group: ${{ inputs.resource-group }}
+        workspace-name: ${{ inputs.workspace-name }}
         client-id: ${{ inputs.client-id }}
         job-path: ${{ inputs.asset-path }}
         compute: ${{ inputs.compute || 'serverless' }}

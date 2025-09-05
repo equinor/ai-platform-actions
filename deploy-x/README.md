@@ -8,8 +8,8 @@ Deploy X is a universal deployment action that can deploy any Azure ML asset (en
 
 - **Universal Dispatcher**: Works with all Azure ML asset types (environments, components, data, jobs)
 - **Matrix Strategy Compatible**: Designed for parallel deployment using GitHub Actions matrix strategies
-- **Direct Input**: Accepts asset type and path directly (no base64 encoding required)
-- **Environment Variable Fallback**: Uses environment variables for Azure credentials when inputs not provided
+- **Simple Input Model**: All Azure parameters are required - no fallback complexity
+- **Pre-deployment Summary**: Shows what will be deployed before starting
 - **Unified Outputs**: Consistent output format regardless of asset type
 
 ## Usage
@@ -19,6 +19,10 @@ Deploy X is a universal deployment action that can deploy any Azure ML asset (en
 ```yaml
 - uses: equinor/ai-platform-actions/deploy-x@main
   with:
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+    workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
     client-id: ${{ secrets.AZURE_CLIENT_ID }}
     asset-type: environment
     asset-path: environments/training/environment.yaml
@@ -58,6 +62,10 @@ jobs:
 
       - uses: equinor/ai-platform-actions/deploy-x@main
         with:
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           asset-type: ${{ matrix.asset.asset-type }}
           asset-path: ${{ matrix.asset.asset-path }}
@@ -65,17 +73,17 @@ jobs:
 
 ## Inputs
 
-| Input | Required | Description | Default |
-|-------|----------|-------------|---------|
-| `client-id` | ✅ | Client ID configured with Federated Credentials | - |
-| `asset-type` | ✅ | Type of Azure ML asset (`environment`, `component`, `data`, `job`) | - |
-| `asset-path` | ✅ | Path to the asset definition YAML file | - |
-| `tenant-id` | ❌ | Azure tenant ID | `TENANT_ID` env var |
-| `subscription-id` | ❌ | Azure subscription ID | `SUBSCRIPTION_ID` env var |
-| `resource-group` | ❌ | Azure resource group | `RESOURCE_GROUP` env var |
-| `workspace-name` | ❌ | Azure ML workspace name | `WORKSPACE_NAME` env var |
-| `type` | ❌ | Type parameter for data assets | - |
-| `compute` | ❌ | Compute parameter for job assets | `serverless` |
+| Input | Required | Description |
+|-------|----------|-------------|
+| `tenant-id` | ✅ | Azure tenant ID |
+| `subscription-id` | ✅ | Azure subscription ID |
+| `resource-group` | ✅ | Azure resource group name |
+| `workspace-name` | ✅ | Azure ML workspace name |
+| `client-id` | ✅ | Client ID configured with Federated Credentials |
+| `asset-type` | ✅ | Type of Azure ML asset (`environment`, `component`, `data`, `job`) |
+| `asset-path` | ✅ | Path to the asset definition YAML file |
+| `type` | ❌ | Type parameter for data assets |
+| `compute` | ❌ | Compute parameter for job assets (defaults to `serverless`) |
 
 ## Outputs
 
@@ -94,34 +102,29 @@ jobs:
 | `data` | Azure ML data assets | `type` |
 | `job` | Azure ML jobs | `compute` |
 
-## Environment Variables
-
-You can set environment variables to provide default Azure credentials:
-
-```yaml
-env:
-  TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-  WORKSPACE_NAME: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
-```
-
 ## Examples
 
 ### Deploy Specific Asset Types
 
 ```yaml
-# Deploy only environments
+# Deploy environment
 - uses: equinor/ai-platform-actions/deploy-x@main
-  if: ${{ matrix.asset.asset-type == 'environment' }}
   with:
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+    workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
     client-id: ${{ secrets.AZURE_CLIENT_ID }}
-    asset-type: ${{ matrix.asset.asset-type }}
-    asset-path: ${{ matrix.asset.asset-path }}
+    asset-type: environment
+    asset-path: environments/training/environment.yaml
 
 # Deploy data asset with type
 - uses: equinor/ai-platform-actions/deploy-x@main
   with:
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+    workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
     client-id: ${{ secrets.AZURE_CLIENT_ID }}
     asset-type: data
     asset-path: data/training-data.yaml
@@ -130,6 +133,10 @@ env:
 # Deploy job with custom compute
 - uses: equinor/ai-platform-actions/deploy-x@main
   with:
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+    workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
     client-id: ${{ secrets.AZURE_CLIENT_ID }}
     asset-type: job
     asset-path: jobs/training-job.yaml
@@ -146,12 +153,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-
-env:
-  TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-  WORKSPACE_NAME: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
 
 jobs:
   detect-changes:
@@ -188,6 +189,10 @@ jobs:
       - uses: equinor/ai-platform-actions/deploy-x@main
         id: deploy
         with:
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           asset-type: ${{ matrix.asset.asset-type }}
           asset-path: ${{ matrix.asset.asset-path }}
@@ -201,10 +206,10 @@ jobs:
 
 ## How It Works
 
-The deploy-x action acts as a smart dispatcher:
+The deploy-x action acts as a smart dispatcher with a simple, explicit input model:
 
-1. **Input Validation**: Validates required inputs and checks that asset files exist
-2. **Default Parameters**: Sets Azure credentials from environment variables if not provided as inputs
+1. **Pre-deployment Summary**: Shows what will be deployed (asset type, path, target workspace)
+2. **Input Validation**: Validates asset type and checks that asset files exist
 3. **Asset Dispatch**: Routes to the appropriate deployment action based on `asset-type`:
    - `environment` → `deploy-environment`
    - `component` → `deploy-component`
@@ -213,7 +218,8 @@ The deploy-x action acts as a smart dispatcher:
 4. **Unified Output**: Returns consistent outputs regardless of the underlying deployment action
 
 This design enables:
-- **Simplified Usage**: One action interface for all asset types
+- **Explicit Configuration**: All required parameters must be provided - no hidden fallbacks
+- **Clear Visibility**: Summary shows exactly what will be deployed before starting
 - **Parallel Deployment**: Perfect for matrix strategies with multiple assets
 - **Consistent Experience**: Same inputs/outputs across all asset types
 - **Specialized Logic**: Leverages the specific deployment actions for each asset type
