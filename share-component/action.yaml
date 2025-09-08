@@ -1,0 +1,193 @@
+name: Share Component
+description: Share an Azure ML Component from a workspace to a registry
+inputs:
+  tenant-id:
+    description: 'Azure tenant ID'
+    required: true
+  subscription-id:
+    description: 'Azure subscription ID'
+    required: true
+  resource-group:
+    description: 'Azure resource group name (for the workspace)'
+    required: true
+  workspace-name:
+    description: 'Azure Machine Learning workspace name (source workspace)'
+    required: true
+  client-id:
+    description: 'Client ID configured with Federated Credentials'
+    required: true
+  registry-name:
+    description: 'Azure ML registry name (target registry)'
+    required: true
+  component-ref:
+    description: 'Component reference (e.g., "azureml:mycomponent:1" or resource-id or "name:version")'
+    required: true
+  tags:
+    description: 'Tags to set on the shared component (format: "key1=value1,key2=value2")'
+    required: false
+
+outputs:
+  resource-id:
+    description: 'Resource ID of the shared component in the registry'
+    value: ${{ steps.share_component.outputs.resource-id }}
+  component-ref:
+    description: 'Reference string of component within Azure ML registry'
+    value: ${{ steps.ref_ver.outputs.component-ref }}
+  component-version:
+    description: 'The version of the component within the registry'
+    value: ${{ steps.ref_ver.outputs.component-version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Action Summary
+      shell: bash
+      run: |
+        echo "🔗 Share Component - Azure ML Component Sharing"
+        echo "   Component: ${{ inputs.component-ref }}"
+        echo "   From Workspace: ${{ inputs.workspace-name }} in ${{ inputs.resource-group }}"
+        echo "   To Registry: ${{ inputs.registry-name }}"
+        if [ -n "${{ inputs.tags }}" ]; then
+          echo "   Tags: ${{ inputs.tags }}"
+        fi
+        echo ""
+
+    - name: Validate inputs
+      shell: bash
+      run: |
+        # Validate inputs
+        VALIDATION_ERRORS=0
+        
+        # Check required inputs
+        if [ -z "${{ inputs.tenant-id }}" ]; then
+          echo "❌ Error: tenant-id is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.subscription-id }}" ]; then
+          echo "❌ Error: subscription-id is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.resource-group }}" ]; then
+          echo "❌ Error: resource-group is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.workspace-name }}" ]; then
+          echo "❌ Error: workspace-name is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.client-id }}" ]; then
+          echo "❌ Error: client-id is required but not provided"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.registry-name }}" ]; then
+          echo "❌ Error: registry-name is required but not provided"
+          echo "   Please specify the target Azure ML registry name"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        if [ -z "${{ inputs.component-ref }}" ]; then
+          echo "❌ Error: component-ref is required but not provided"
+          echo "   Please specify the component reference (e.g., 'azureml:mycomponent:1', resource-id, or 'name:version')"
+          VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+        fi
+        
+        # Validate tags format if provided
+        if [ -n "${{ inputs.tags }}" ]; then
+          # Basic validation for tags format (key=value pairs separated by commas)
+          if ! echo "${{ inputs.tags }}" | grep -q "^[a-zA-Z0-9_-]*=[^,=]*\(,[a-zA-Z0-9_-]*=[^,=]*\)*$"; then
+            echo "❌ Error: Invalid tags format: ${{ inputs.tags }}"
+            echo "   Tags should be in format: 'key1=value1,key2=value2'"
+            echo "   Example: 'component=preprocessing,language=python,tested=true'"
+            VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+          fi
+        fi
+        
+        # Check for validation errors and exit if any found
+        if [ $VALIDATION_ERRORS -gt 0 ]; then
+          echo ""
+          echo "❌ Validation failed with $VALIDATION_ERRORS error(s). Please fix the above issues and try again."
+          exit 1
+        fi
+        
+        echo "✅ Input validation passed"
+
+    - name: Install Azure ML extension
+      shell: bash
+      run: |
+        az extension add -n ml -y
+
+    - name: Share Component
+      shell: bash
+      id: share_component
+      run: |
+        # Prepare the share command
+        SHARE_CMD="az ml component share"
+        SHARE_CMD="$SHARE_CMD --name '${{ inputs.component-ref }}'"
+        SHARE_CMD="$SHARE_CMD --resource-group '${{ inputs.resource-group }}'"
+        SHARE_CMD="$SHARE_CMD --workspace-name '${{ inputs.workspace-name }}'"
+        SHARE_CMD="$SHARE_CMD --registry-name '${{ inputs.registry-name }}'"
+        SHARE_CMD="$SHARE_CMD --subscription '${{ inputs.subscription-id }}'"
+        
+        # Add tags if provided
+        if [ -n "${{ inputs.tags }}" ]; then
+          # Convert comma-separated tags to CLI format
+          TAGS_CLI=""
+          IFS=',' read -ra TAG_PAIRS <<< "${{ inputs.tags }}"
+          for tag_pair in "${TAG_PAIRS[@]}"; do
+            if [ -n "$TAGS_CLI" ]; then
+              TAGS_CLI="$TAGS_CLI "
+            fi
+            TAGS_CLI="$TAGS_CLI--set tags.$tag_pair"
+          done
+          SHARE_CMD="$SHARE_CMD $TAGS_CLI"
+        fi
+        
+        SHARE_CMD="$SHARE_CMD --query 'id' --output tsv"
+        
+        echo "Executing: $SHARE_CMD"
+        
+        # Execute the command and capture resource ID
+        RESOURCE_ID=$(eval $SHARE_CMD)
+        echo "resource-id=$RESOURCE_ID" >> "$GITHUB_OUTPUT"
+
+    - name: Extract reference and version
+      shell: bash
+      id: ref_ver
+      run: |
+        # Extract component reference and version from resource ID
+        # Resource ID format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.MachineLearningServices/registries/{registry}/components/{name}/versions/{version}
+        RESOURCE_ID="${{ steps.share_component.outputs.resource-id }}"
+        
+        if [ -z "$RESOURCE_ID" ]; then
+          echo "❌ Error: Failed to get resource ID from share command"
+          exit 1
+        fi
+        
+        # Extract component name and version using awk
+        COMPONENT_NAME=$(echo "$RESOURCE_ID" | awk -F '/' '{print $11}')
+        COMPONENT_VERSION=$(echo "$RESOURCE_ID" | awk -F '/' '{print $13}')
+        
+        if [ -z "$COMPONENT_NAME" ] || [ -z "$COMPONENT_VERSION" ]; then
+          echo "❌ Error: Failed to extract component name or version from resource ID"
+          echo "   Resource ID: $RESOURCE_ID"
+          exit 1
+        fi
+        
+        echo "component-ref=azureml:$COMPONENT_NAME:$COMPONENT_VERSION" >> "$GITHUB_OUTPUT"
+        echo "component-version=$COMPONENT_VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Print Result
+      shell: bash
+      run: |
+        echo "🎉 Component sharing completed successfully!"
+        echo ""
+        echo "Resource ID: ${{ steps.share_component.outputs.resource-id }}"
+        echo "Component Reference: ${{ steps.ref_ver.outputs.component-ref }}"
+        echo "Component Version: ${{ steps.ref_ver.outputs.component-version }}"
+        echo ""
+        echo "The component is now available in registry: ${{ inputs.registry-name }}"
