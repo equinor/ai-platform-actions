@@ -16,9 +16,21 @@ The Share Component action allows you to share Azure ML Components from a source
 ### Basic Example
 
 ```yaml
+- name: Azure Login
+  uses: azure/login@v2
+  with:
+    client-id: ${{ vars.AZURE_CLIENT_ID }}
+    tenant-id: ${{ vars.AZURE_TENANT_ID }}
+    subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    enable-AzPSSession: true
+    auth-type: SERVICE_PRINCIPAL
+  id: azure-login
+
 - name: Share component to registry
   uses: ./share-component
   with:
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     tenant-id: ${{ vars.AZURE_TENANT_ID }}
     subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     resource-group: "my-resource-group"
@@ -31,9 +43,21 @@ The Share Component action allows you to share Azure ML Components from a source
 ### Example with Tags
 
 ```yaml
+- name: Azure Login
+  uses: azure/login@v2
+  with:
+    client-id: ${{ vars.AZURE_CLIENT_ID }}
+    tenant-id: ${{ vars.AZURE_TENANT_ID }}
+    subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    enable-AzPSSession: true
+    auth-type: SERVICE_PRINCIPAL
+  id: azure-login
+
 - name: Share component with tags
   uses: ./share-component
   with:
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     tenant-id: ${{ vars.AZURE_TENANT_ID }}
     subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     resource-group: "my-resource-group"
@@ -73,16 +97,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+        id: azure-login
 
       - name: Share Component
         uses: ./share-component
         id: share
         with:
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -104,6 +133,8 @@ jobs:
 
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
+| `token` | Access token from Azure login action | ✅ | |
+| `expires-on` | Token expiration timestamp from Azure login action | ✅ | |
 | `tenant-id` | Azure tenant ID | ✅ | |
 | `subscription-id` | Azure subscription ID | ✅ | |
 | `resource-group` | Azure resource group name (for the workspace) | ✅ | |
@@ -145,9 +176,24 @@ Tags should be provided as comma-separated key=value pairs:
 - Appropriate permissions to read from workspace and write to registry
 
 ### Authentication
-This action requires Azure authentication. Use the `azure/login` action with:
+This action requires Azure authentication via the `azure/login` action with token outputs enabled:
+
+```yaml
+- name: Azure Login
+  uses: azure/login@v2
+  with:
+    client-id: ${{ vars.AZURE_CLIENT_ID }}
+    tenant-id: ${{ vars.AZURE_TENANT_ID }}
+    subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    enable-AzPSSession: true
+    auth-type: SERVICE_PRINCIPAL
+  id: azure-login
+```
+
+The action requires:
 - Service Principal with Federated Credentials
 - `client-id`, `tenant-id`, and `subscription-id`
+- Token outputs from azure-login: `access-token` and `expires-on`
 
 ### Required Permissions
 The authenticated principal needs:
@@ -167,11 +213,15 @@ The action validates inputs and provides clear error messages:
 ## Notes
 
 ### Component Sharing Process
-1. The action validates all inputs and authenticates to Azure
-2. Installs the Azure ML CLI extension
-3. Executes the `az ml component share` command
-4. Extracts component details from the result
-5. Provides outputs for downstream use
+1. The action validates all inputs and creates Azure ML client connections
+2. Connects to the source workspace using the provided authentication token
+3. Retrieves the specified component from the workspace
+4. Applies any additional tags to the component metadata
+5. Connects to the target registry using the same authentication
+6. Uses the Azure ML Python SDK `create_or_update` method to share the component
+7. Provides outputs for downstream use
+
+**Note:** This action uses the Azure ML Python SDK instead of Azure CLI because the `az ml component share` command is not available. The Python SDK's `create_or_update` method provides equivalent functionality for sharing components to registries.
 
 ### Registry vs Workspace
 - **Workspace**: Development environment for creating and testing components
