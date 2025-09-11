@@ -276,6 +276,9 @@ def main():
                 download_path=temp_dir
             )
             spec_path = os.path.join(temp_dir, "component_spec.yaml")
+            print(f"📄 Loading component spec from: {spec_path}")
+            loaded_component = load_component(source=spec_path)
+            print(loaded_component)
             # Parse and apply tags if provided
             if tags_str:
                 new_tags = parse_tags(tags_str)
@@ -297,8 +300,6 @@ def main():
                 print(f"   {spec['command']}")
                 with open(spec_path, 'w', encoding='utf-8') as f:
                     yaml.safe_dump(spec, f, default_flow_style=False, sort_keys=False)
-                        print(f"📄 Loading component spec from: {spec_path}")
-            loaded_component = load_component(source=spec_path)
             # Get registry client and share component
             print("🏛️  Connecting to target registry...")
             print(f"   • Registry: {registry_name}")
