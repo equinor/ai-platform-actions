@@ -224,7 +224,10 @@ def main():
     try:
         # Print action summary
         print_action_summary(component_ref, workspace_name, resource_group, registry_name, tags_str)
-        
+        print(f"Token length: {len(token)}")
+        print(f"Expires: {expires_on}")
+        print("=" * 40)
+
         # Comprehensive input validation
         if not validate_inputs(token, expires_on, subscription_id, resource_group, workspace_name, registry_name, component_ref, tags_str):
             sys.exit(1)
