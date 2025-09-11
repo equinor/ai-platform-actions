@@ -279,6 +279,10 @@ def main():
             print(f"📄 Loading component spec from: {spec_path}")
             loaded_component = load_component(source=spec_path)
             print(loaded_component)
+            print(loaded_component.__dict__)
+            print(loaded_component.__dict__['_base_path'])
+            print(loaded_component.__dict__['_Resource__source_path'])
+            print(loaded_component.__dict__['command'])
             # Parse and apply tags if provided
             if tags_str:
                 new_tags = parse_tags(tags_str)
