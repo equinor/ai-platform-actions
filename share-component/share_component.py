@@ -6,6 +6,7 @@ from azure.core.credentials import AccessToken
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Component
 from azure.ai.ml import load_component
+import yaml
 
 
 class Credential:
@@ -284,6 +285,19 @@ def main():
                     loaded_component.tags.update(new_tags)
                 else:
                     loaded_component.tags = new_tags
+            # Preprocess component_spec.yaml to fix command field
+            with open(spec_path, 'r', encoding='utf-8') as f:
+                spec = yaml.safe_load(f)
+            if 'command' in spec:
+                # Remove backslash-newline and extra newlines
+                cmd = spec['command']
+                # Replace backslash-newline and any newline with a space
+                cmd_single_line = cmd.replace('\\\n', ' ').replace('\n', ' ')
+                spec['command'] = cmd_single_line
+                print(f"🛠️  Preprocessed command field to single line:")
+                print(f"   {spec['command']}")
+                with open(spec_path, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(spec, f, default_flow_style=False, sort_keys=False)
             # Get registry client and share component
             print("🏛️  Connecting to target registry...")
             print(f"   • Registry: {registry_name}")
