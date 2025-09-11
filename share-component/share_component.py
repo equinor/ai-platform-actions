@@ -1,9 +1,11 @@
 import sys
 import os
 import re
+import tempfile
 from azure.core.credentials import AccessToken
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Component
+from azure.ai.ml import load_component
 
 
 class Credential:
@@ -256,7 +258,7 @@ def main():
             component = workspace_client.components.get(name=component_name, version=component_version)
         else:
             component = workspace_client.components.get(name=component_name)
-        
+
         print(f"✅ Retrieved component: {component.name} version {component.version}")
         if hasattr(component, 'description') and component.description:
             print(f"   • Description: {component.description}")
@@ -264,54 +266,50 @@ def main():
             print(f"   • Existing Tags: {component.tags}")
         print("")
         
-        # Parse and apply tags if provided
-        if tags_str:
-            print("🏷️  Processing tags...")
-            new_tags = parse_tags(tags_str)
-            print(f"   • New tags to apply: {new_tags}")
-            # Merge with existing tags
-            if component.tags:
-                original_tags = component.tags.copy()
-                component.tags.update(new_tags)
-                print(f"   • Merged with existing tags")
-                print(f"   • Original tags: {original_tags}")
-                print(f"   • Final tags: {component.tags}")
-            else:
-                component.tags = new_tags
-                print(f"   • Applied new tags: {component.tags}")
+        # Download the component and its dependencies to a temp folder
+        with tempfile.TemporaryDirectory() as temp_dir:
+            print(f"📥 Downloading component and dependencies to: {temp_dir}")
+            workspace_client.components.download(
+                name=component_name,
+                version=component_version,
+                download_path=temp_dir
+            )
+            spec_path = os.path.join(temp_dir, "component_spec.yaml")
+            print(f"📄 Loading component spec from: {spec_path}")
+            loaded_component = load_component(source=spec_path)
+            # Parse and apply tags if provided
+            if tags_str:
+                new_tags = parse_tags(tags_str)
+                if loaded_component.tags:
+                    loaded_component.tags.update(new_tags)
+                else:
+                    loaded_component.tags = new_tags
+            # Get registry client and share component
+            print("🏛️  Connecting to target registry...")
+            print(f"   • Registry: {registry_name}")
+            print(f"   • Subscription: {subscription_id}")
+            registry_client = get_registry_client(token, expires_on, subscription_id, registry_name)
+            print("✅ Connected to registry successfully")
             print("")
-        
-        # Get registry client and share component
-        print("🏛️  Connecting to target registry...")
-        print(f"   • Registry: {registry_name}")
-        print(f"   • Subscription: {subscription_id}")
-        registry_client = get_registry_client(token, expires_on, subscription_id, registry_name)
-        print("✅ Connected to registry successfully")
-        print("")
-        
-        # Share component to registry using create_or_update
-        print("📤 Sharing component to registry...")
-        print("   • Using Azure ML SDK create_or_update method")
-        print("   • This will create/update the component in the target registry")
-        shared_component = registry_client.components.create_or_update(component)
-        
-        # Generate outputs
-        resource_id = f"/subscriptions/{subscription_id}/resourceGroups//providers/Microsoft.MachineLearningServices/registries/{registry_name}/components/{shared_component.name}/versions/{shared_component.version}"
-        component_ref_output = f"azureml:{shared_component.name}:{shared_component.version}"
-        
-        # Print comprehensive results
-        print_execution_results(shared_component, resource_id, component_ref_output, registry_name)
-        
-        # Set GitHub Action outputs
-        print("📝 Setting GitHub Action outputs...")
-        if 'GITHUB_OUTPUT' in os.environ:
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write(f"resource-id={resource_id}\n")
-                f.write(f"component-ref={component_ref_output}\n")
-                f.write(f"component-version={shared_component.version}\n")
-            print("✅ GitHub Action outputs set successfully")
-        else:
-            print("ℹ️  GitHub Action outputs not available (not running in GitHub Actions)")
+            # Share loaded component to registry using create_or_update
+            print("📤 Sharing loaded component to registry...")
+            shared_component = registry_client.components.create_or_update(loaded_component)
+            # Generate outputs
+            resource_id = f"/subscriptions/{subscription_id}/resourceGroups//providers/Microsoft.MachineLearningServices/registries/{registry_name}/components/{shared_component.name}/versions/{shared_component.version}"
+            component_ref_output = f"azureml:{shared_component.name}:{shared_component.version}"
+            # Print comprehensive results
+            print_execution_results(shared_component, resource_id, component_ref_output, registry_name)
+            # Set GitHub Action outputs
+            print("📝 Setting GitHub Action outputs...")
+            if 'GITHUB_OUTPUT' in os.environ:
+                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                    f.write(f"resource-id={resource_id}\n")
+                    f.write(f"component-ref={component_ref_output}\n")
+                    f.write(f"component-version={shared_component.version}\n")
+                print("✅ GitHub Action outputs set successfully")
+            else:
+                print("ℹ️  GitHub Action outputs not available (not running in GitHub Actions)")
+            # End of with tempfile.TemporaryDirectory()
         
     except Exception as e:
         print("")
