@@ -289,12 +289,13 @@ def main():
             with open(spec_path, 'r', encoding='utf-8') as f:
                 spec = yaml.safe_load(f)
             if 'command' in spec:
-                # Remove backslash-newline and extra newlines
+                # Remove all backslashes and newlines
                 cmd = spec['command']
-                # Replace backslash-newline and any newline with a space
-                cmd_single_line = cmd.replace('\\\n', ' ').replace('\n', ' ')
-                spec['command'] = cmd_single_line
-                print(f"🛠️  Preprocessed command field to single line:")
+                # Replace all backslashes and newlines with a space
+                import re
+                cmd_single_line = re.sub(r'[\\\n]+', ' ', cmd)
+                spec['command'] = cmd_single_line.strip()
+                print(f"🛠️  Preprocessed command field to single line (no backslashes):")
                 print(f"   {spec['command']}")
                 with open(spec_path, 'w', encoding='utf-8') as f:
                     yaml.safe_dump(spec, f, default_flow_style=False, sort_keys=False)
