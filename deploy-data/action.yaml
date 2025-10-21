@@ -69,12 +69,12 @@ runs:
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
         fi
         
-        if [ -z "${{ inputs.data-type }}" ]; then
-          echo "❌ Error: data-type is required but not provided"
+        if [ -z "${{ inputs.type }}" ]; then
+          echo "❌ Error: type is required but not provided"
           echo "   Valid types: data, datastore, mltable"
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        elif [[ "${{ inputs.data-type }}" != "data" && "${{ inputs.data-type }}" != "datastore" && "${{ inputs.data-type }}" != "mltable" ]]; then
-          echo "❌ Error: Invalid data-type: ${{ inputs.data-type }}"
+        elif [[ "${{ inputs.type }}" != "data" && "${{ inputs.type }}" != "datastore" && "${{ inputs.type }}" != "mltable" ]]; then
+          echo "❌ Error: Invalid type: ${{ inputs.type }}"
           echo "   Valid types: data, datastore, mltable"
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
         fi
@@ -101,7 +101,7 @@ runs:
     - name: Deployment summary
       shell: bash
       run: |
-        echo "🚀 About to deploy Azure ML ${{ inputs.data-type }} from: ${{ inputs.data-path }}"
+        echo "🚀 About to deploy Azure ML ${{ inputs.type }} from: ${{ inputs.data-path }}"
         echo "   Target workspace: ${{ inputs.workspace-name }} (Resource Group: ${{ inputs.resource-group }})"
 
     - name: Az ml
