@@ -91,8 +91,8 @@ runs:
     - name: Deployment summary
       shell: bash
       run: |
-        echo "🚀 About to deploy Azure ML job from: ${{ inputs.job-path }}"
-        echo "   Target workspace: ${{ inputs.workspace-name}} (Resource Group: ${{ inputs.resource-group}})"
+        echo "About to deploy Azure ML job from: ${{ inputs.job-path }}"
+        echo "   Target workspace: ${{ inputs.workspace-name }} (Resource Group: ${{ inputs.resource-group }})"
         if [ -n "${{ inputs.compute }}" ]; then
           echo "   Compute target: ${{ inputs.compute }}"
         else

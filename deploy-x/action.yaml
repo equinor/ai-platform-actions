@@ -46,7 +46,7 @@ runs:
     - name: Action Summary
       shell: bash
       run: |
-        echo "🚀 Deploy X - Universal Azure ML Asset Deployment"
+        echo "Deploy X - Universal Azure ML Asset Deployment"
         echo "   Asset Type: ${{ inputs.asset-type }}"
         echo "   Asset Path: ${{ inputs.asset-path }}"
         echo "   Target: ${{ inputs.workspace-name }} in ${{ inputs.resource-group }}"

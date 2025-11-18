@@ -90,6 +90,15 @@ Deploys Azure ML data assets from YAML definitions.
 #### deploy-job
 Submits Azure ML jobs from YAML definitions.
 
+#### share-environment
+Shares Azure ML environments from a workspace to a registry, with optional tagging support.
+
+#### share-data
+Shares Azure ML data assets from a workspace to a registry, with optional tagging support.
+
+#### share-component
+Shares Azure ML components from a workspace to a registry, with optional tagging support.
+
 ### Matrix Strategy Pattern
 
 The recommended approach is to use the `changed-files` action output with a matrix strategy to deploy multiple assets in parallel:

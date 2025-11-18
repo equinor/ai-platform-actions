@@ -101,7 +101,7 @@ runs:
     - name: Deployment summary
       shell: bash
       run: |
-        echo "🚀 About to deploy Azure ML ${{ inputs.type }} from: ${{ inputs.data-path }}"
+        echo "About to deploy Azure ML ${{ inputs.type }} from: ${{ inputs.data-path }}"
         echo "   Target workspace: ${{ inputs.workspace-name }} (Resource Group: ${{ inputs.resource-group }})"
 
     - name: Az ml

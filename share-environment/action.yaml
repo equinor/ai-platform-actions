@@ -43,7 +43,7 @@ runs:
     - name: Action Summary
       shell: bash
       run: |
-        echo "🔗 Share Environment - Azure ML Environment Sharing"
+        echo "Share Environment - Azure ML Environment Sharing"
         echo "   Environment: ${{ inputs.environment-ref }}"
         echo "   From Workspace: ${{ inputs.workspace-name }} in ${{ inputs.resource-group }}"
         echo "   To Registry: ${{ inputs.registry-name }}"
@@ -184,7 +184,7 @@ runs:
     - name: Print Result
       shell: bash
       run: |
-        echo "🎉 Environment sharing completed successfully!"
+        echo "✅ Environment sharing completed successfully!"
         echo ""
         echo "Resource ID: ${{ steps.share_environment.outputs.resource-id }}"
         echo "Environment Reference: ${{ steps.ref_ver.outputs.environment-ref }}"
