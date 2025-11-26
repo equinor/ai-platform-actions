@@ -1,0 +1,110 @@
+name: Inner Loop
+description: Unified action for Azure ML operations using command pattern
+
+inputs:
+  verb:
+    description: "Action verb (deploy, share)"
+    required: true
+  subject:
+    description: "Target subject (data, environment, component, job)"
+    required: true
+  tenant-id:
+    description: "Azure tenant ID"
+    required: false
+  subscription-id:
+    description: "Azure subscription ID"
+    required: true
+  resource-group:
+    description: "Azure resource group name"
+    required: true
+  workspace-name:
+    description: "Azure Machine Learning workspace name"
+    required: false
+  registry-name:
+    description: "Azure ML registry name (for share operations)"
+    required: false
+  client-id:
+    description: "Client ID configured with Federated Credentials"
+    required: false
+  filepath:
+    description: "Path to the configuration file (YAML)"
+    required: false
+  component-ref:
+    description: "Component reference (for share component operations)"
+    required: false
+  tags:
+    description: "Tags to set (format: 'key1=value1,key2=value2')"
+    required: false
+  type:
+    description: "Type specification (e.g., data, datastore, mltable)"
+    required: false
+  image-build-compute:
+    description: "When building environments and you need specific compute instead of serverless, set this to the name of the cluster in the workspace"
+    required: false
+
+outputs:
+  resource-id:
+    description: "Resource ID of the created/shared resource"
+    value: ${{ steps.inner-loop.outputs.resource-id }}
+  reference:
+    description: "Reference string within Azure ML"
+    value: ${{ steps.inner-loop.outputs.reference }}
+  version:
+    description: "Version of the resource"
+    value: ${{ steps.inner-loop.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Action Summary
+      shell: bash
+      run: |
+        echo "INNER LOOP ACTION"
+        echo "Verb: ${{ inputs.verb }}"
+        echo "Subject: ${{ inputs.subject }}"
+        echo "Workspace: ${{ inputs.workspace-name }}"
+        echo "Resource Group: ${{ inputs.resource-group }}"
+
+    - name: Get Access Token (if credentials provided)
+      shell: bash
+      id: token
+      run: |
+        if [ -n "${{ inputs.client-id }}" ] && [ -n "${{ inputs.tenant-id }}" ]; then
+          access_token=$(az account get-access-token --resource=https://management.azure.com/.default --query accessToken -o tsv)
+          expires_on=$(az account get-access-token --resource=https://management.azure.com/.default --query expiresOn -o tsv)
+          echo "token=$access_token" >> "$GITHUB_OUTPUT"
+          echo "expires_on=$expires_on" >> "$GITHUB_OUTPUT"
+        else
+          echo "No credentials provided, will use DefaultAzureCredential"
+          echo "token=" >> "$GITHUB_OUTPUT"
+          echo "expires_on=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Execute Inner Loop Container
+      id: inner-loop
+      shell: bash
+      run: |
+        docker run --rm \
+          -v $PWD:/app \
+          inner-loop:latest \
+          "${{ inputs.verb }}" \
+          "${{ inputs.subject }}" \
+          "${{ inputs.subscription-id }}" \
+          "${{ inputs.resource-group }}" \
+          "${{ inputs.workspace-name }}" \
+          "${{ inputs.registry-name }}" \
+          --token "${{ steps.token.outputs.token }}" \
+          --expires-on "${{ steps.token.outputs.expires_on }}" \
+          --tenant-id "${{ inputs.tenant-id }}" \
+          --filepath "${{ inputs.filepath }}" \
+          --component-ref "${{ inputs.component-ref }}" \
+          --tags "${{ inputs.tags }}" \
+          --type "${{ inputs.type }}" \
+          --image-build-compute "${{ inputs.image-build-compute }}"
+
+    - name: Set Outputs
+      shell: bash
+      run: |
+        echo "resource-id=${{ steps.inner-loop.outputs.resource-id }}" >> "$GITHUB_OUTPUT"
+        echo "reference=${{ steps.inner-loop.outputs.reference }}" >> "$GITHUB_OUTPUT"
+        echo "version=${{ steps.inner-loop.outputs.version }}" >> "$GITHUB_OUTPUT"
