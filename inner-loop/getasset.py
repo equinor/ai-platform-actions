@@ -4,27 +4,36 @@ Get asset methods.
 These are helper methods
 
 """
-from azure.ai.ml.entities import Environment,BuildContext
+from azure.ai.ml.entities import Component,Environment,BuildContext,Model
 from azure.ai.ml import MLClient
 from azure.core.polling import LROPoller
 import typer
-from typing import Optional
+from typing import Optional,Iterable
 from util import get_workspace_client
 import yaml
 from pathlib import Path
+import datetime
 
 app = typer.Typer()
 
-def filter_envs_by_tag(envs: list[Environment], tag:str|dict[str,None|str]) -> None|list[Environment]:
-    e_list : list[Environment] = list()
+def filter_assets_by_property(assets: list[Component|Environment|Model], property:str|dict[str,None|str])-> None|list[Component|Environment|Model]:
+    return assets
+
+def filter_assets_by_version(assets: list[Component|Environment|Model], version:str)-> None|list[Component|Environment|Model]:   
+    return [a for a in assets if a.version==version]
+
+def filter_assets_by_tag(assets: list[Component|Environment|Model], tag:str|dict[str,None|str]) -> None|list[Component|Environment|Model]:
+    asset_list : list[Component|Environment|Model] = list()
     tag_str = type(tag)==str
     #print(f"tag is a string? {tag_str}")
-    for e in envs:
-        tags = e.tags
+    #print(f"filter_assets_by_tag(assets, tag={tag})")
+    for a in assets:
+        #print(f"Filtering asset with name={a.name}")
+        tags = a.tags
         if tags:
             if tag_str:
                 if tag in tags:
-                    e_list.append(e)
+                    asset_list.append(a)
             else:
                 keys_match=True
                 values_match=True
@@ -32,9 +41,9 @@ def filter_envs_by_tag(envs: list[Environment], tag:str|dict[str,None|str]) -> N
                     keys_match = keys_match and t in tags
                     values_match = values_match and keys_match and(tags[t]==tag[t] or not tag[t])
                 if keys_match and values_match:
-                    e_list.append(e)
-    if len(e_list)>0:
-        return e_list
+                    asset_list.append(a)
+    if len(asset_list)>0:
+        return asset_list
     else:
         return None
 
@@ -43,7 +52,8 @@ def getenvironment(
         client:MLClient,
         name:str,
         version:str|None=None,
-        tag:None|str|dict[str,None|str]=None
+        tags:None|str|dict[str,None|str]=None,
+        req_int_version:bool=True
     ) -> None|list[Environment]:
     """
         Retrieves an environment using the MLClient.
@@ -55,36 +65,106 @@ def getenvironment(
 
         Name is required.
         If version is specified, this MUST match.
-        If tag is specified, and it is a string, the tag value MUST exist.
-        If tag is specified, and it is a dict, every key in the dict MUST exist,
+        If tags is specified, and it is a string, the tag value MUST exist.
+        If tags is specified, and it is a dict, every key in the dict MUST exist,
           AND if a key's corresponding value is specified the value MUST also match.
           However, it is ok if the environment has extra tags.
+        if req_int_version is True, then the version of the environment MUST be a positive integer.
+          This argument is there due to AzureML's need to have integer version fields 
+          in order to update their information. If not integers, the environment can't be updated.
     """
-    res = None
 
     # the only way to get the latest version
     # HOWEVER, it populates neither the version NOR the tags. sigh...
     env_list = list(client.environments.list())
     env_list = [e for e in env_list if e.name==name]
-    if len(env_list)>0:
-        res = [env_list[0]] #The environment with correct name and the latest version
-
-    latest_version = res[0].latest_version
-    if res and (version or tag): # If version or tag is required, we need to get the full list    
-
-        env_list =list(client.environments.list(name=name))
-        if version and tag:
-            pruned_ver_list = [e for e in env_list if e.version==version]
-            res = filter_envs_by_tag(pruned_ver_list,tag)
-        elif tag:
-            res = filter_envs_by_tag(env_list,tag)
-        elif version:
-            res = [e for e in env_list if e.version==version]
-
+    if env_list:
+        latest_version=env_list[0].latest_version
     else:
-        res=client.environments.get(name=name,version=latest_version)
+        return None
     
-    if res and len(res)==0:
-        res = None
-    return res
+    # This time, get a list that contains both version and tags.
+    env_list =list(client.environments.list(name=name))
 
+    if version:
+        env_list = filter_assets_by_version(env_list,version=version)
+    else:
+        env_list=[client.environments.get(name=name,version=latest_version)]
+
+    if tags:
+        env_list = filter_assets_by_tag(env_list,tags)
+
+    if req_int_version:
+        env_list = [e for e in env_list if e.version.isdigit()]
+
+    return env_list
+
+def getcomponent(
+    client:MLClient,
+        name:str,
+        version:str|None=None,
+        tags:None|str|dict[str,None|str]=None,
+        req_int_version:bool=True
+    ) -> None|list[Component]:
+
+    comp_list = list(client.components.list())
+    comp_list = [c for c in comp_list if c.name==name]
+    if comp_list:
+        latest_version = comp_list[0].latest_version
+
+    comp_list = list(client.components.list(name=name))
+
+    if version:
+        comp_list = filter_assets_by_version(name=name,version=version)
+    else:
+        comp_list = [client.components.get(name=name,version=latest_version)]
+    
+    if tags:
+        comp_list = filter_assets_by_tag(comp_list,tags)
+    
+    if req_int_version:
+        comp_list = [c for c in comp_list if c.version.isdigit()]
+    
+    return comp_list
+    # A component may not have version set (at least in registry).
+    # However, in that case the creation_context will take presedense,
+    # and have the value of str(component.creation_context.created_at.timestamp())
+    # (created_at is a datetime)
+    #
+    # Components in a workspace seems to have version property
+    # Notice that while the components in a workspace have a string representing the datetime of creation,
+    # the times does not correspond exactly to the created_at or last_modified_at.
+    # There are small delays, pointing to separate process actually being responsible for the different timestamps.
+    #
+    # NB: If the component version is NOT convertible to an int, it cannot be updated.
+
+
+def getmodel(
+        client:MLClient,
+        name:str,
+        version:str|None=None,
+        tags:None|str|dict[str,None|str]=None,
+        req_int_version=True
+    ) -> None|list[Model]:
+
+    m_list = list(client.models.list())
+    m_list = [m for m in m_list if m.name==name]
+    if m_list:
+        latest_version=m_list[0].latest_version
+    else:
+        return None
+
+    m_list=list(client.models.list(name=name))
+
+    if version:
+        m_list = filter_assets_by_version(m_list,version=version)
+    else:
+        m_list = filter_assets_by_version(m_list,version=latest_version)
+
+    if tags:    
+        m_list = filter_assets_by_tag(m_list,tag=tags)
+
+    if req_version:
+        m_list = [m for m in m_list if m.version.isdigit()]
+
+    return m_list

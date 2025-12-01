@@ -3,23 +3,41 @@ Share operations for Inner Loop Action
 """
 
 import typer
-from typing import Optional
-from util import get_workspace_client, get_registry_client
+from typing import Optional, Annotated
+from util import (
+    check_and_replace_environment,
+    get_new_asset_version,
+    get_registry_client,
+    get_workspace_client,
+    get_yaml_from_folder,
+    load_safe_tags
+)
+from getasset import (
+    getcomponent, 
+    getenvironment,
+    getmodel
+)
+from share_model_by_commit_id import share_model_by_commit
+import tempfile
+from azure.ai.ml import load_component
 
 app = typer.Typer()
 
 
 @app.command()
 def data(
-    subscription_id: str,
-    resource_group: str,
-    workspace_name: str,
-    registry_name: str,
-    data_ref: str,
-    token: Optional[str] = None,
-    expires_on: Optional[int] = None,
-    tags: Optional[str] = None
-):
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        data_ref: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
+        ]=None
+    ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
     print(f"  Workspace: {workspace_name}")
@@ -37,55 +55,247 @@ def data(
 
 @app.command()
 def environment(
-    subscription_id: str,
-    resource_group: str,
-    workspace_name: str,
-    registry_name: str,
-    env_ref: str,
-    token: Optional[str] = None,
-    expires_on: Optional[int] = None,
-    tags: Optional[str] = None
-):
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        env_ref: str, # Consider renaming this, asset_id, resource_id, asset_uri , etc. 
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
+        ]=None,
+        promote_stage:str=None
+    ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
     print(f"  Workspace: {workspace_name}")
     print(f"  Registry: {registry_name}")
-    print(f"  Environment Ref: {env_ref}")
+    print(f"  Environment Ref: <{env_ref}>")
     print(f"  Tags: {tags}")
+
+    print("[share environment] Creating workspace client")
+    ws_client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+
+    print("[share environment] Retrieving environment from workspace")
+    list_env_ws = getenvironment(
+        client=ws_client,
+        name=env_ref,
+        tags=tags
+    )
+    if len(list_env_ws)<1:
+        raise ValueError("There is no such environment in the workspace")
+    if len(list_env_ws)>1:
+        raise ValueError("Found more than one matching environment in the workspace") # should never be raised
+    ws_env = list_env_ws[0]
+
+    print("[share environment] Creating registry client")
+    reg_client = get_registry_client(
+        registry_name=registry_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_env_reg = getenvironment(
+        client=reg_client,
+        name=env_ref,
+        tags=tags,
+        req_int_version=True
+    )
+    # find latest registry version to use
+    latest_reg_version=0
+    if list_env_reg:
+        for e in list_env_reg:
+            lrv = int(e.version)
+            if lrv>latest_reg_version:
+                latest_reg_version=lrv
+    latest_reg_version=str(latest_reg_version+1)
     
-    # Skeleton implementation
-    print("[share environment] [SKELETON] Creating workspace client")
-    print("[share environment] [SKELETON] Retrieving environment from workspace")
-    print("[share environment] [SKELETON] Creating registry client")
-    print("[share environment] [SKELETON] Sharing environment to registry")
-    print("[share environment] [SKELETON] Applying tags if provided")
+    print("[share environment] Sharing environment to registry")
+    ws_client.environments.share(
+        name=ws_env.name,
+        version=ws_env.version,
+        registry_name=registry_name,
+        share_with_name=ws_env.name,
+        share_with_version=latest_reg_version
+    )
+
+    print("[share environment] Applying stage promotion if provided")
+    if promote_stage:
+        reg_env = reg_client.environments.get(name=env_ref,version=latest_reg_version)
+        reg_env_tags=reg_env.tags
+        if reg_env_tags:
+            reg_env_tags.update({'stage':promote_stage})
+        else:
+            reg_env_tags={'stage':promote_stage}
+        reg_env.tags=reg_env_tags
+        reg_client.environments.create_or_update(reg_env)
 
 
 @app.command()
-def component(
-    subscription_id: str,
-    resource_group: str,
-    workspace_name: str,
-    registry_name: str,
-    component_ref: str,
-    token: Optional[str] = None,
-    expires_on: Optional[int] = None,
-    tags: Optional[str] = None
-):
-    """Share component from workspace to registry"""
-    print(f"[share component] Sharing component")
+def model(
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        model_ref: str, # Consider renaming this, asset_id, resource_id, asset_uri , etc. 
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
+        ]=None,
+        promote_stage:str=None
+    ):
+    """Share model from workspace to registry"""
+    print(f"[share model] Sharing model")
+    print(f"  Subscription: {subscription_id}")
+    print(f"  RG (of WS): {resource_group}")
     print(f"  Workspace: {workspace_name}")
     print(f"  Registry: {registry_name}")
-    print(f"  Component Ref: {component_ref}")
+    print(f"  Model-ID (of WS): {model_ref}")
     print(f"  Tags: {tags}")
+
+    ws_client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_m_ws = getmodel(ws_client,name=model_ref,tags=tags)
+    if len(list_m_ws)<1:
+        raise ValueError("There is no such environment in the workspace")
+    if len(list_m_ws)>1:
+        raise ValueError("Found more than one matching environment in the workspace") # should never be raised
+    ws_model = list_m_ws[0]
+
+    print("[share model] Creating registry client")
+    reg_client = get_registry_client(
+        registry_name=registry_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_m_reg = getenvironment(
+        client=reg_client,
+        name=env_ref,
+        tags=tags,
+        req_int_version=True
+    )
+
+    # find latest registry version to use
+    latest_reg_version=0
+    if list_m_reg:
+        for m in list_m_reg:
+            lrv = int(m.version)
+            if lrv>latest_reg_version:
+                latest_reg_version=lrv
+    latest_reg_version=str(latest_reg_version+1)
+
+    print("[share environment] Sharing environment to registry")
+    ws_client.models.share(
+        name=ws_model.name,
+        version=ws_model.version,
+        registry_name=registry_name,
+        share_with_name=ws_model.name,
+        share_with_version=latest_reg_version
+    )
+
+    print("[share environment] Applying stage promotion if provided")
+    if promote_stage:
+        reg_model = reg_client.models.get(name=env_ref,version=latest_reg_version)
+        reg_model_tags=reg_model.tags
+        if reg_model_tags:
+            reg_model_tags.update({'stage':promote_stage})
+        else:
+            reg_model_tags={'stage':promote_stage}
+        reg_model.tags=reg_model_tags
+        reg_client.models.create_or_update(reg_model)
+   
+
+@app.command()
+def component(
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        component_ref: str, # Consider renaming this, asset_id, resource_id, asset_uri , etc. 
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
+        ]=None,
+        promote_stage:str=None
+    ):
+    """Share component from workspace to registry"""
+    print(f"[share component] Sharing component")
+    print(f"  Subscription: {subscription_id}")
+    print(f"  RG (of WS): {resource_group}")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Registry: {registry_name}")
+    print(f"  Component-ID (of WS): {component_ref}")
+    print(f"  Tags: {tags}")
+    print(f"  Promote Stage: {promote_stage}")
     
-    # Skeleton implementation
-    print("[share component] [SKELETON] Creating workspace client")
-    print("[share component] [SKELETON] Parsing component reference")
-    print("[share component] [SKELETON] Retrieving component from workspace")
-    print("[share component] [SKELETON] Creating registry client")
-    print("[share component] [SKELETON] Sharing component to registry")
-    print("[share component] [SKELETON] Applying tags if provided")
+    ws_client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_comp_ws = getcomponent(client=ws_client,name=temp_component_name)
+    if len(list_comp_ws)<1:
+        raise ValueError("There is no such component in the workspace")
+    if len(list_comp_ws)>1:
+        raise ValueError("Found more than one matching component in the workspace") # should never happen
+    ws_comp = list_comp_ws[0]
+
+    print("[share component] Creating registry client")
+    reg_client = get_registry_client(
+        registry_name=registry_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_comp_reg = getcomponent(
+        client=reg_client,
+        name=temp_component_name,
+        tags=tags,
+        req_int_version=True
+    )
+
+    latest_reg_version=0
+    if list_comp_reg:
+        for c in list_comp_reg:
+            lrv = int(c.version)
+            if lrv>latest_reg_version:
+                latest_reg_version=lrv
+    latest_reg_version=str(latest_reg_version+1)
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        print('Created temporary directory:', tmpdirname)
+        ws_client.components.download(name=cn,download_path=tmpdirname,version=v)
+        path_to_yaml = get_yaml_from_folder(asset_type="component",folder_path=Path(tmpdirname))
+        component = load_component(source=path_to_yaml)
+        component.tags=tags
+        if promote_stage:
+            component.tags.update({'stage':promote_stage})
+
+        component.environment = check_and_replace_environment(
+            reg_client, component.environment
+        )
+
+        reg_comp = reg_client.components.create_or_update(
+            component=component,
+            version=latest_reg_version
+        )
 
 
 if __name__ == "__main__":
