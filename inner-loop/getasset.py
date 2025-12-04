@@ -172,7 +172,7 @@ def getmodel(
     if tags:    
         m_list = filter_assets_by_tag(m_list,tag=tags)
 
-    if req_version:
+    if req_int_version:
         m_list = [m for m in m_list if m.version.isdigit()]
 
     return m_list

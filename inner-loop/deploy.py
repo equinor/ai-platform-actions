@@ -111,64 +111,6 @@ def environment(
             environment.tags.update(tags)
         else:
             environment.tags = tags  
-
-    if False:
-        # Load environment configuration from YAML file
-        print("[deploy environment] Loading environment configuration from file")
-        
-        # Get the directory containing the YAML file
-        yaml_path = Path(filepath).resolve()
-        yaml_dir = yaml_path.parent
-        
-        with open(yaml_path, "r") as file:
-            environment_config = yaml.safe_load(file)
-        for key,value in environment_config.items():
-            print (f"{key} = {value}")
-        if "build" in environment_config:
-            # Resolve paths relative to the YAML file's directory
-            dockerfile_path = environment_config["build"].get("dockerfile_path", None)
-            build_path = environment_config["build"].get("path", None)
-            
-            if dockerfile_path:
-                dockerfile_path = str(yaml_dir / dockerfile_path)
-            if build_path:
-                build_path = str(yaml_dir / build_path)
-            
-            build = BuildContext(
-                dockerfile_path=dockerfile_path,
-                path=build_path
-            )
-            yaml_tags=environment_config.get("tags")
-            tags_to_apply = dict()
-            if yaml_tags:
-                tags_to_apply.update(yaml_tags)
-            if tags:
-                tags_to_apply.update(tags)
-            environment = Environment(
-                name=environment_config["name"],
-                build = build,
-                tags=tags_to_apply,
-                conda_file=environment_config.get("conda_file", None),
-                properties=environment_config.get("properties", {}),
-                datastore=environment_config.get("datastore",None),
-            )
-        else:
-            environment = Environment(
-                name=environment_config["name"],
-                description=environment_config.get("description", ""),
-                tags=tags_to_apply,
-                conda_file=environment_config.get("conda_file", None),
-                image=environment_config.get("image", None),
-                properties=environment_config.get("properties", {}),
-                datastore=environment_config.get("datastore",None),
-                #os_type=environment_config.get("os_type", None),
-                #python=environment_config.get("python", None),
-                #packages=environment_config.get("packages", None),
-                #pip_requirements=environment_config.get("pip_requirements", None),
-                #environment_variables=environment_config.get("environment_variables", None),
-            )
-
-        print(environment)
     
     print("[deploy environment] Creating workspace client")
     client = get_workspace_client(
@@ -221,17 +163,11 @@ def component(
             component.tags = tags
 
     cmd = component.command
-    #print(f"Processed command before: ->{cmd}<-")
-    # Clean up multiline commands: remove backslashes and line breaks
     cmd = re.sub(r'\s*[\\]+\s*',' ', cmd)
-    cmd = re.sub(r'\s*[\n]\s*', ' ', cmd)        # Remove remaining line breaks
-    cmd = re.sub(r'\s+', ' ', cmd)             # Normalize multiple spaces to single space
-    cmd = cmd.strip()                           # Remove leading/trailing whitespace
-    
-    #print(f"Processed cmd after: {cmd}")
+    cmd = re.sub(r'\s*[\n]\s*', ' ', cmd)
+    cmd = re.sub(r'\s+', ' ', cmd)
+    cmd = cmd.strip()
     component.command = cmd
-
-    #print(f"Processed command after: {component.command}")
 
     print("[deploy component] Creating workspace client")
     client = get_workspace_client(
@@ -246,11 +182,8 @@ def component(
     # we need to get any existing ones, and update the version ourselves
     list_comp_ws = getcomponent(
         client=client,
-        name=component.name,
-        #req_int_version=True
+        name=component.name
     )
-
-    #print(f"Result of get: {list_comp_ws}")
 
     latest_ws_version=0
     if list_comp_ws:
@@ -263,51 +196,7 @@ def component(
                 pass # Ignore non-int versions
     latest_ws_version=str(latest_ws_version+1)
 
-    #print(f"Try new version: {latest_ws_version}")
-
-    if False:
-        yaml_path = Path(filepath).resolve()
-        yaml_dir = yaml_path.parent
-        with open(yaml_path, "r") as file:
-            component_config = yaml.safe_load(file)
-
-        # Note: Handle this in a better way
-        component_config['command'] = component_config['command'].replace("  "," ").replace(" \\\n","")
-        for key,value in component_config.items():
-            print (f"{key} = {value}")
-        print('-----------------')
-        cc = component_config
-        yaml_tags=cc.get("tags")
-        tags_to_apply = dict()
-        if yaml_tags:
-            tags_to_apply.update(yaml_tags)
-        if tags:
-            tags_to_apply.update(tags)
-        c = CommandComponent(
-            name=cc['name'],
-            #version="",
-            description=cc['description'],
-            tags=tags,
-            display_name=cc['display_name'],
-            command=cc['command'],
-            code=cc['code'],
-            environment=cc['environment'],
-            distribution=None,
-            resources=None,
-            inputs=None,
-            outputs=None,
-            instance_count=None,
-            is_deterministicc=cc['is_deterministic'], # find better way
-            additional_includes=None,
-            properties=None
-        )
-        print(c)
-        print('-----------------')
-
     component.version = latest_ws_version
-    #print('************')
-    #print(f"[deploy component] Creating or updating component: {component}")
-    #print('************')
     component_result = client.components.create_or_update(
         component=component,
         version=latest_ws_version
