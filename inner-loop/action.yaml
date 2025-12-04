@@ -8,6 +8,12 @@ inputs:
   subject:
     description: "Target subject (data, environment, component, job)"
     required: true
+  token:
+    description: "From azLogin action. Required unless running locally."
+    required: false
+  expires-on:
+    description: "From azLogin action. Required unless running locally."
+    required: false
   tenant-id:
     description: "Azure tenant ID"
     required: false
