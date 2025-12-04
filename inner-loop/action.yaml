@@ -32,8 +32,20 @@ inputs:
   component-ref:
     description: "Component reference (for share component operations)"
     required: false
+  data-ref:
+    description: "Data reference (for share data operations)"
+    required: false
+  env-ref:
+    description: "Environment reference (for share environment operations)"
+    required: false
+  model-ref:
+    description: "Model reference (for share model operations)"
+    required: false
   tags:
     description: "Tags to set (format: 'key1=value1,key2=value2')"
+    required: false
+  promote-stage:
+    description: "Stage to promote asset to (for share operations)"
     required: false
   type:
     description: "Type specification (e.g., data, datastore, mltable)"
@@ -98,7 +110,11 @@ runs:
           --tenant-id "${{ inputs.tenant-id }}" \
           --filepath "${{ inputs.filepath }}" \
           --component-ref "${{ inputs.component-ref }}" \
+          --data-ref "${{ inputs.data-ref }}" \
+          --env-ref "${{ inputs.env-ref }}" \
+          --model-ref "${{ inputs.model-ref }}" \
           --tags "${{ inputs.tags }}" \
+          --promote-stage "${{ inputs.promote-stage }}" \
           --type "${{ inputs.type }}" \
           --image-build-compute "${{ inputs.image-build-compute }}"
 

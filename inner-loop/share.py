@@ -15,11 +15,13 @@ from util import (
 from getasset import (
     getcomponent, 
     getenvironment,
-    getmodel
+    getmodel,
+    getdata
 )
 from share_model_by_commit_id import share_model_by_commit
 import tempfile
 from azure.ai.ml import load_component
+from pathlib import Path
 
 app = typer.Typer()
 
@@ -36,7 +38,8 @@ def data(
         tags: Annotated[
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
-        ]=None
+        ]=None,
+        promote_stage:str=None
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -44,13 +47,68 @@ def data(
     print(f"  Registry: {registry_name}")
     print(f"  Data Ref: {data_ref}")
     print(f"  Tags: {tags}")
+
+    print("[share data] Creating workspace client")
+    ws_client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+
+    print("[share data] Retrieving data asset from workspace")
+    list_data_ws = getdata(
+        client=ws_client,
+        name=data_ref,
+        tags=tags
+    )
+    if len(list_data_ws)<1:
+        raise ValueError("There is no such data asset in the workspace")
+    if len(list_data_ws)>1:
+        raise ValueError("Found more than one matching data asset in the workspace") # should never be raised
+    ws_data = list_data_ws[0]
+
+    print("[share data] Creating registry client")
+    reg_client = get_registry_client(
+        registry_name=registry_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_data_reg = getdata(
+        client=reg_client,
+        name=data_ref,
+        tags=tags,
+        req_int_version=True
+    )
+    # find latest registry version to use
+    latest_reg_version=0
+    if list_data_reg:
+        for d in list_data_reg:
+            lrv = int(d.version)
+            if lrv>latest_reg_version:
+                latest_reg_version=lrv
+    latest_reg_version=str(latest_reg_version+1)
     
-    # Skeleton implementation
-    print("[share data] [SKELETON] Creating workspace client")
-    print("[share data] [SKELETON] Retrieving data asset from workspace")
-    print("[share data] [SKELETON] Creating registry client")
-    print("[share data] [SKELETON] Sharing data asset to registry")
-    print("[share data] [SKELETON] Applying tags if provided")
+    print("[share data] Sharing data asset to registry")
+    ws_client.data.share(
+        name=ws_data.name,
+        version=ws_data.version,
+        registry_name=registry_name,
+        share_with_name=ws_data.name,
+        share_with_version=latest_reg_version
+    )
+
+    print("[share data] Applying stage promotion if provided")
+    if promote_stage:
+        reg_data = reg_client.data.get(name=data_ref,version=latest_reg_version)
+        reg_data_tags=reg_data.tags
+        if reg_data_tags:
+            reg_data_tags.update({'stage':promote_stage})
+        else:
+            reg_data_tags={'stage':promote_stage}
+        reg_data.tags=reg_data_tags
+        reg_client.data.create_or_update(reg_data)
 
 
 @app.command()
@@ -171,9 +229,9 @@ def model(
     )
     list_m_ws = getmodel(ws_client,name=model_ref,tags=tags)
     if len(list_m_ws)<1:
-        raise ValueError("There is no such environment in the workspace")
+        raise ValueError("There is no such model in the workspace")
     if len(list_m_ws)>1:
-        raise ValueError("Found more than one matching environment in the workspace") # should never be raised
+        raise ValueError("Found more than one matching model in the workspace") # should never be raised
     ws_model = list_m_ws[0]
 
     print("[share model] Creating registry client")
@@ -182,9 +240,9 @@ def model(
         token=token,
         expires_on=expires_on
     )
-    list_m_reg = getenvironment(
+    list_m_reg = getmodel(
         client=reg_client,
-        name=env_ref,
+        name=model_ref,
         tags=tags,
         req_int_version=True
     )
@@ -198,7 +256,7 @@ def model(
                 latest_reg_version=lrv
     latest_reg_version=str(latest_reg_version+1)
 
-    print("[share environment] Sharing environment to registry")
+    print("[share model] Sharing model to registry")
     ws_client.models.share(
         name=ws_model.name,
         version=ws_model.version,
@@ -207,9 +265,9 @@ def model(
         share_with_version=latest_reg_version
     )
 
-    print("[share environment] Applying stage promotion if provided")
+    print("[share model] Applying stage promotion if provided")
     if promote_stage:
-        reg_model = reg_client.models.get(name=env_ref,version=latest_reg_version)
+        reg_model = reg_client.models.get(name=model_ref,version=latest_reg_version)
         reg_model_tags=reg_model.tags
         if reg_model_tags:
             reg_model_tags.update({'stage':promote_stage})
@@ -251,7 +309,7 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_ws = getcomponent(client=ws_client,name=temp_component_name)
+    list_comp_ws = getcomponent(client=ws_client,name=component_ref)
     if len(list_comp_ws)<1:
         raise ValueError("There is no such component in the workspace")
     if len(list_comp_ws)>1:
@@ -266,7 +324,7 @@ def component(
     )
     list_comp_reg = getcomponent(
         client=reg_client,
-        name=temp_component_name,
+        name=component_ref,
         tags=tags,
         req_int_version=True
     )
@@ -281,7 +339,7 @@ def component(
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         print('Created temporary directory:', tmpdirname)
-        ws_client.components.download(name=cn,download_path=tmpdirname,version=v)
+        ws_client.components.download(name=ws_comp.name,download_path=tmpdirname,version=ws_comp.version)
         path_to_yaml = get_yaml_from_folder(asset_type="component",folder_path=Path(tmpdirname))
         component = load_component(source=path_to_yaml)
         component.tags=tags

@@ -4,7 +4,7 @@ Get asset methods.
 These are helper methods
 
 """
-from azure.ai.ml.entities import Component,Environment,BuildContext,Model
+from azure.ai.ml.entities import Component,Environment,BuildContext,Model,Data
 from azure.ai.ml import MLClient
 from azure.core.polling import LROPoller
 import typer
@@ -168,3 +168,49 @@ def getmodel(
         m_list = [m for m in m_list if m.version.isdigit()]
 
     return m_list
+
+
+def getdata(
+        client:MLClient,
+        name:str,
+        version:str|None=None,
+        tags:None|str|dict[str,None|str]=None,
+        req_int_version:bool=True
+    ) -> None|list[Data]:
+    """
+        Retrieves a data asset using the MLClient.
+        
+        Name is required.
+        If version is specified, this MUST match.
+        If tags is specified, and it is a string, the tag value MUST exist.
+        If tags is specified, and it is a dict, every key in the dict MUST exist,
+          AND if a key's corresponding value is specified the value MUST also match.
+          However, it is ok if the data asset has extra tags.
+        if req_int_version is True, then the version of the data asset MUST be a positive integer.
+          This argument is there due to AzureML's need to have integer version fields 
+          in order to update their information. If not integers, the data asset can't be updated.
+    """
+
+    # Get the list to find the latest version
+    data_list = list(client.data.list())
+    data_list = [d for d in data_list if d.name==name]
+    if data_list:
+        latest_version=data_list[0].latest_version
+    else:
+        return None
+    
+    # Get a list that contains both version and tags
+    data_list = list(client.data.list(name=name))
+
+    if version:
+        data_list = filter_assets_by_version(data_list,version=version)
+    else:
+        data_list = [client.data.get(name=name,version=latest_version)]
+
+    if tags:
+        data_list = filter_assets_by_tag(data_list,tags)
+
+    if req_int_version:
+        data_list = [d for d in data_list if d.version.isdigit()]
+
+    return data_list

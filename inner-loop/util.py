@@ -135,7 +135,7 @@ def check_and_replace_environment(ml_client_reg: MLClient, env: str) -> str:
 
 def get_yaml_from_folder(asset_type:str, folder_path:Path)->Path|None:
     asset_map = {
-        #'data':'',
+        'data':'https://azuremlschemas.azureedge.net/latest/data.schema.json',
         'component':'https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json',
         #'environment':'',
         #'model':'',
