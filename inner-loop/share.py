@@ -10,7 +10,8 @@ from util import (
     get_registry_client,
     get_workspace_client,
     get_yaml_from_folder,
-    load_safe_tags
+    load_safe_tags,
+    get_ref_properties
 )
 from getasset import (
     getcomponent, 
@@ -48,6 +49,10 @@ def data(
     print(f"  Data Ref: {data_ref}")
     print(f"  Tags: {tags}")
 
+    d_ref = get_ref_properties(data_ref)
+    data_name = d_ref.name
+    data_version = d_ref.version
+
     print("[share data] Creating workspace client")
     ws_client = get_workspace_client(
         subscription_id=subscription_id,
@@ -60,7 +65,7 @@ def data(
     print("[share data] Retrieving data asset from workspace")
     list_data_ws = getdata(
         client=ws_client,
-        name=data_ref,
+        name=data_name,
         tags=tags
     )
     if len(list_data_ws)<1:
@@ -77,7 +82,7 @@ def data(
     )
     list_data_reg = getdata(
         client=reg_client,
-        name=data_ref,
+        name=data_name,
         tags=tags,
         req_int_version=True
     )
@@ -101,7 +106,7 @@ def data(
 
     print("[share data] Applying stage promotion if provided")
     if promote_stage:
-        reg_data = reg_client.data.get(name=data_ref,version=latest_reg_version)
+        reg_data = reg_client.data.get(name=data_name,version=latest_reg_version)
         reg_data_tags=reg_data.tags
         if reg_data_tags:
             reg_data_tags.update({'stage':promote_stage})
@@ -109,6 +114,20 @@ def data(
             reg_data_tags={'stage':promote_stage}
         reg_data.tags=reg_data_tags
         reg_client.data.create_or_update(reg_data)
+    
+    data_result=getdata(
+        client=reg_client,
+        name=data_name,
+        version=latest_reg_version
+    )
+
+    print(f"[share data] ✅ Data shared successfully")
+    print(f"  Name: {data_result.name}")
+    print(f"  Version: {data_result.version}")
+    print(f"  Resource ID: {data_result.id}")
+    github_output({
+        "resource-id":data_result.id
+    })
 
 
 @app.command()
@@ -133,6 +152,8 @@ def environment(
     print(f"  Environment Ref: <{env_ref}>")
     print(f"  Tags: {tags}")
 
+    env_name = get_ref_properties(env_ref).name
+
     print("[share environment] Creating workspace client")
     ws_client = get_workspace_client(
         subscription_id=subscription_id,
@@ -145,7 +166,7 @@ def environment(
     print("[share environment] Retrieving environment from workspace")
     list_env_ws = getenvironment(
         client=ws_client,
-        name=env_ref,
+        name=env_name,
         tags=tags
     )
     if len(list_env_ws)<1:
@@ -162,7 +183,7 @@ def environment(
     )
     list_env_reg = getenvironment(
         client=reg_client,
-        name=env_ref,
+        name=env_name,
         tags=tags,
         req_int_version=True
     )
@@ -186,7 +207,7 @@ def environment(
 
     print("[share environment] Applying stage promotion if provided")
     if promote_stage:
-        reg_env = reg_client.environments.get(name=env_ref,version=latest_reg_version)
+        reg_env = reg_client.environments.get(name=env_name,version=latest_reg_version)
         reg_env_tags=reg_env.tags
         if reg_env_tags:
             reg_env_tags.update({'stage':promote_stage})
@@ -195,6 +216,21 @@ def environment(
         reg_env.tags=reg_env_tags
         reg_client.environments.create_or_update(reg_env)
 
+    environment_result = getenvironment(
+        client=reg_client,
+        name=env_name,
+        version=latest_reg_version
+    )
+
+    print(f"[share environment] ✅ Environment shared successfully")
+    print(f"  Name: {environment_result.name}")
+    print(f"  Version: {environment_result.version}")
+    print(f"  Resource ID: {environment_result.id}")
+    github_output({
+        #"reference":f"azureml:{environment_result.name}:{environment_result.version}",
+        #"version":environment_result.version,
+        "resource-id":environment_result.id
+    })
 
 @app.command()
 def model(
@@ -220,6 +256,10 @@ def model(
     print(f"  Model-ID (of WS): {model_ref}")
     print(f"  Tags: {tags}")
 
+    m_ref = get_ref_properties(model_ref)
+    model_name = m_ref.name
+    model_version = m_ref.version
+
     ws_client = get_workspace_client(
         subscription_id=subscription_id,
         resource_group=resource_group,
@@ -227,7 +267,7 @@ def model(
         token=token,
         expires_on=expires_on
     )
-    list_m_ws = getmodel(ws_client,name=model_ref,tags=tags)
+    list_m_ws = getmodel(ws_client,name=model_name,tags=tags)
     if len(list_m_ws)<1:
         raise ValueError("There is no such model in the workspace")
     if len(list_m_ws)>1:
@@ -242,7 +282,7 @@ def model(
     )
     list_m_reg = getmodel(
         client=reg_client,
-        name=model_ref,
+        name=model_name,
         tags=tags,
         req_int_version=True
     )
@@ -275,7 +315,20 @@ def model(
             reg_model_tags={'stage':promote_stage}
         reg_model.tags=reg_model_tags
         reg_client.models.create_or_update(reg_model)
-   
+
+    model_result = getmodel(
+        client=reg_client,
+        name=model_name,
+        version=latest_reg_version
+    )
+
+    print(f"[share model] ✅ Model shared successfully")
+    print(f"  Name: {model_result.name}")
+    print(f"  Version: {model_result.version}")
+    print(f"  Resource ID: {model_result.id}")
+    github_output({
+        "resource-id":model_result.id
+    })
 
 @app.command()
 def component(
@@ -302,6 +355,10 @@ def component(
     print(f"  Tags: {tags}")
     print(f"  Promote Stage: {promote_stage}")
     
+    c_ref = get_ref_properties(component_ref)
+    component_name = c_ref.name
+    component_version = c_ref.version
+
     ws_client = get_workspace_client(
         subscription_id=subscription_id,
         resource_group=resource_group,
@@ -309,7 +366,7 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_ws = getcomponent(client=ws_client,name=component_ref)
+    list_comp_ws = getcomponent(client=ws_client,name=component_name)
     if len(list_comp_ws)<1:
         raise ValueError("There is no such component in the workspace")
     if len(list_comp_ws)>1:
@@ -324,7 +381,7 @@ def component(
     )
     list_comp_reg = getcomponent(
         client=reg_client,
-        name=component_ref,
+        name=component_name,
         tags=tags,
         req_int_version=True
     )
@@ -354,6 +411,20 @@ def component(
             component=component,
             version=latest_reg_version
         )
+    
+    component_result = getcomponent(
+        client=reg_client,
+        name=component_name,
+        version=latest_reg_version
+    )
+
+    print(f"[share component] ✅ Component shared successfully")
+    print(f"  Name: {component_result.name}")
+    print(f"  Version: {component_result.version}")
+    print(f"  Resource ID: {component_result.id}")
+    github_output({
+        "resource-id":component_result.id
+    })
 
 
 if __name__ == "__main__":

@@ -214,17 +214,17 @@ def component(
 
 @app.command()
 def job(
-    subscription_id: Annotated[str, typer.Option("--subscription","-s")],
-    resource_group: Annotated[str, typer.Option("--resource-group","-g")],
-    workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
-    filepath: str,
-    token: Optional[str] = None,
-    expires_on: Optional[int] = None,
-    tags: Annotated[
-        Optional[str],
-        typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-    ]=None
-):
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ]=None
+    ):
     """Submit job to Azure ML workspace"""
     print(f"[deploy job] Submitting job")
     print(f"  Workspace: {workspace_name}")

@@ -12,6 +12,7 @@ import datetime
 import secrets
 from pathlib import Path
 import yaml
+from collections import namedtuple
 
 class Credential:
     """Simple credential wrapper for Azure SDK"""
@@ -166,3 +167,99 @@ def get_yaml_from_folder(asset_type:str, folder_path:Path)->Path|None:
 
     return matching_files[0]
 
+def reference_registry_asset(
+        ml_client_reg: MLClient,
+        asset_type: str,
+        name: str,
+        version: str|None=None
+    ) -> str:
+    """
+    Utility function to create a reference string for an asset in a registry
+
+    The reference string is of the form:
+    'azureml://registries/<registry_name>/<asset_type>s/<asset_name>/versions/<version>'
+    If version is None, 'latest' is used.
+    """
+
+    if version is None:
+        version = "latest"
+    
+    asset_type_plural = asset_type + "s"
+    registry_name = ml_client_reg._operation_scope.registry_name
+    reference_string = f"azureml://registries/{registry_name}/{asset_type_plural}/{name}/versions/{version}"
+
+    return reference_string
+
+def get_ref_properties(reference: str) -> namedtuple:
+    """
+    Parse Azure ML asset reference strings and extract their components.
+    
+    Supports three patterns:
+    1. azureml:<asset_name>:<version>
+    2. azureml:/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.MachineLearningServices/workspaces/<workspace-name>/<asset-type-plural>/<asset-name>/versions/<asset-version>
+    3. azureml://registries/<registry_name>/<asset-type-plural>/<asset-name>/versions/<version>
+    
+    Returns:
+        namedtuple subclass with name and version attributes
+    """
+    
+    # Pattern 1: azureml:<asset_name>:<version>
+    pattern1 = re.compile(r'^azureml:(?P<asset_name>[^:]+):(?P<version>[^:]+)$')
+    
+    # Pattern 2: azureml:/subscriptions/.../workspaces/...
+    pattern2 = re.compile(
+        r'^azureml:/subscriptions/(?P<subscription_id>[^/]+)'
+        r'/resourceGroups/(?P<resource_group>[^/]+)'
+        r'/providers/Microsoft\.MachineLearningServices'
+        r'/workspaces/(?P<workspace_name>[^/]+)'
+        r'/(?P<asset_type_plural>[^/]+)'
+        r'/(?P<asset_name>[^/]+)'
+        r'/versions/(?P<version>[^/]+)$'
+    )
+    
+    # Pattern 3: azureml://registries/<registry_name>/...
+    pattern3 = re.compile(
+        r'^azureml://registries/(?P<registry_name>[^/]+)'
+        r'/(?P<asset_type_plural>[^/]+)'
+        r'/(?P<asset_name>[^/]+)'
+        r'/versions/(?P<version>[^/]+)$'
+    )
+    
+    # Try matching each pattern
+    match1 = pattern1.match(reference)
+    if match1:
+        d = {
+            'pattern': 'simple',
+            'asset_name': match1.group('asset_name'),
+            'version': match1.group('version')
+        }
+    else:
+        match2 = pattern2.match(reference)
+        match3 = pattern3.match(reference)
+        if match2:
+            d = {
+                'pattern': 'workspace',
+                'subscription_id': match2.group('subscription_id'),
+                'resource_group': match2.group('resource_group'),
+                'workspace_name': match2.group('workspace_name'),
+                'asset_type': match2.group('asset_type_plural')[:-1],
+                'name': match2.group('asset_name'),
+                'version': match2.group('version')
+            }
+        elif match3:
+            d = {
+                'pattern': 'registry',
+                'registry_name': match3.group('registry_name'),
+                'asset_type': match3.group('asset_type_plural')[:-1],
+                'name': match3.group('asset_name'),
+                'version': match3.group('version')
+            }
+        else:
+            # No pattern matched
+            raise ValueError(f"Reference string '{reference}' does not match any supported Azure ML reference pattern")
+    
+    # For ref with all retrieved attributes
+    # ref = namedtuple('Ref',d.keys())
+    # return ref(*d)
+    ref = namedtuple('Ref',['name','version'])
+    return ref(name=d['name'],version=d['version'])
