@@ -11,7 +11,8 @@ from util import (
     get_workspace_client,
     get_yaml_from_folder,
     load_safe_tags,
-    get_ref_properties
+    get_ref_properties,
+    github_output
 )
 from getasset import (
     getcomponent, 
@@ -119,7 +120,7 @@ def data(
         client=reg_client,
         name=data_name,
         version=latest_reg_version
-    )
+    )[0]
 
     print(f"[share data] ✅ Data shared successfully")
     print(f"  Name: {data_result.name}")
@@ -149,7 +150,7 @@ def environment(
     print(f"[share environment] Sharing environment")
     print(f"  Workspace: {workspace_name}")
     print(f"  Registry: {registry_name}")
-    print(f"  Environment Ref: <{env_ref}>")
+    print(f"  Environment Ref: {env_ref}")
     print(f"  Tags: {tags}")
 
     env_name = get_ref_properties(env_ref).name
@@ -220,7 +221,7 @@ def environment(
         client=reg_client,
         name=env_name,
         version=latest_reg_version
-    )
+    )[0]
 
     print(f"[share environment] ✅ Environment shared successfully")
     print(f"  Name: {environment_result.name}")
@@ -320,7 +321,7 @@ def model(
         client=reg_client,
         name=model_name,
         version=latest_reg_version
-    )
+    )[0]
 
     print(f"[share model] ✅ Model shared successfully")
     print(f"  Name: {model_result.name}")
@@ -416,7 +417,7 @@ def component(
         client=reg_client,
         name=component_name,
         version=latest_reg_version
-    )
+    )[0]
 
     print(f"[share component] ✅ Component shared successfully")
     print(f"  Name: {component_result.name}")

@@ -203,12 +203,12 @@ def get_ref_properties(reference: str) -> namedtuple:
         namedtuple subclass with name and version attributes
     """
     
-    # Pattern 1: azureml:<asset_name>:<version>
-    pattern1 = re.compile(r'^azureml:(?P<asset_name>[^:]+):(?P<version>[^:]+)$')
+    # Pattern 1: [azureml:]<asset_name>:<version>
+    pattern1 = re.compile(r'^(?:azureml:)?(?P<asset_name>[^:]+):(?P<version>[^:]+)$')
     
-    # Pattern 2: azureml:/subscriptions/.../workspaces/...
+    # Pattern 2: [azureml:]/subscriptions/.../workspaces/...
     pattern2 = re.compile(
-        r'^azureml:/subscriptions/(?P<subscription_id>[^/]+)'
+        r'^(?:azureml:)?/subscriptions/(?P<subscription_id>[^/]+)'
         r'/resourceGroups/(?P<resource_group>[^/]+)'
         r'/providers/Microsoft\.MachineLearningServices'
         r'/workspaces/(?P<workspace_name>[^/]+)'
@@ -217,9 +217,9 @@ def get_ref_properties(reference: str) -> namedtuple:
         r'/versions/(?P<version>[^/]+)$'
     )
     
-    # Pattern 3: azureml://registries/<registry_name>/...
+    # Pattern 3: [azureml:]//registries/<registry_name>/...
     pattern3 = re.compile(
-        r'^azureml://registries/(?P<registry_name>[^/]+)'
+        r'^(?:azureml:)?//registries/(?P<registry_name>[^/]+)'
         r'/(?P<asset_type_plural>[^/]+)'
         r'/(?P<asset_name>[^/]+)'
         r'/versions/(?P<version>[^/]+)$'
