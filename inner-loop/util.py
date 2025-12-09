@@ -166,29 +166,7 @@ def get_yaml_from_folder(asset_type:str, folder_path:Path)->Path|None:
         raise ValueError("No yaml file found")
 
     return matching_files[0]
-
-def reference_registry_asset(
-        ml_client_reg: MLClient,
-        asset_type: str,
-        name: str,
-        version: str|None=None
-    ) -> str:
-    """
-    Utility function to create a reference string for an asset in a registry
-
-    The reference string is of the form:
-    'azureml://registries/<registry_name>/<asset_type>s/<asset_name>/versions/<version>'
-    If version is None, 'latest' is used.
-    """
-
-    if version is None:
-        version = "latest"
     
-    asset_type_plural = asset_type + "s"
-    registry_name = ml_client_reg._operation_scope.registry_name
-    reference_string = f"azureml://registries/{registry_name}/{asset_type_plural}/{name}/versions/{version}"
-
-    return reference_string
 
 def get_ref_properties(reference: str) -> namedtuple:
     """
