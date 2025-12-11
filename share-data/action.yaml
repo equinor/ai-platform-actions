@@ -43,7 +43,7 @@ runs:
     - name: Action Summary
       shell: bash
       run: |
-        echo "🔗 Share Data - Azure ML Data Asset Sharing"
+        echo "Share Data - Azure ML Data Asset Sharing"
         echo "   Data Asset: ${{ inputs.data-ref }}"
         echo "   From Workspace: ${{ inputs.workspace-name }} in ${{ inputs.resource-group }}"
         echo "   To Registry: ${{ inputs.registry-name }}"
@@ -184,7 +184,7 @@ runs:
     - name: Print Result
       shell: bash
       run: |
-        echo "🎉 Data asset sharing completed successfully!"
+        echo "✅ Data asset sharing completed successfully!"
         echo ""
         echo "Resource ID: ${{ steps.share_data.outputs.resource-id }}"
         echo "Data Asset Reference: ${{ steps.ref_ver.outputs.data-ref }}"

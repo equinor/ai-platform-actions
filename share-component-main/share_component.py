@@ -1,12 +1,9 @@
 import sys
 import os
 import re
-import tempfile
 from azure.core.credentials import AccessToken
 from azure.ai.ml import MLClient
 from azure.ai.ml.entities import Component
-from azure.ai.ml import load_component
-import yaml
 
 
 class Credential:
@@ -170,6 +167,7 @@ def validate_inputs(token, expires_on, subscription_id, resource_group, workspac
 
 def print_action_summary(component_ref, workspace_name, resource_group, registry_name, tags_str):
     """Print comprehensive action summary before execution"""
+    print("")
     print("SHARE COMPONENT")
     print(f"Component: {component_ref} | Workspace: {workspace_name}/{resource_group} | Registry: {registry_name}")
     if tags_str and tags_str.strip():
@@ -209,10 +207,7 @@ def main():
     try:
         # Print action summary
         print_action_summary(component_ref, workspace_name, resource_group, registry_name, tags_str)
-        print(f"Token length: {len(token)}")
-        print(f"Expires: {expires_on}")
-        print("=" * 40)
-
+        
         # Comprehensive input validation
         if not validate_inputs(token, expires_on, subscription_id, resource_group, workspace_name, registry_name, component_ref, tags_str):
             sys.exit(1)
@@ -234,58 +229,41 @@ def main():
             component = workspace_client.components.get(name=component_name, version=component_version)
         else:
             component = workspace_client.components.get(name=component_name)
-
+        
         print(f"✅ Retrieved {component.name} v{component.version}")
         print("")
         
-        # Download the component and its dependencies to a temp folder
-        with tempfile.TemporaryDirectory() as temp_dir:
-            print(f"Downloading component to: {temp_dir}")
-            workspace_client.components.download(
-                name=component_name,
-                version=component_version,
-                download_path=temp_dir
-            )
-            spec_path = os.path.join(temp_dir, "component_spec.yaml")
-            loaded_component = load_component(source=spec_path)
-            # Parse and apply tags if provided
-            if tags_str:
-                new_tags = parse_tags(tags_str)
-                if loaded_component.tags:
-                    loaded_component.tags.update(new_tags)
-                else:
-                    loaded_component.tags = new_tags
-            # Preprocess component_spec.yaml to fix command field
-            with open(spec_path, 'r', encoding='utf-8') as f:
-                spec = yaml.safe_load(f)
-            if 'command' in spec:
-                # Remove all backslashes and newlines
-                cmd = spec['command']
-                # Replace all backslashes and newlines with a space
-                import re
-                cmd_single_line = re.sub(r'[\\\n]+', ' ', cmd)
-                spec['command'] = cmd_single_line.strip()
-                with open(spec_path, 'w', encoding='utf-8') as f:
-                    yaml.safe_dump(spec, f, default_flow_style=False, sort_keys=False)
-            # Get registry client and share component
-            print("Connecting to registry...")
-            registry_client = get_registry_client(token, expires_on, subscription_id, registry_name)
-            print("✅ Connected to registry")
-            print("")
-            # Share loaded component to registry using create_or_update
-            shared_component = registry_client.components.create_or_update(loaded_component)
-            # Generate outputs
-            resource_id = f"/subscriptions/{subscription_id}/resourceGroups//providers/Microsoft.MachineLearningServices/registries/{registry_name}/components/{shared_component.name}/versions/{shared_component.version}"
-            component_ref_output = f"azureml:{shared_component.name}:{shared_component.version}"
-            # Print comprehensive results
-            print_execution_results(shared_component, resource_id, component_ref_output, registry_name)
-            # Set GitHub Action outputs
-            if 'GITHUB_OUTPUT' in os.environ:
-                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                    f.write(f"resource-id={resource_id}\n")
-                    f.write(f"component-ref={component_ref_output}\n")
-                    f.write(f"component-version={shared_component.version}\n")
-            # End of with tempfile.TemporaryDirectory()
+        # Parse and apply tags if provided
+        if tags_str:
+            new_tags = parse_tags(tags_str)
+            # Merge with existing tags
+            if component.tags:
+                component.tags.update(new_tags)
+            else:
+                component.tags = new_tags
+        
+        # Get registry client and share component
+        print("Connecting to registry...")
+        registry_client = get_registry_client(token, expires_on, subscription_id, registry_name)
+        print("✅ Connected to registry")
+        print("")
+        
+        # Share component to registry using create_or_update
+        shared_component = registry_client.components.create_or_update(component)
+        
+        # Generate outputs
+        resource_id = f"/subscriptions/{subscription_id}/resourceGroups//providers/Microsoft.MachineLearningServices/registries/{registry_name}/components/{shared_component.name}/versions/{shared_component.version}"
+        component_ref_output = f"azureml:{shared_component.name}:{shared_component.version}"
+        
+        # Print comprehensive results
+        print_execution_results(shared_component, resource_id, component_ref_output, registry_name)
+        
+        # Set GitHub Action outputs
+        if 'GITHUB_OUTPUT' in os.environ:
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write(f"resource-id={resource_id}\n")
+                f.write(f"component-ref={component_ref_output}\n")
+                f.write(f"component-version={shared_component.version}\n")
         
     except Exception as e:
         print("")
@@ -300,7 +278,7 @@ def main():
         print("  Check that you have permissions to read from workspace and write to registry")
         print("  Ensure the registry name is correct and accessible")
         print("  Verify the component reference format is valid")
-        print("  Check that the authentication token is valid and not expired")
+        print("• Check that the authentication token is valid and not expired")
         print("=" * 60)
         sys.exit(1)
 

@@ -1,0 +1,69 @@
+name: Share Component
+description: Share an Azure ML Component from a workspace to a registry
+
+inputs:
+  tenant-id:
+    description: "Azure tenant ID"
+    required: true
+  subscription-id:
+    description: "Azure subscription ID"
+    required: true
+  resource-group:
+    description: "Azure resource group name (for the workspace)"
+    required: true
+  workspace-name:
+    description: "Azure Machine Learning workspace name (source workspace)"
+    required: true
+  client-id:
+    description: "Client ID configured with Federated Credentials"
+    required: true
+  registry-name:
+    description: "Azure ML registry name (target registry)"
+    required: true
+  component-ref:
+    description: "Component reference (e.g., 'azureml:mycomponent:1' or resource-id or 'name:version')"
+    required: true
+  tags:
+    description: "Tags to set on the shared component (format: 'key1=value1,key2=value2')"
+    required: false
+
+outputs:
+  resource-id:
+    description: "Resource ID of the shared component in the registry"
+  component-ref:
+    description: "Reference string of component within Azure ML registry"
+  component-version:
+    description: "The version of the component within the registry"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Action Summary
+      shell: bash
+      run: |
+        access_token=$(az account get-access-token --resource=https://management.azure.com/.default --query accessToken -o tsv)
+        expires_on=$(az account get-access-token --resource=https://management.azure.com/.default --query expiresOn -o tsv)
+    
+    - name: Share component container
+      id: shr-comp
+      shell: bash
+      run: |
+        access_token=$(az account get-access-token --resource=https://management.azure.com/.default --query accessToken -o tsv)
+        expires_on=$(az account get-access-token --resource=https://management.azure.com/.default --query expiresOn -o tsv)
+        docker run --rm \
+      -v $PWD:/app \
+      myregistry/share-component:latest \
+      "$access_token" "$expires_on" "$subscription-id" "$RESOURCE_GROUP" "$WORKSPACE_NAME" "$REGISTRY_NAME" "$COMPONENT_REF" "$TAGS"
+      with:
+        tenant-id: ${{ inputstenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        resource-group: ${{ inputs.resource-group }}
+        workspace-name: ${{ inputs.workspace-name }}
+        registry-name: ${{ inputs.registry-name }}
+    
+    - name: Set output
+      shell: bash
+      run: |
+        echo "resource-id=${{ steps.shr-comp.outputs.resource-id }}" >> "$GITHUB_OUTPUT"
+        echo "component-ref=${{ steps.shr-comp.outputs.component-ref }}" >> "$GITHUB_OUTPUT"
+        echo "component-version=${{ steps.shr-comp.outputs.component-version }}" >> "$GITHUB_OUTPUT"
