@@ -208,7 +208,7 @@ def get_ref_properties(reference: str) -> namedtuple:
     if match1:
         d = {
             'pattern': 'simple',
-            'asset_name': match1.group('asset_name'),
+            'name': match1.group('asset_name'),
             'version': match1.group('version')
         }
     else:

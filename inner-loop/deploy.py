@@ -197,6 +197,9 @@ def component(
                 pass # Ignore non-int versions
     latest_ws_version=str(latest_ws_version+1)
 
+    env_in_component = component.environment
+    
+
     component.version = latest_ws_version
     component_result = client.components.create_or_update(
         component=component,
