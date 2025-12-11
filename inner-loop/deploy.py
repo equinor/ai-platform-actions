@@ -105,6 +105,7 @@ def environment(
     print(f"  Resource Group: {resource_group}")
     print(f"  Filepath: {filepath}")
     
+    print("[deploy environment] Loading environment configuration from file")
     environment = load_environment(source=filepath)
     if tags:
         if environment.tags:
