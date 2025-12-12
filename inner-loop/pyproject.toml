@@ -3,13 +3,13 @@ name = "inner-loop"
 version = "0.1.0"
 description = "Unified Azure ML operations using command pattern"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
-    "azure-ai-ml>=1.28.1",
-    "azure-core>=1.35.0",
-    "azure-identity>=1.23.1",
-    "azureml-mlflow>=1.60.0.post1",
-    "mlflow>=2.22.2",
+    "azure-ai-ml>=1.30.0",
+    "azure-core>=1.37.0",
+    "azure-identity>=1.25.1",
+    "azureml-mlflow>=1.61.0.post1",
+    "mlflow>=3.5.0",
     "pyyaml>=6.0.3",
-    "typer>=0.16.0",
+    "typer>=0.20.0",
 ]
