@@ -9,7 +9,7 @@ dependencies = [
     "azure-core>=1.37.0",
     "azure-identity>=1.25.1",
     "azureml-mlflow>=1.61.0.post1",
-    "mlflow>=3.5.0",
+    "mlflow-skinny>=3.5.0",
     "pyyaml>=6.0.3",
     "typer>=0.20.0",
 ]
