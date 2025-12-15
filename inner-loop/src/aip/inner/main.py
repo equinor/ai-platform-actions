@@ -6,8 +6,8 @@ Routes to deploy.py or share.py based on the verb.
 
 import typer
 from typing import Optional
-import deploy
-import share
+from . import deploy
+from . import share
 
 app = typer.Typer()
 

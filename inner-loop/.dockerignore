@@ -1,1 +1,21 @@
+﻿# UV lock file (will be generated in container)
 uv.lock
+
+# Python cache and virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+
+# Documentation and examples
+README.md
+EXAMPLES.md
+
+# Git and IDE
+.git/
+.gitignore
+.vscode/
+
+# GitHub Actions
+action.yaml

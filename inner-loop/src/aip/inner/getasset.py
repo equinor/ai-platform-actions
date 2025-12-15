@@ -9,7 +9,7 @@ from azure.ai.ml import MLClient
 from azure.core.polling import LROPoller
 import typer
 from typing import Optional,Iterable
-from util import get_workspace_client
+from .util import get_workspace_client
 import yaml
 from pathlib import Path
 import datetime

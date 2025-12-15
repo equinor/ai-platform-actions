@@ -18,14 +18,14 @@ from azure.ai.ml.entities import (
 from azure.core.polling import LROPoller
 import typer
 from typing import Annotated, Any, Optional
-from util import (
+from .util import (
     get_workspace_client, 
     github_output, 
     load_safe_tags
 )
 import yaml
 from pathlib import Path
-from getasset import (
+from .getasset import (
     getcomponent,
     getdata,
     getenvironment,

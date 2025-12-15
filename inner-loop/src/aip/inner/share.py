@@ -4,7 +4,7 @@ Share operations for Inner Loop Action
 
 import typer
 from typing import Optional, Annotated
-from util import (
+from .util import (
     check_and_replace_environment,
     get_new_asset_version,
     get_registry_client,
@@ -14,13 +14,12 @@ from util import (
     get_ref_properties,
     github_output
 )
-from getasset import (
+from .getasset import (
     getcomponent, 
     getenvironment,
     getmodel,
     getdata
 )
-from share_model_by_commit_id import share_model_by_commit
 import tempfile
 from azure.ai.ml import load_component
 from pathlib import Path
