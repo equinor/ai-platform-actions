@@ -5,4 +5,4 @@ COPY pyproject.toml __init__.py util.py main.py deploy.py share.py ./
 RUN uv sync
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["uv", "run", "python", "/app/main.py"]
+ENTRYPOINT ["uv", "run", "--no-sync", "python", "/app/main.py"]
