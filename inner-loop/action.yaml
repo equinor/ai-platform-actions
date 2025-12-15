@@ -91,3 +91,5 @@ runs:
     - ${{ inputs.tags }}
     - --promote-stage
     - ${{ inputs.promote-stage }}
+  env:
+    UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
