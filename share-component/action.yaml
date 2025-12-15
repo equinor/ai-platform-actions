@@ -1,0 +1,55 @@
+name: Share Component
+description: Share an Azure ML Component from a workspace to a registry
+
+inputs:
+  token:
+    description: "Access token from Azure login action"
+    required: true
+  expires-on:
+    description: "Token expiration timestamp from Azure login action"
+    required: true
+  tenant-id:
+    description: "Azure tenant ID"
+    required: true
+  subscription-id:
+    description: "Azure subscription ID"
+    required: true
+  resource-group:
+    description: "Azure resource group name (for the workspace)"
+    required: true
+  workspace-name:
+    description: "Azure Machine Learning workspace name (source workspace)"
+    required: true
+  client-id:
+    description: "Client ID configured with Federated Credentials"
+    required: true
+  registry-name:
+    description: "Azure ML registry name (target registry)"
+    required: true
+  component-ref:
+    description: "Component reference (e.g., 'azureml:mycomponent:1' or resource-id or 'name:version')"
+    required: true
+  tags:
+    description: "Tags to set on the shared component (format: 'key1=value1,key2=value2')"
+    required: false
+
+outputs:
+  resource-id:
+    description: "Resource ID of the shared component in the registry"
+  component-ref:
+    description: "Reference string of component within Azure ML registry"
+  component-version:
+    description: "The version of the component within the registry"
+
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - ${{ inputs.token }}
+    - ${{ inputs.expires-on }}
+    - ${{ inputs.subscription-id }}
+    - ${{ inputs.resource-group }}
+    - ${{ inputs.workspace-name }}
+    - ${{ inputs.registry-name }}
+    - ${{ inputs.component-ref }}
+    - ${{ inputs.tags }}

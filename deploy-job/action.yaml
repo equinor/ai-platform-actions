@@ -1,5 +1,5 @@
-name: Deploy Environment
-description: Deploy an Environment to AzureML
+name: Deploy Job
+description: Deploy a Job to AzureML
 inputs:
   tenant-id:
     description: 'Tenant id'
@@ -16,20 +16,24 @@ inputs:
   client-id:
     description: 'Client id configured with Federated Credentials'
     required: true
-  environment-path:
-    description: 'Environment definition file with full path'
+  job-path:
+    description: 'Job definition file with full path'
     required: true
+  compute:
+    description: 'Name of the compute resource to use (compute or kubernetes cluster within workspace)'
+    default: 'serverless'
+    required: False
 
 outputs:
   resource-id:
-    description: 'resource id of the environment'
-    value: ${{ steps.create_environment.outputs.resource-id }}
-  environment-ref:
-    description: 'reference string of environment within AzureML workspace'
-    value: ${{ steps.ref_ver.outputs.environment-ref }}
-  environment-version:
-    description: 'The registered version of the environment within the workspace'
-    value: ${{ steps.ref_ver.outputs.environment-version }}
+    description: 'resource id of the job'
+    value: ${{ steps.create_job.outputs.resource-id }}
+  job-ref:
+    description: 'reference string of job within AzureML workspace'
+    value: ${{ steps.ref_ver.outputs.job-ref }}
+  job-name:
+    description: 'The name of the job within the workspace'
+    value: ${{ steps.ref_ver.outputs.job-name }}
 
 runs:
   using: "composite"
@@ -65,12 +69,12 @@ runs:
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
         fi
         
-        if [ -z "${{ inputs.environment-path }}" ]; then
-          echo "❌ Error: environment-path is required but not provided"
-          echo "   Please specify the path to your environment YAML file"
+        if [ -z "${{ inputs.job-path }}" ]; then
+          echo "❌ Error: job-path is required but not provided"
+          echo "   Please specify the path to your job configuration YAML file"
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
-        elif [ ! -f "${{ inputs.environment-path }}" ]; then
-          echo "❌ Error: Environment file not found: ${{ inputs.environment-path }}"
+        elif [ ! -f "${{ inputs.job-path }}" ]; then
+          echo "❌ Error: Job configuration file not found: ${{ inputs.job-path }}"
           echo "   Please ensure the file exists and the path is correct"
           VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
         fi
@@ -87,42 +91,60 @@ runs:
     - name: Deployment summary
       shell: bash
       run: |
-        echo "About to deploy Azure ML environment from: ${{ inputs.environment-path }}"
+        echo "About to deploy Azure ML job from: ${{ inputs.job-path }}"
         echo "   Target workspace: ${{ inputs.workspace-name }} (Resource Group: ${{ inputs.resource-group }})"
+        if [ -n "${{ inputs.compute }}" ]; then
+          echo "   Compute target: ${{ inputs.compute }}"
+        else
+          echo "   Compute target: serverless (default)"
+        fi
 
     - name: Az ml
       shell: bash
       run: |
         az extension add -n ml -y
 
-    - name: Create Environment
+    - name: Create Job
       shell: bash
-      id: create_environment
+      id: create_job
       run: |
-        echo "resource-id=$(\
-        az ml environment create \
-        --file ${{ inputs.environment-path }} \
-        -g ${{ inputs.resource-group }} \
-        -w ${{ inputs.workspace-name }} \
-        --subscription ${{ inputs.subscription-id }} \
-        --query "id" \
-        --output tsv \
-        )" >> "$GITHUB_OUTPUT"
+        if [ "${{ inputs.compute }}" = "serverless" ]; then
+          echo "resource-id=$(\
+          az ml job create \
+          --file ${{ inputs.job-path }} \
+          -g ${{ inputs.resource-group }} \
+          -w ${{ inputs.workspace-name }} \
+          --subscription ${{ inputs.subscription-id }} \
+          --query "id" \
+          --output tsv \
+          )" >> "$GITHUB_OUTPUT"
+        else
+          echo "resource-id=$(\
+          az ml job create \
+          --file ${{ inputs.job-path }} \
+          --set compute=${{ inputs.compute }} \
+          -g ${{ inputs.resource-group }} \
+          -w ${{ inputs.workspace-name }} \
+          --subscription ${{ inputs.subscription-id }} \
+          --query "id" \
+          --output tsv \
+          )" >> "$GITHUB_OUTPUT"
+        fi
 
-    - name: Ref and version
+    - name: Ref and name
       shell: bash
       id: ref_ver
       run: |
-        echo "environment-ref=$(\
-        echo "${{ steps.create_environment.outputs.resource-id }}" | awk -F '/' '{printf("azureml:%s:%s\n"),$11,$13 }'
+        echo "job-ref=$(\
+        echo "${{ steps.create_job.outputs.resource-id }}" | awk -F '/' '{printf("azureml:%s\n"),$11 }'
         )" >> "$GITHUB_OUTPUT"
-        echo "environment-version=$(\
-        echo "${{ steps.create_environment.outputs.resource-id }}" | awk -F '/' '{print $13}'
+        echo "job-name=$(\
+        echo "${{ steps.create_job.outputs.resource-id }}" | awk -F '/' '{print $11}'
         )" >> "$GITHUB_OUTPUT"
 
     - name: Print Result
       shell: bash
       run: |
-        echo "Resource ID of AzureML Environment: ${{ steps.create_environment.outputs.resource-id }}"
-        echo "Reference uri of AzureML Environment within workspace: ${{ steps.ref_ver.outputs.environment-ref }}"
-        echo "Version of AzureML Environment within workspace: ${{ steps.ref_ver.outputs.environment-version }}"
+        echo "Resource ID of AzureML Job: ${{ steps.create_job.outputs.resource-id }}"
+        echo "Reference of AzureML Job within workspace: ${{ steps.ref_ver.outputs.job-ref }}"
+        echo "Name of AzureML Job within workspace: ${{ steps.ref_ver.outputs.job-name }}"
