@@ -11,6 +11,7 @@ from .util import (
     get_workspace_client,
     get_yaml_from_folder,
     load_safe_tags,
+    empty_string_to_none,
     get_ref_properties,
     github_output
 )
@@ -32,7 +33,7 @@ def data(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
         resource_group: Annotated[str, typer.Option("--resource-group","-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
-        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name","-r", callback=empty_string_to_none)],
         data_ref: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
@@ -40,7 +41,7 @@ def data(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage:str=None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -135,7 +136,7 @@ def environment(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
         resource_group: Annotated[str, typer.Option("--resource-group","-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
-        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name","-r", callback=empty_string_to_none)],
         env_ref: str, # Consider renaming this, asset_id, resource_id, asset_uri , etc. 
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
@@ -143,7 +144,7 @@ def environment(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage:str=None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -237,7 +238,7 @@ def model(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
         resource_group: Annotated[str, typer.Option("--resource-group","-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
-        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name","-r", callback=empty_string_to_none)],
         model_ref: str, # Consider renaming this, asset_id, resource_id, asset_uri , etc. 
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
@@ -245,7 +246,7 @@ def model(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage:str=None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
     ):
     """Share model from workspace to registry"""
     print(f"[share model] Sharing model")
@@ -335,7 +336,7 @@ def component(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
         resource_group: Annotated[str, typer.Option("--resource-group","-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
-        registry_name: Annotated[str, typer.Option("--registry-name","-r")],
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name","-r", callback=empty_string_to_none)],
         component_ref: str, # Consider renaming this, asset_id, resource_id, asset_uri , etc. 
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
@@ -343,7 +344,7 @@ def component(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage:str=None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
     ):
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")

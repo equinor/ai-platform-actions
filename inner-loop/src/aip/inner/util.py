@@ -82,7 +82,7 @@ def load_safe_tags(tags: None|str) -> dict[str, str]:
     """
     #print(f"Safe handling of tags: {tags}")
     nonascii = r'[^\x00-\x7F]+'
-    if tags:
+    if tags and tags.strip():
         res :dict[str,str] = dict()
         tl = re.split(r",\s*",tags)
         for t in tl:
@@ -99,8 +99,15 @@ def load_safe_tags(tags: None|str) -> dict[str, str]:
             #res.update({key.strip(): val})
             res.update({re.sub(nonascii,'',key).strip(): val})
         return res
-    else:
-        return {}
+    return None
+
+
+def empty_string_to_none(value: Optional[str]) -> Optional[str]:
+    """Convert empty strings to None for optional parameters"""
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        return None
+    return value
+
 
 def check_and_replace_environment(ml_client_reg: MLClient, env: str) -> str:
     """

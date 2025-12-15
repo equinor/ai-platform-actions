@@ -21,7 +21,8 @@ from typing import Annotated, Any, Optional
 from .util import (
     get_workspace_client, 
     github_output, 
-    load_safe_tags
+    load_safe_tags,
+    empty_string_to_none
 )
 import yaml
 from pathlib import Path
@@ -47,7 +48,11 @@ def data(
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ]=None
+        ]=None,
+        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
     ):
     """Deploy data asset to Azure ML workspace"""
     print(f"[deploy data] Deploying data asset")
@@ -97,7 +102,11 @@ def environment(
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ]=None
+        ]=None,
+        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
     ):
     """Deploy environment to Azure ML workspace"""
     print(f"[deploy environment] Deploying environment")
@@ -147,7 +156,11 @@ def component(
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ]=None
+        ]=None,
+        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
     ):
     """Deploy component to Azure ML workspace"""
     print(f"[deploy component] Deploying component")
@@ -227,7 +240,11 @@ def job(
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ]=None
+        ]=None,
+        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
     ):
     """Submit job to Azure ML workspace"""
     print(f"[deploy job] Submitting job")

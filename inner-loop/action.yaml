@@ -81,17 +81,17 @@ runs:
     - ${{ inputs.resource-group }}
     - --workspace-name
     - ${{ inputs.workspace-name }}
-    - ${{ inputs.registry-name && '--registry-name' || '' }}
-    - ${{ inputs.registry-name || '' }}
+    - --registry-name
+    - ${{ inputs.registry-name }}
     - --token
     - ${{ inputs.token }}
     - --expires-on
     - ${{ inputs.expires-on }}
-    - ${{ inputs.tags && '--tags' || '' }}
-    - ${{ inputs.tags || '' }}
-    - ${{ inputs.promote-stage && '--promote-stage' || '' }}
-    - ${{ inputs.promote-stage || '' }}
-    - ${{ inputs.image-build-compute && '--image-build-compute' || '' }}
-    - ${{ inputs.image-build-compute || '' }}
+    - --tags
+    - ${{ inputs.tags }}
+    - --promote-stage
+    - ${{ inputs.promote-stage }}
+    - --image-build-compute
+    - ${{ inputs.image-build-compute }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
