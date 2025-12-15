@@ -44,7 +44,6 @@ def data(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
-        data_type: Optional[str] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -59,7 +58,6 @@ def data(
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")
     print(f"  Filepath: {filepath}")
-    print(f"  Type: {data_type}")
 
     print("[deploy data] Creating workspace client")
     client = get_workspace_client(

@@ -175,7 +175,6 @@ The action supports two authentication methods:
 | `model-ref` | No* | Model name (*for share model) |
 | `tags` | No | Tags in format: `key1=value1,key2=value2` |
 | `promote-stage` | No | Stage to promote asset to (e.g., "Production") |
-| `type` | No | Resource type specification (e.g., data, datastore, mltable) |
 | `image-build-compute` | No | Compute cluster name for environment builds (instead of serverless) |
 
 ## Outputs
