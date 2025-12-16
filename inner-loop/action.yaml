@@ -53,9 +53,6 @@ inputs:
   promote-stage:
     description: "Stage to promote asset to (for share operations)"
     required: false
-  type:
-    description: "Type specification (e.g., data, datastore, mltable)"
-    required: false
   image-build-compute:
     description: "When building environments and you need specific compute instead of serverless, set this to the name of the cluster in the workspace"
     required: false
