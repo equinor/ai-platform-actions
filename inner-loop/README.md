@@ -14,6 +14,7 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share) f
 - ✅ **deploy data**: Deploy data assets to Azure ML workspace
 - ✅ **deploy environment**: Deploy Azure ML environments with build support
 - ✅ **deploy component**: Deploy Azure ML components with automatic versioning
+- ✅ **deploy model**: Register Azure ML models from YAML specifications
 - ✅ **deploy job**: Submit Azure ML jobs to workspace
 
 ### Share Operations
@@ -109,6 +110,20 @@ The action supports two authentication methods:
 - Cleans multiline commands (removes `\` and line breaks)
 - Merges tags from YAML and command line
 
+### Deploy Model
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: model
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    filepath: ./models/my-model.yaml
+    tags: "owner=mlops,stage=staging"
+```
+
 ### Deploy Job
 
 ```yaml
@@ -165,7 +180,7 @@ The action supports two authentication methods:
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |
-| `workspace-name` | No* | Azure ML workspace name (*required for most operations) |
+| `workspace-name` | Yes | Azure ML workspace name |
 | `registry-name` | No* | Azure ML registry name (*required for share operations) |
 | `client-id` | No | Client ID for federated credentials (required for token-based auth) |
 | `filepath` | No* | Path to configuration YAML file (*required for deploy operations) |

@@ -308,7 +308,7 @@ def model(
 
     print("[share model] Applying stage promotion if provided")
     if promote_stage:
-        reg_model = reg_client.models.get(name=model_ref,version=latest_reg_version)
+        reg_model = reg_client.models.get(name=model_name,version=latest_reg_version)
         reg_model_tags=reg_model.tags
         if reg_model_tags:
             reg_model_tags.update({'stage':promote_stage})
@@ -400,9 +400,12 @@ def component(
         ws_client.components.download(name=ws_comp.name,download_path=tmpdirname,version=ws_comp.version)
         path_to_yaml = get_yaml_from_folder(asset_type="component",folder_path=Path(tmpdirname))
         component = load_component(source=path_to_yaml)
-        component.tags=tags
+        merged_tags = component.tags or {}
+        if tags:
+            merged_tags.update(tags)
         if promote_stage:
-            component.tags.update({'stage':promote_stage})
+            merged_tags.update({'stage':promote_stage})
+        component.tags = merged_tags
 
         component.environment = check_and_replace_environment(
             reg_client, component.environment

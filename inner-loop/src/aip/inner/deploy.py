@@ -5,7 +5,8 @@ from azure.ai.ml import (
     load_data,
     load_environment,
     load_component,
-    load_model
+    load_model,
+    load_job
 )
 from azure.ai.ml.entities import (
     CommandComponent,
@@ -101,7 +102,7 @@ def environment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
@@ -155,7 +156,7 @@ def component(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
@@ -209,7 +210,6 @@ def component(
     latest_ws_version=str(latest_ws_version+1)
 
     env_in_component = component.environment
-    
 
     component.version = latest_ws_version
     component_result = client.components.create_or_update(
@@ -228,6 +228,59 @@ def component(
     })
 
 @app.command()
+def model(
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ]=None,
+        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+    ):
+    """Deploy model to Azure ML workspace"""
+    print(f"[deploy model] Deploying model")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Filepath: {filepath}")
+
+    print("[deploy model] Creating workspace client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+
+    print("[deploy model] Loading model configuration from file")
+    model = load_model(source=filepath)
+    if tags:
+        if model.tags:
+            model.tags.update(tags)
+        else:
+            model.tags = tags
+
+    print("[deploy model] Creating or updating model")
+    model_result = client.models.create_or_update(model)
+
+    print(f"[deploy model] ✅ Model deployed successfully")
+    print(f"  Name: {model_result.name}")
+    print(f"  Version: {model_result.version}")
+    print(f"  Resource ID: {model_result.id}")
+    github_output({
+        "reference":f"azureml:{model_result.name}:{model_result.version}",
+        "version":model_result.version,
+        "resource-id":model_result.id
+    })
+
+@app.command()
 def job(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
         resource_group: Annotated[str, typer.Option("--resource-group","-g")],
@@ -239,12 +292,17 @@ def job(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
     ):
-    """Submit job to Azure ML workspace"""
+    """Submit job to Azure ML workspace.
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-pipeline?view=azureml-api-2
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-command?view=azureml-api-2
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-sweep?view=azureml-api-2
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-parallel?view=azureml-api-2
+    """
     print(f"[deploy job] Submitting job")
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")
@@ -260,8 +318,9 @@ def job(
     )
 
     print("[deploy job] Loading job configuration from file")
-    with open(filepath, "r") as file:
-        job_config = yaml.safe_load(file)
+    #with open(filepath, "r") as file:
+    #    job_config = yaml.safe_load(file)
+    job_config = load_job(source=filepath)
     
     print("[deploy job] Submitting job to workspace")
     job_result = client.jobs.create_or_update(job_config)
@@ -275,6 +334,9 @@ def job(
         "version":job_result.name,
         "resource-id":job_result.id
     })
+
+
+
 
 if __name__ == "__main__":
     app()

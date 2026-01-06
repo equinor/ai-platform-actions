@@ -6,7 +6,7 @@ inputs:
     description: "Action verb (deploy, share)"
     required: true
   subject:
-    description: "Target subject (data, environment, component, job)"
+    description: "Target subject (data, environment, component, model, job)"
     required: true
   token:
     description: "From azLogin action. Required unless running locally."
@@ -25,7 +25,7 @@ inputs:
     required: true
   workspace-name:
     description: "Azure Machine Learning workspace name"
-    required: false
+    required: true
   registry-name:
     description: "Azure ML registry name (for share operations)"
     required: false
@@ -52,9 +52,6 @@ inputs:
     required: false
   promote-stage:
     description: "Stage to promote asset to (for share operations)"
-    required: false
-  type:
-    description: "Type specification (e.g., data, datastore, mltable)"
     required: false
   image-build-compute:
     description: "When building environments and you need specific compute instead of serverless, set this to the name of the cluster in the workspace"
