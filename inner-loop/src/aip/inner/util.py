@@ -179,20 +179,24 @@ def get_ref_properties(reference: str) -> namedtuple:
     """
     Parse Azure ML asset reference strings and extract their components.
     
-    Supports three patterns:
-    1. azureml:<asset_name>:<version>
-    2. azureml:/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.MachineLearningServices/workspaces/<workspace-name>/<asset-type-plural>/<asset-name>/versions/<asset-version>
-    3. azureml://registries/<registry_name>/<asset-type-plural>/<asset-name>/versions/<version>
+    Supports multiple patterns (version is optional for all):
+    1. azureml:<asset_name> or <asset_name> (version will be None)
+    2. azureml:<asset_name>:<version> or <asset_name>:<version>
+    3. azureml:/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.MachineLearningServices/workspaces/<workspace-name>/<asset-type-plural>/<asset-name>[/versions/<asset-version>]
+    4. azureml://registries/<registry_name>/<asset-type-plural>/<asset-name>[/versions/<version>]
     
     Returns:
-        namedtuple subclass with name and version attributes
+        namedtuple subclass with name and version attributes (version may be None)
     """
+    
+    # Pattern 0: [azureml:]<asset_name> (no version)
+    pattern0 = re.compile(r'^(?:azureml:)?(?P<asset_name>[^:/]+)$')
     
     # Pattern 1: [azureml:]<asset_name>:<version>
     pattern1 = re.compile(r'^(?:azureml:)?(?P<asset_name>[^:]+):(?P<version>[^:]+)$')
     
-    # Pattern 2: [azureml:]/subscriptions/.../workspaces/...
-    pattern2 = re.compile(
+    # Pattern 2a: [azureml:]/subscriptions/.../workspaces/.../<asset_name>/versions/<version>
+    pattern2a = re.compile(
         r'^(?:azureml:)?/subscriptions/(?P<subscription_id>[^/]+)'
         r'/resourceGroups/(?P<resource_group>[^/]+)'
         r'/providers/Microsoft\.MachineLearningServices'
@@ -202,46 +206,92 @@ def get_ref_properties(reference: str) -> namedtuple:
         r'/versions/(?P<version>[^/]+)$'
     )
     
-    # Pattern 3: [azureml:]//registries/<registry_name>/...
-    pattern3 = re.compile(
+    # Pattern 2b: [azureml:]/subscriptions/.../workspaces/.../<asset_name> (no version)
+    pattern2b = re.compile(
+        r'^(?:azureml:)?/subscriptions/(?P<subscription_id>[^/]+)'
+        r'/resourceGroups/(?P<resource_group>[^/]+)'
+        r'/providers/Microsoft\.MachineLearningServices'
+        r'/workspaces/(?P<workspace_name>[^/]+)'
+        r'/(?P<asset_type_plural>[^/]+)'
+        r'/(?P<asset_name>[^/]+)$'
+    )
+    
+    # Pattern 3a: [azureml:]//registries/<registry_name>/.../<asset_name>/versions/<version>
+    pattern3a = re.compile(
         r'^(?:azureml:)?//registries/(?P<registry_name>[^/]+)'
         r'/(?P<asset_type_plural>[^/]+)'
         r'/(?P<asset_name>[^/]+)'
         r'/versions/(?P<version>[^/]+)$'
     )
     
+    # Pattern 3b: [azureml:]//registries/<registry_name>/.../<asset_name> (no version)
+    pattern3b = re.compile(
+        r'^(?:azureml:)?//registries/(?P<registry_name>[^/]+)'
+        r'/(?P<asset_type_plural>[^/]+)'
+        r'/(?P<asset_name>[^/]+)$'
+    )
+    
     # Try matching each pattern
-    match1 = pattern1.match(reference)
-    if match1:
+    match0 = pattern0.match(reference)
+    if match0:
         d = {
-            'pattern': 'simple',
-            'name': match1.group('asset_name'),
-            'version': match1.group('version')
+            'pattern': 'name_only',
+            'name': match0.group('asset_name'),
+            'version': None
         }
     else:
-        match2 = pattern2.match(reference)
-        match3 = pattern3.match(reference)
-        if match2:
+        match1 = pattern1.match(reference)
+        if match1:
             d = {
-                'pattern': 'workspace',
-                'subscription_id': match2.group('subscription_id'),
-                'resource_group': match2.group('resource_group'),
-                'workspace_name': match2.group('workspace_name'),
-                'asset_type': match2.group('asset_type_plural')[:-1],
-                'name': match2.group('asset_name'),
-                'version': match2.group('version')
-            }
-        elif match3:
-            d = {
-                'pattern': 'registry',
-                'registry_name': match3.group('registry_name'),
-                'asset_type': match3.group('asset_type_plural')[:-1],
-                'name': match3.group('asset_name'),
-                'version': match3.group('version')
+                'pattern': 'simple',
+                'name': match1.group('asset_name'),
+                'version': match1.group('version')
             }
         else:
-            # No pattern matched
-            raise ValueError(f"Reference string '{reference}' does not match any supported Azure ML reference pattern")
+            match2a = pattern2a.match(reference)
+            match2b = pattern2b.match(reference)
+            match3a = pattern3a.match(reference)
+            match3b = pattern3b.match(reference)
+            
+            if match2a:
+                d = {
+                    'pattern': 'workspace',
+                    'subscription_id': match2a.group('subscription_id'),
+                    'resource_group': match2a.group('resource_group'),
+                    'workspace_name': match2a.group('workspace_name'),
+                    'asset_type': match2a.group('asset_type_plural')[:-1],
+                    'name': match2a.group('asset_name'),
+                    'version': match2a.group('version')
+                }
+            elif match2b:
+                d = {
+                    'pattern': 'workspace',
+                    'subscription_id': match2b.group('subscription_id'),
+                    'resource_group': match2b.group('resource_group'),
+                    'workspace_name': match2b.group('workspace_name'),
+                    'asset_type': match2b.group('asset_type_plural')[:-1],
+                    'name': match2b.group('asset_name'),
+                    'version': None
+                }
+            elif match3a:
+                d = {
+                    'pattern': 'registry',
+                    'registry_name': match3a.group('registry_name'),
+                    'asset_type': match3a.group('asset_type_plural')[:-1],
+                    'name': match3a.group('asset_name'),
+                    'version': match3a.group('version')
+                }
+            elif match3b:
+                d = {
+                    'pattern': 'registry',
+                    'registry_name': match3b.group('registry_name'),
+                    'asset_type': match3b.group('asset_type_plural')[:-1],
+                    'name': match3b.group('asset_name'),
+                    'version': None
+                }
+            else:
+                # No pattern matched
+                raise ValueError(f"Reference string '{reference}' does not match any supported Azure ML reference pattern")
     
     # For ref with all retrieved attributes
     # ref = namedtuple('Ref',d.keys())

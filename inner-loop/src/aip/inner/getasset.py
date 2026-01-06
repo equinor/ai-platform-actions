@@ -4,7 +4,7 @@ Get asset methods.
 These are helper methods
 
 """
-from azure.ai.ml.entities import Component,Environment,BuildContext,Model,Data
+from azure.ai.ml.entities import Component,Environment,BuildContext,Model,Data,Job
 from azure.ai.ml import MLClient
 from azure.core.polling import LROPoller
 import typer
@@ -87,7 +87,7 @@ def getenvironment(
     env_list =list(client.environments.list(name=name))
 
     if version:
-        env_list = filter_assets_by_version(env_list,version=version)
+        env_list = filter_assets_by_version(assets=env_list,version=version)
     else:
         env_list=[client.environments.get(name=name,version=latest_version)]
 
@@ -120,7 +120,7 @@ def getcomponent(
     #print(f"GC [3]: {comp_list}")
 
     if version:
-        comp_list = filter_assets_by_version(name=name,version=version)
+        comp_list = filter_assets_by_version(assets=comp_list,version=version)
     else:
         comp_list = [client.components.get(name=name,version=latest_version)]
     #print(f"GC [4]: {comp_list}")
@@ -165,7 +165,7 @@ def getmodel(
     m_list=list(client.models.list(name=name))
 
     if version:
-        m_list = filter_assets_by_version(m_list,version=version)
+        m_list = filter_assets_by_version(assets=m_list,version=version)
     else:
         m_list = filter_assets_by_version(m_list,version=latest_version)
 
@@ -211,7 +211,7 @@ def getdata(
     data_list = list(client.data.list(name=name))
 
     if version:
-        data_list = filter_assets_by_version(data_list,version=version)
+        data_list = filter_assets_by_version(assets=data_list,version=version)
     else:
         data_list = [client.data.get(name=name,version=latest_version)]
 
@@ -222,3 +222,48 @@ def getdata(
         data_list = [d for d in data_list if d.version.isdigit()]
 
     return data_list
+
+def getjob(
+        client:MLClient,
+        name:str,
+        tags:None|str|dict[str,None|str]=None
+    ) -> None|list[Job]:
+    """
+        Retrieves a job using the MLClient.
+        
+        Name is required.
+        If tags is specified, and it is a string, the tag value MUST exist.
+        If tags is specified, and it is a dict, every key in the dict MUST exist,
+          AND if a key's corresponding value is specified the value MUST also match.
+          However, it is ok if the job has extra tags.
+        
+        Note: Jobs don't have versions like other assets, so version filtering is not applicable.
+    """
+
+    # Get the specific job by name
+    try:
+        job = client.jobs.get(name=name)
+        job_list = [job]
+    except:
+        return None
+
+    if tags:
+        job_list = filter_assets_by_tag(assets=job_list, tags)
+
+    return job_list
+
+def getcompute( 
+        client:MLClient,
+        name:str
+    ):
+    """
+        Retrieves a compute target using the MLClient.
+        
+        Name is required.
+    """
+
+    try:
+        compute = client.compute.get(name=name)
+        return compute
+    except:
+        return None
