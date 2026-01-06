@@ -3,7 +3,7 @@ description: Unified action for Azure ML operations using command pattern
 
 inputs:
   verb:
-    description: "Action verb (deploy, share)"
+    description: "Action verb (deploy, share, waitfor)"
     required: true
   subject:
     description: "Target subject (data, environment, component, model, job)"
@@ -47,6 +47,9 @@ inputs:
   model-ref:
     description: "Model reference (for share model operations)"
     required: false
+  job-name:
+    description: "Azure ML job name (for waitfor job operations)"
+    required: false
   tags:
     description: "Tags to set (format: 'key1=value1,key2=value2')"
     required: false
@@ -71,7 +74,7 @@ runs:
   args:
     - ${{ inputs.verb }}
     - ${{ inputs.subject }}
-    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref }}
+    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name }}
     - --subscription
     - ${{ inputs.subscription-id }}
     - --resource-group
