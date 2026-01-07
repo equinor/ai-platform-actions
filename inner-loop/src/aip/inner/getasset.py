@@ -92,7 +92,7 @@ def getenvironment(
         env_list=[client.environments.get(name=name,version=latest_version)]
 
     if tags:
-        env_list = filter_assets_by_tag(env_list,tags)
+        env_list = filter_assets_by_tag(assets=env_list,tag=tags)
 
     if req_int_version:
         env_list = [e for e in env_list if e.version.isdigit()]
@@ -126,7 +126,7 @@ def getcomponent(
     #print(f"GC [4]: {comp_list}")
 
     if tags:
-        comp_list = filter_assets_by_tag(comp_list,tags)
+        comp_list = filter_assets_by_tag(assets=comp_list,tag=tags)
     #print(f"GC [5]: {comp_list}")
     
     if req_int_version:
@@ -170,7 +170,7 @@ def getmodel(
         m_list = filter_assets_by_version(m_list,version=latest_version)
 
     if tags:    
-        m_list = filter_assets_by_tag(m_list,tag=tags)
+        m_list = filter_assets_by_tag(assets=m_list,tag=tags)
 
     if req_int_version:
         m_list = [m for m in m_list if m.version.isdigit()]
@@ -216,7 +216,7 @@ def getdata(
         data_list = [client.data.get(name=name,version=latest_version)]
 
     if tags:
-        data_list = filter_assets_by_tag(data_list,tags)
+        data_list = filter_assets_by_tag(assets=data_list,tag=tags)
 
     if req_int_version:
         data_list = [d for d in data_list if d.version.isdigit()]
@@ -248,7 +248,7 @@ def getjob(
         return None
 
     if tags:
-        job_list = filter_assets_by_tag(assets=job_list, tags)
+        job_list = filter_assets_by_tag(assets=job_list, tag=tags)
 
     return job_list
 
