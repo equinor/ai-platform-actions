@@ -8,12 +8,14 @@ import typer
 from typing import Optional
 from . import deploy
 from . import share
+from . import waitfor
 
 app = typer.Typer()
 
 # Add deploy and share sub-apps
 app.add_typer(deploy.app, name="deploy")
 app.add_typer(share.app, name="share")
+app.add_typer(waitfor.app, name="waitfor")
 
 if __name__ == "__main__":
     app()

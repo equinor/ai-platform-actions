@@ -4,11 +4,11 @@ A unified GitHub Action for Azure ML operations using typer for clean command ro
 
 ## Overview
 
-The Inner Loop action consolidates various Azure ML operations (deploy, share) for different resource types (data, environment, component, model, job) into a single, flexible action. It uses typer to provide a clean, intuitive CLI-style interface.
+The Inner Loop action consolidates various Azure ML operations (deploy, share, waitfor) for different resource types (data, environment, component, model, job) into a single, flexible action. It uses typer to provide a clean, intuitive CLI-style interface.
 
 ## Implementation Status
 
-**✅ FULLY IMPLEMENTED** - All deploy and share operations are complete and ready for production use.
+**✅ FULLY IMPLEMENTED** - All deploy, share, and waitfor operations are complete and ready for production use.
 
 ### Deploy Operations
 - ✅ **deploy data**: Deploy data assets to Azure ML workspace
@@ -22,6 +22,13 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share) f
 - ✅ **share environment**: Share environments from workspace to registry with stage promotion
 - ✅ **share component**: Share components from workspace to registry with environment replacement
 - ✅ **share model**: Share models from workspace to registry with stage promotion
+
+### Waitfor Operations
+- ✅ **waitfor data**: Poll workspace until a specific data asset version is registered successfully
+- ✅ **waitfor environment**: Monitor environment builds (including image verification) until completion
+- ✅ **waitfor component**: Track component registrations until provisioning succeeds or fails
+- ✅ **waitfor model**: Ensure model registrations finish before dependent stages continue
+- ✅ **waitfor job**: Observe Azure ML job lifecycle until it reaches a terminal status (Completed/Failed)
 
 ## Architecture
 
@@ -46,6 +53,14 @@ Each module uses typer's `@app.command()` decorator for clean, self-documenting 
 - **Stage Promotion**: Share operations support promoting assets to specific stages (e.g., "Production")
 - **Environment Replacement**: Component sharing automatically replaces workspace environments with registry equivalents
 - **Flexible Authentication**: Supports both token-based (federated credentials) and DefaultAzureCredential
+
+## Waitfor Logic Analysis
+
+- **AzureML provisioning states**: Every waitfor command queries AzureML via `MLClient` and interprets standard provisioning statuses (`Succeeded`, `Failed`, `Creating`, etc.) exposed on workspace assets as `provisioning_state`/`status`. This mirrors how Azure signals asynchronous registrations and image builds, so the polling logic aligns with service semantics.
+- **Timeout and backoff**: Polls happen every 10 seconds with a 30-minute cutoff, which matches common AzureML build durations (environment image builds rarely exceed this) while preventing pipelines from hanging indefinitely when Azure reports no progress.
+- **Deploy alignment**: Deploy commands return as soon as Azure accepts a registration request, whereas actual materialization (image build, artifact copy) may still be running. The waitfor verb bridges that gap by blocking downstream steps until the deploy-requested asset reaches `Succeeded`, reducing race conditions in chained workflows.
+- **Job lifecycle integration**: AzureML jobs expose a richer status model (`Queued`, `Running`, `Completed`, `Failed`). The waitfor job subject specifically looks for terminal states, enabling automated triggering of share/promote logic once a training job finishes without having to embed custom SDK scripts.
+- **Tag consistency**: Because waitfor enforces optional tag matches, it works with deploy-time tagging conventions and ensures that pipelines do not accidentally observe stale assets with the same name/version but different metadata.
 
 ### Authentication
 
@@ -137,6 +152,22 @@ The action supports two authentication methods:
     filepath: ./jobs/my-job.yaml
 ```
 
+### Wait for Environment Readiness
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: waitfor
+    subject: environment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    env-ref: my-env:5
+    tags: "stage=build"
+```
+
+The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the specified asset exists and reports a success status. If the asset reports a failure state or the timeout expires, the action stops with a failure, allowing pipelines to halt early when provisioned artifacts break.
+
 ### Share to Registry with Stage Promotion
 
 ```yaml
@@ -175,7 +206,7 @@ The action supports two authentication methods:
 
 | Input | Required | Description |
 |-------|----------|-------------|
-| `verb` | Yes | Action verb: `deploy` or `share` |
+| `verb` | Yes | Action verb: `deploy`, `share`, or `waitfor` |
 | `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, or `job` |
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
@@ -188,6 +219,7 @@ The action supports two authentication methods:
 | `data-ref` | No* | Data asset name (*for share data) |
 | `env-ref` | No* | Environment name (*for share environment) |
 | `model-ref` | No* | Model name (*for share model) |
+| `job-name` | No* | Job name (*for waitfor job) |
 | `tags` | No | Tags in format: `key1=value1,key2=value2` |
 | `promote-stage` | No | Stage to promote asset to (e.g., "Production") |
 | `image-build-compute` | No | Compute cluster name for environment builds (instead of serverless) |
@@ -250,6 +282,16 @@ jobs:
           filepath: ./components/training-component.yaml
           tags: "type=training"
       
+      - name: Wait for Environment
+        uses: ./inner-loop
+        with:
+          verb: waitfor
+          subject: environment
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resource-group: my-resource-group
+          workspace-name: my-workspace
+          env-ref: training-env:${{ steps.deploy-env.outputs.version }}
+
       - name: Share Environment to Registry
         uses: ./inner-loop
         with:
