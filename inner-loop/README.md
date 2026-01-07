@@ -282,6 +282,16 @@ jobs:
           filepath: ./components/training-component.yaml
           tags: "type=training"
       
+      - name: Wait for Environment
+        uses: ./inner-loop
+        with:
+          verb: waitfor
+          subject: environment
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resource-group: my-resource-group
+          workspace-name: my-workspace
+          env-ref: training-env:${{ steps.deploy-env.outputs.version }}
+
       - name: Share Environment to Registry
         uses: ./inner-loop
         with:
