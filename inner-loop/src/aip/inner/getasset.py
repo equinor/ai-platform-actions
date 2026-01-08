@@ -86,6 +86,19 @@ def getenvironment(
     # This time, get a list that contains both version and tags.
     env_list =list(client.environments.list(name=name))
 
+    # If latest_version is None (e.g., when using a registry client),
+    # find the latest environment by creation date, respecting req_int_version filter
+    if latest_version is None and env_list:
+        # Filter by req_int_version first if required
+        candidates = [e for e in env_list if e.version.isdigit()] if req_int_version else env_list
+        if candidates:
+            # Find the environment with the latest creation date
+            latest_env = max(
+                candidates,
+                key=lambda e: e.creation_context.created_at if e.creation_context and e.creation_context.created_at else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            )
+            latest_version = latest_env.version
+
     if version:
         env_list = filter_assets_by_version(assets=env_list,version=version)
     else:
