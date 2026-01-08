@@ -5,8 +5,10 @@ Wait-for operations for Inner Loop Action.
 import time
 from typing import Annotated, Callable, Optional, Any
 
+import requests
 import typer
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+from azure.identity import DefaultAzureCredential
 
 from .util import (
     get_workspace_client,
@@ -14,6 +16,7 @@ from .util import (
     empty_string_to_none,
     get_ref_properties,
     github_output,
+    Credential,
 )
 
 POLL_INTERVAL_SECONDS = 10
@@ -30,7 +33,136 @@ FAILURE_STATES = {
     "not responding",
 }
 
+# Azure REST API version for Machine Learning Services
+REST_API_VERSION = "2025-01-01-preview"
+
 app = typer.Typer()
+
+
+def _get_access_token(token: Optional[str], expires_on: Optional[int]) -> str:
+    """Get access token for Azure REST API calls."""
+    if token and expires_on:
+        return token
+    else:
+        credential = DefaultAzureCredential()
+        token_response = credential.get_token("https://management.azure.com/.default")
+        return token_response.token
+
+
+def _get_rest_api_base_url(
+    subscription_id: str,
+    resource_group: str,
+    workspace_name: str,
+) -> str:
+    """Build the base URL for Azure ML REST API."""
+    return (
+        f"https://management.azure.com/subscriptions/{subscription_id}"
+        f"/resourceGroups/{resource_group}"
+        f"/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}"
+    )
+
+
+def _call_rest_api(
+    url: str,
+    access_token: str,
+) -> Optional[dict]:
+    """Call Azure REST API and return the JSON response."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.HTTPError as exc:
+        print(f"[REST API] HTTP error: {exc}")
+        return None
+    except requests.exceptions.RequestException as exc:
+        print(f"[REST API] Request error: {exc}")
+        return None
+
+
+def _get_provisioning_state_from_rest(
+    asset_type: str,
+    subscription_id: str,
+    resource_group: str,
+    workspace_name: str,
+    name: str,
+    version: Optional[str],
+    access_token: str,
+) -> Optional[str]:
+    """
+    Get provisioning state of an asset via Azure REST API.
+    
+    The SDK objects don't expose provisioning_state, so we need to call
+    the REST API directly to get this information.
+    
+    Supported asset types: environment, component, data, model
+    """
+    base_url = _get_rest_api_base_url(subscription_id, resource_group, workspace_name)
+    
+    # Build the URL based on asset type
+    asset_type_map = {
+        "environment": "environments",
+        "component": "components",
+        "data": "data",
+        "model": "models",
+    }
+    
+    rest_asset_type = asset_type_map.get(asset_type)
+    if not rest_asset_type:
+        print(f"[REST API] Unknown asset type: {asset_type}")
+        return None
+    
+    if version:
+        url = f"{base_url}/{rest_asset_type}/{name}/versions/{version}?api-version={REST_API_VERSION}"
+    else:
+        url = f"{base_url}/{rest_asset_type}/{name}?api-version={REST_API_VERSION}"
+    
+    response_data = _call_rest_api(url, access_token)
+    if not response_data:
+        return None
+    
+    # Extract provisioning state from response
+    properties = response_data.get("properties", {})
+    provisioning_state = properties.get("provisioningState")
+    
+    if provisioning_state:
+        return str(provisioning_state).strip().lower()
+    
+    return None
+
+
+def _get_job_state_from_rest(
+    subscription_id: str,
+    resource_group: str,
+    workspace_name: str,
+    job_name: str,
+    access_token: str,
+) -> Optional[str]:
+    """
+    Get job status via Azure REST API.
+    
+    Jobs use a different endpoint pattern and return 'status' instead of 'provisioningState'.
+    """
+    base_url = _get_rest_api_base_url(subscription_id, resource_group, workspace_name)
+    url = f"{base_url}/jobs/{job_name}?api-version={REST_API_VERSION}"
+    
+    response_data = _call_rest_api(url, access_token)
+    if not response_data:
+        return None
+    
+    # Jobs return status in the properties
+    properties = response_data.get("properties", {})
+    status = properties.get("status")
+    
+    if status:
+        return str(status).strip().lower()
+    
+    return None
 
 
 def _normalize_state(state: Optional[Any]) -> Optional[str]:
@@ -82,7 +214,18 @@ def _wait_for_asset(
     subject: str,
     fetch_entity: Callable[[], Any],
     tags: Optional[dict[str, Any]] = None,
+    fetch_state: Optional[Callable[[], Optional[str]]] = None,
 ) -> tuple[Any, Optional[str]]:
+    """
+    Wait for an asset to reach a terminal state.
+    
+    Args:
+        subject: Name of the asset type for logging purposes.
+        fetch_entity: Callable to fetch the entity from the SDK.
+        tags: Optional tags to match against the entity.
+        fetch_state: Optional callable to fetch the provisioning state via REST API.
+                     If provided, this is used instead of _extract_state.
+    """
     start = time.monotonic()
     attempt = 0
     while True:
@@ -112,7 +255,11 @@ def _wait_for_asset(
             )
 
         if entity:
-            state = _extract_state(entity)
+            # Use REST API to fetch state if provided, otherwise fall back to SDK extraction
+            if fetch_state:
+                state = fetch_state()
+            else:
+                state = _extract_state(entity)
             normalized_state = _normalize_state(state)
             if normalized_state in SUCCESS_STATES:
                 print(
@@ -188,10 +335,22 @@ def data(
         expires_on=expires_on,
     )
 
+    # Get access token for REST API calls
+    access_token = _get_access_token(token, expires_on)
+
     entity, final_state = _wait_for_asset(
         subject="data",
         fetch_entity=lambda: client.data.get(name=data_props.name, version=data_version),
         tags=tags,
+        fetch_state=lambda: _get_provisioning_state_from_rest(
+            asset_type="data",
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            name=data_props.name,
+            version=data_version,
+            access_token=access_token,
+        ),
     )
 
     print(
@@ -228,10 +387,22 @@ def environment(
         expires_on=expires_on,
     )
 
+    # Get access token for REST API calls
+    access_token = _get_access_token(token, expires_on)
+
     entity, final_state = _wait_for_asset(
         subject="environment",
         fetch_entity=lambda: client.environments.get(name=env_props.name, version=env_version),
         tags=tags,
+        fetch_state=lambda: _get_provisioning_state_from_rest(
+            asset_type="environment",
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            name=env_props.name,
+            version=env_version,
+            access_token=access_token,
+        ),
     )
 
     print(
@@ -268,10 +439,22 @@ def component(
         expires_on=expires_on,
     )
 
+    # Get access token for REST API calls
+    access_token = _get_access_token(token, expires_on)
+
     entity, final_state = _wait_for_asset(
         subject="component",
         fetch_entity=lambda: client.components.get(name=comp_props.name, version=comp_version),
         tags=tags,
+        fetch_state=lambda: _get_provisioning_state_from_rest(
+            asset_type="component",
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            name=comp_props.name,
+            version=comp_version,
+            access_token=access_token,
+        ),
     )
 
     print(
@@ -308,10 +491,22 @@ def model(
         expires_on=expires_on,
     )
 
+    # Get access token for REST API calls
+    access_token = _get_access_token(token, expires_on)
+
     entity, final_state = _wait_for_asset(
         subject="model",
         fetch_entity=lambda: client.models.get(name=model_props.name, version=model_version),
         tags=tags,
+        fetch_state=lambda: _get_provisioning_state_from_rest(
+            asset_type="model",
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            name=model_props.name,
+            version=model_version,
+            access_token=access_token,
+        ),
     )
 
     print(
@@ -346,10 +541,20 @@ def job(
         expires_on=expires_on,
     )
 
+    # Get access token for REST API calls
+    access_token = _get_access_token(token, expires_on)
+
     entity, final_state = _wait_for_asset(
         subject="job",
         fetch_entity=lambda: client.jobs.get(name=job_name),
         tags=tags,
+        fetch_state=lambda: _get_job_state_from_rest(
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            job_name=job_name,
+            access_token=access_token,
+        ),
     )
 
     if final_state not in SUCCESS_STATES:
