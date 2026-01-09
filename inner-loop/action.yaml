@@ -59,6 +59,10 @@ inputs:
   image-build-compute:
     description: "When building environments and you need specific compute instead of serverless, set this to the name of the cluster in the workspace"
     required: false
+  timeout-minutes:
+    description: "When using waitfor verb, override default timeout of 30"
+    required: false
+    default: "30"
 
 outputs:
   resource-id:
@@ -95,3 +99,4 @@ runs:
     - ${{ inputs.image-build-compute }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
+    TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
