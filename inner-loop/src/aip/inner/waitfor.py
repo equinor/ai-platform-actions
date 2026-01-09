@@ -129,6 +129,10 @@ def _get_provisioning_state_from_rest(
     # Extract provisioning state from response
     properties = response_data.get("properties", {})
     provisioning_state = properties.get("provisioningState")
+    if asset_type=='environment':
+        image_exists = properties.get("imageDetails").get("exists")
+        if provisioning_state=='Succeeded' and not image_exists:
+            provisioning_state='Running'
     
     if provisioning_state:
         return str(provisioning_state).strip().lower()
