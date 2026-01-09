@@ -85,7 +85,7 @@ def data(
     list_data_reg = getdata(
         client=reg_client,
         name=data_name,
-        tags=tags,
+        #tags=tags,
         req_int_version=True
     )
     # find latest registry version to use
@@ -187,7 +187,7 @@ def environment(
     list_env_reg = getenvironment(
         client=reg_client,
         name=env_name,
-        tags=tags,
+        #tags=tags, # tags may be unique, so DON'T filter with them
         req_int_version=True
     )
     # find latest registry version to use
@@ -287,7 +287,7 @@ def model(
     list_m_reg = getmodel(
         client=reg_client,
         name=model_name,
-        tags=tags,
+        #tags=tags,
         req_int_version=True
     )
 
@@ -387,7 +387,7 @@ def component(
     list_comp_reg = getcomponent(
         client=reg_client,
         name=component_name,
-        tags=tags,
+        #tags=tags,
         req_int_version=True
     )
 
