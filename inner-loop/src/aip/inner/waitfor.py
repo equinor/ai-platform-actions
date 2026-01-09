@@ -2,6 +2,7 @@
 Wait-for operations for Inner Loop Action.
 """
 
+import os
 import time
 from typing import Annotated, Callable, Optional, Any
 
@@ -20,7 +21,11 @@ from .util import (
 )
 
 POLL_INTERVAL_SECONDS = 10
-TIMEOUT_SECONDS = 30 * 60
+# Default timeout in minutes, can be overridden via TIMEOUT_MINUTES environment variable
+DEFAULT_TIMEOUT_MINUTES = 30
+# Buffer time in seconds before token expiry to trigger refresh
+TOKEN_REFRESH_BUFFER_SECONDS = 5 * 60  # 5 minutes before expiry
+
 SUCCESS_STATES = {"succeeded", "success", "completed", "ready"}
 FAILURE_STATES = {
     "failed",
@@ -39,8 +44,77 @@ REST_API_VERSION = "2025-01-01-preview"
 app = typer.Typer()
 
 
+def _get_timeout_seconds() -> int:
+    """Get timeout in seconds from environment variable or default."""
+    timeout_minutes_str = os.environ.get("TIMEOUT_MINUTES", "")
+    if timeout_minutes_str:
+        try:
+            timeout_minutes = int(timeout_minutes_str)
+            if timeout_minutes > 0:
+                print(f"[waitfor] Using custom timeout of {timeout_minutes} minutes from TIMEOUT_MINUTES environment variable.")
+                return timeout_minutes * 60
+            else:
+                print(f"[waitfor] Invalid TIMEOUT_MINUTES value '{timeout_minutes_str}', using default of {DEFAULT_TIMEOUT_MINUTES} minutes.")
+        except ValueError:
+            print(f"[waitfor] Invalid TIMEOUT_MINUTES value '{timeout_minutes_str}', using default of {DEFAULT_TIMEOUT_MINUTES} minutes.")
+    return DEFAULT_TIMEOUT_MINUTES * 60
+
+
+class TokenManager:
+    """
+    Manages access tokens for Azure REST API calls with automatic refresh.
+    
+    When a static token is provided (from GitHub Actions), it will be used directly.
+    When using DefaultAzureCredential, tokens are refreshed automatically before expiry.
+    """
+    
+    def __init__(self, token: Optional[str] = None, expires_on: Optional[int] = None):
+        self._static_token = token
+        self._static_expires_on = expires_on
+        self._credential: Optional[DefaultAzureCredential] = None
+        self._cached_token: Optional[str] = None
+        self._cached_expires_on: Optional[int] = None
+        
+        if not (token and expires_on):
+            # Initialize credential for dynamic token refresh
+            self._credential = DefaultAzureCredential()
+    
+    def get_token(self) -> str:
+        """
+        Get a valid access token, refreshing if necessary.
+        
+        Returns:
+            A valid access token string.
+        """
+        if self._static_token and self._static_expires_on:
+            # Check if static token is still valid
+            current_time = int(time.time())
+            if current_time >= self._static_expires_on - TOKEN_REFRESH_BUFFER_SECONDS:
+                print("[TokenManager] Warning: Static token is expiring soon or has expired. Cannot refresh static tokens.")
+            return self._static_token
+        
+        # Use dynamic credential
+        if self._credential:
+            current_time = int(time.time())
+            
+            # Check if we need to refresh the token
+            if (self._cached_token is None or 
+                self._cached_expires_on is None or
+                current_time >= self._cached_expires_on - TOKEN_REFRESH_BUFFER_SECONDS):
+                
+                print("[TokenManager] Refreshing access token...")
+                token_response = self._credential.get_token("https://management.azure.com/.default")
+                self._cached_token = token_response.token
+                self._cached_expires_on = token_response.expires_on
+                print(f"[TokenManager] Token refreshed, valid until {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self._cached_expires_on))}")
+            
+            return self._cached_token
+        
+        raise RuntimeError("No credential available to get access token")
+
+
 def _get_access_token(token: Optional[str], expires_on: Optional[int]) -> str:
-    """Get access token for Azure REST API calls."""
+    """Get access token for Azure REST API calls. DEPRECATED: Use TokenManager instead."""
     if token and expires_on:
         return token
     else:
@@ -219,6 +293,7 @@ def _wait_for_asset(
     fetch_entity: Callable[[], Any],
     tags: Optional[dict[str, Any]] = None,
     fetch_state: Optional[Callable[[], Optional[str]]] = None,
+    token_manager: Optional[TokenManager] = None,
 ) -> tuple[Any, Optional[str]]:
     """
     Wait for an asset to reach a terminal state.
@@ -229,15 +304,18 @@ def _wait_for_asset(
         tags: Optional tags to match against the entity.
         fetch_state: Optional callable to fetch the provisioning state via REST API.
                      If provided, this is used instead of _extract_state.
+                     The callable receives a fresh access token as parameter.
+        token_manager: Optional TokenManager for refreshing tokens during long waits.
     """
+    timeout_seconds = _get_timeout_seconds()
     start = time.monotonic()
     attempt = 0
     while True:
         attempt += 1
         elapsed = time.monotonic() - start
-        remaining = TIMEOUT_SECONDS - elapsed
+        remaining = timeout_seconds - elapsed
         if remaining <= 0:
-            print(f"[waitfor {subject}] ❌ Timed out after {TIMEOUT_SECONDS // 60} minutes.")
+            print(f"[waitfor {subject}] ❌ Timed out after {timeout_seconds // 60} minutes.")
             raise typer.Exit(code=1)
         try:
             entity = fetch_entity()
@@ -261,7 +339,12 @@ def _wait_for_asset(
         if entity:
             # Use REST API to fetch state if provided, otherwise fall back to SDK extraction
             if fetch_state:
-                state = fetch_state()
+                # Get fresh token from token manager if available
+                if token_manager:
+                    fresh_token = token_manager.get_token()
+                    state = fetch_state(fresh_token)
+                else:
+                    state = fetch_state(None)
             else:
                 state = _extract_state(entity)
             normalized_state = _normalize_state(state)
@@ -339,14 +422,14 @@ def data(
         expires_on=expires_on,
     )
 
-    # Get access token for REST API calls
-    access_token = _get_access_token(token, expires_on)
+    # Create token manager for automatic token refresh during long waits
+    token_manager = TokenManager(token=token, expires_on=expires_on)
 
     entity, final_state = _wait_for_asset(
         subject="data",
         fetch_entity=lambda: client.data.get(name=data_props.name, version=data_version),
         tags=tags,
-        fetch_state=lambda: _get_provisioning_state_from_rest(
+        fetch_state=lambda access_token: _get_provisioning_state_from_rest(
             asset_type="data",
             subscription_id=subscription_id,
             resource_group=resource_group,
@@ -355,6 +438,7 @@ def data(
             version=data_version,
             access_token=access_token,
         ),
+        token_manager=token_manager,
     )
 
     print(
@@ -391,14 +475,14 @@ def environment(
         expires_on=expires_on,
     )
 
-    # Get access token for REST API calls
-    access_token = _get_access_token(token, expires_on)
+    # Create token manager for automatic token refresh during long waits
+    token_manager = TokenManager(token=token, expires_on=expires_on)
 
     entity, final_state = _wait_for_asset(
         subject="environment",
         fetch_entity=lambda: client.environments.get(name=env_props.name, version=env_version),
         tags=tags,
-        fetch_state=lambda: _get_provisioning_state_from_rest(
+        fetch_state=lambda access_token: _get_provisioning_state_from_rest(
             asset_type="environment",
             subscription_id=subscription_id,
             resource_group=resource_group,
@@ -407,6 +491,7 @@ def environment(
             version=env_version,
             access_token=access_token,
         ),
+        token_manager=token_manager,
     )
 
     print(
@@ -443,14 +528,14 @@ def component(
         expires_on=expires_on,
     )
 
-    # Get access token for REST API calls
-    access_token = _get_access_token(token, expires_on)
+    # Create token manager for automatic token refresh during long waits
+    token_manager = TokenManager(token=token, expires_on=expires_on)
 
     entity, final_state = _wait_for_asset(
         subject="component",
         fetch_entity=lambda: client.components.get(name=comp_props.name, version=comp_version),
         tags=tags,
-        fetch_state=lambda: _get_provisioning_state_from_rest(
+        fetch_state=lambda access_token: _get_provisioning_state_from_rest(
             asset_type="component",
             subscription_id=subscription_id,
             resource_group=resource_group,
@@ -459,6 +544,7 @@ def component(
             version=comp_version,
             access_token=access_token,
         ),
+        token_manager=token_manager,
     )
 
     print(
@@ -495,14 +581,14 @@ def model(
         expires_on=expires_on,
     )
 
-    # Get access token for REST API calls
-    access_token = _get_access_token(token, expires_on)
+    # Create token manager for automatic token refresh during long waits
+    token_manager = TokenManager(token=token, expires_on=expires_on)
 
     entity, final_state = _wait_for_asset(
         subject="model",
         fetch_entity=lambda: client.models.get(name=model_props.name, version=model_version),
         tags=tags,
-        fetch_state=lambda: _get_provisioning_state_from_rest(
+        fetch_state=lambda access_token: _get_provisioning_state_from_rest(
             asset_type="model",
             subscription_id=subscription_id,
             resource_group=resource_group,
@@ -511,6 +597,7 @@ def model(
             version=model_version,
             access_token=access_token,
         ),
+        token_manager=token_manager,
     )
 
     print(
@@ -545,20 +632,21 @@ def job(
         expires_on=expires_on,
     )
 
-    # Get access token for REST API calls
-    access_token = _get_access_token(token, expires_on)
+    # Create token manager for automatic token refresh during long waits
+    token_manager = TokenManager(token=token, expires_on=expires_on)
 
     entity, final_state = _wait_for_asset(
         subject="job",
         fetch_entity=lambda: client.jobs.get(name=job_name),
         tags=tags,
-        fetch_state=lambda: _get_job_state_from_rest(
+        fetch_state=lambda access_token: _get_job_state_from_rest(
             subscription_id=subscription_id,
             resource_group=resource_group,
             workspace_name=workspace_name,
             job_name=job_name,
             access_token=access_token,
         ),
+        token_manager=token_manager,
     )
 
     if final_state not in SUCCESS_STATES:
