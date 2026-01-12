@@ -189,13 +189,13 @@ def environment(
         req_int_version=True
     )
     # find latest registry version to use
-    latest_reg_version=0
+    latest_reg_version=ws_env.version # Can cause error if set=0 like the other asset types.
     if list_env_reg:
         for e in list_env_reg:
             lrv = int(e.version)
             if lrv>latest_reg_version:
                 latest_reg_version=lrv
-    latest_reg_version=str(latest_reg_version+1)
+        latest_reg_version=str(latest_reg_version+1) # only if name exists
     
     print("[share environment] Sharing environment to registry")
     ws_client.environments.share(
