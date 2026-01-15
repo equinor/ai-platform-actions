@@ -135,6 +135,19 @@ def getcomponent(
     comp_list = list(client.components.list(name=name))
     #print(f"GC [3]: {comp_list}")
 
+    # If latest_version is None (e.g., when using a registry client),
+    # find the latest component by creation date, respecting req_int_version filter
+    if latest_version is None and comp_list:
+        # Filter by req_int_version first if required
+        candidates = [c for c in comp_list if c.version.isdigit()] if req_int_version else comp_list
+        if candidates:
+            # Find the component with the latest creation date
+            latest_comp = max(
+                candidates,
+                key=lambda c: c.creation_context.created_at if c.creation_context and c.creation_context.created_at else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            )
+            latest_version = latest_comp.version
+
     if version:
         comp_list = filter_assets_by_version(assets=comp_list,version=version)
     elif latest_version:

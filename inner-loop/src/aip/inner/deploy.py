@@ -49,7 +49,7 @@ def data(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
+        # The following 4 arguments are not used. They ar required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
@@ -103,7 +103,7 @@ def environment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
+        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
@@ -158,7 +158,7 @@ def component(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
+        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
@@ -242,7 +242,7 @@ def model(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
+        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
