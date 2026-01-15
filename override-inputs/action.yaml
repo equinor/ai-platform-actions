@@ -1,0 +1,25 @@
+name: Override Inputs
+description: Override a value in a YAML file using yq. Changes are ephemeral within the job context.
+
+inputs:
+  file:
+    description: 'Path to the YAML file to modify'
+    required: true
+  path:
+    description: 'Dot-notation path to the property (e.g., inputs.threshold, jobs.inference.component)'
+    required: true
+  set-value:
+    description: 'The new value to set'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Override Value
+      shell: bash
+      run: |
+        if [ ! -f "${{ inputs.file }}" ]; then
+          echo "❌ Error: File not found: ${{ inputs.file }}"
+          exit 1
+        fi
+        yq -i '.${{ inputs.path }} = "${{ inputs.set-value }}"' "${{ inputs.file }}"
