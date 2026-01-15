@@ -14,6 +14,9 @@ inputs:
   expires-on:
     description: "From azLogin action. Required unless running locally."
     required: false
+  aml-token:
+    description: "Access token with Azure ML scope (https://ml.azure.com/.default). Required for job operations."
+    required: false
   tenant-id:
     description: "Azure tenant ID"
     required: false
@@ -97,6 +100,8 @@ runs:
     - ${{ inputs.promote-stage }}
     - --image-build-compute
     - ${{ inputs.image-build-compute }}
+    - --aml-token
+    - ${{ inputs.aml-token }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}

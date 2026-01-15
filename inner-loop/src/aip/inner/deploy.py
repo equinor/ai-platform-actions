@@ -288,6 +288,7 @@ def job(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -314,7 +315,8 @@ def job(
         resource_group=resource_group,
         workspace_name=workspace_name,
         token=token,
-        expires_on=expires_on
+        expires_on=expires_on,
+        aml_token=aml_token
     )
 
     print("[deploy job] Loading job configuration from file")

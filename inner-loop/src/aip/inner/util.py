@@ -14,23 +14,36 @@ from pathlib import Path
 import yaml
 from collections import namedtuple
 
+AML_SCOPE = "https://ml.azure.com/.default"
+
+
 class Credential:
-    """Simple credential wrapper for Azure SDK"""
-    def __init__(self, access_token: str, expires_on: int):
+    """
+    Credential wrapper for Azure SDK that handles Azure ML's scope requirements.
+    
+    Azure ML operations (especially job submission) require tokens with the
+    https://ml.azure.com/.default scope. When this scope is requested, the
+    wrapper returns the dedicated AML token if provided.
+    """
+    def __init__(self, access_token: str, expires_on: int, aml_token: Optional[str] = None):
         self._access_token = AccessToken(token=access_token, expires_on=expires_on)
+        self._aml_token = AccessToken(token=aml_token, expires_on=expires_on) if aml_token else None
     
     def get_token(self, *scopes: str, claims: str | None = None, 
                    tenant_id: str | None = None, enable_cae: bool = False, 
                    **kwargs) -> AccessToken:
+        if AML_SCOPE in scopes and self._aml_token:
+            return self._aml_token
         return self._access_token
 
 
 def get_workspace_client(subscription_id: str, resource_group: str, 
                          workspace_name: str, token: Optional[str] = None, 
-                         expires_on: Optional[int] = None) -> MLClient:
+                         expires_on: Optional[int] = None,
+                         aml_token: Optional[str] = None) -> MLClient:
     """Create MLClient for workspace"""
     if token and expires_on:
-        credential = Credential(token, expires_on)
+        credential = Credential(token, expires_on, aml_token)
     else:
         credential = DefaultAzureCredential()
     return MLClient(
@@ -43,11 +56,12 @@ def get_workspace_client(subscription_id: str, resource_group: str,
 def get_registry_client(
         registry_name: str, 
         token: Optional[str] = None, 
-        expires_on: Optional[int] = None
+        expires_on: Optional[int] = None,
+        aml_token: Optional[str] = None
     ) -> MLClient:
     """Create MLClient for registry"""
     if token and expires_on:
-        credential = Credential(token, expires_on)
+        credential = Credential(token, expires_on, aml_token)
     else:
         credential = DefaultAzureCredential()
     return MLClient(
