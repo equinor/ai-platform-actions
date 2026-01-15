@@ -100,3 +100,7 @@ runs:
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+    AZURE_CLIENT_ID: ${{ inputs.client-id }}
+    AZURE_TENANT_ID: ${{ inputs.tenant-id }}
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+    ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
