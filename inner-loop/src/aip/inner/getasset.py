@@ -123,8 +123,11 @@ def getcomponent(
     comp_list = list(client.components.list())
     #print(f"GC [1]: {comp_list}")
     comp_list = [c for c in comp_list if c.name==name]
+    latest_version = None
     if comp_list:
         latest_version = comp_list[0].latest_version
+    else:
+        return []
     # Beware: If this is a workspace, AND there exists a version that is non-standard,
     # then latest_version may be None.
     #print(f"GC [2]: {latest_version}")
@@ -134,8 +137,10 @@ def getcomponent(
 
     if version:
         comp_list = filter_assets_by_version(assets=comp_list,version=version)
-    else:
+    elif latest_version:
         comp_list = [client.components.get(name=name,version=latest_version)]
+    else:
+        return []
     #print(f"GC [4]: {comp_list}")
 
     if tags:
