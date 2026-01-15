@@ -113,6 +113,8 @@ def getcomponent(
     latest_version = None
     if comp_list:
         latest_version = comp_list[0].latest_version
+    else:
+        return []
     # Beware: If this is a workspace, AND there exists a version that is non-standard,
     # then latest_version may be None.
     #print(f"GC [2]: {latest_version}")
