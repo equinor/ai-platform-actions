@@ -52,7 +52,8 @@ def data(
         # The following 3 arguments are not used. They ar required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
     ):
     """Deploy data asset to Azure ML workspace"""
     print(f"[deploy data] Deploying data asset")
@@ -105,7 +106,8 @@ def environment(
         # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
     ):
     """Deploy environment to Azure ML workspace"""
     print(f"[deploy environment] Deploying environment")
@@ -159,7 +161,8 @@ def component(
         # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
     ):
     """Deploy component to Azure ML workspace"""
     print(f"[deploy component] Deploying component")
@@ -242,7 +245,8 @@ def model(
         # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
     ):
     """Deploy model to Azure ML workspace"""
     print(f"[deploy model] Deploying model")
