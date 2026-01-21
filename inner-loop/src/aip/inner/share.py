@@ -42,7 +42,8 @@ def data(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -146,7 +147,8 @@ def environment(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -249,7 +251,8 @@ def model(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     ):
     """Share model from workspace to registry"""
     print(f"[share model] Sharing model")
@@ -348,7 +351,8 @@ def component(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     ):
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")
