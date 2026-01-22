@@ -6,7 +6,9 @@ from azure.ai.ml import (
     load_environment,
     load_component,
     load_model,
-    load_job
+    load_job,
+    load_online_endpoint,
+    load_online_deployment,
 )
 from azure.ai.ml.entities import (
     CommandComponent,
@@ -14,7 +16,9 @@ from azure.ai.ml.entities import (
     Data,
     Environment,
     BuildContext,
-    Model
+    Model,
+    ManagedOnlineEndpoint,
+    ManagedOnlineDeployment,
 )
 from azure.core.polling import LROPoller
 import typer
@@ -342,6 +346,138 @@ def job(
     })
 
 
+@app.command()
+def online_endpoint(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    ):
+    """Deploy online endpoint to Azure ML workspace.
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-endpoint-online?view=azureml-api-2
+    """
+    print(f"[deploy online-endpoint] Deploying online endpoint")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Filepath: {filepath}")
+
+    print("[deploy online-endpoint] Creating workspace client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    print("[deploy online-endpoint] Loading endpoint configuration from file")
+    endpoint: ManagedOnlineEndpoint = load_online_endpoint(source=filepath)
+    if tags:
+        if endpoint.tags:
+            endpoint.tags.update(tags)
+        else:
+            endpoint.tags = tags
+
+    print("[deploy online-endpoint] Creating or updating online endpoint")
+    poller = client.online_endpoints.begin_create_or_update(endpoint)
+    endpoint_result = poller.result()
+
+    print(f"[deploy online-endpoint] ✅ Online endpoint deployed successfully")
+    print(f"  Name: {endpoint_result.name}")
+    print(f"  Provisioning State: {endpoint_result.provisioning_state}")
+    print(f"  Scoring URI: {endpoint_result.scoring_uri}")
+    print(f"  Resource ID: {endpoint_result.id}")
+    github_output({
+        "reference": f"azureml:{endpoint_result.name}",
+        "version": endpoint_result.name,
+        "resource-id": endpoint_result.id,
+    })
+
+
+@app.command()
+def online_deployment(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        filepath: str,
+        endpoint_name: Annotated[str, typer.Option("--endpoint-name", "-e", help="Name of the online endpoint")],
+        traffic_allocation: Annotated[
+            Optional[int],
+            typer.Option("--traffic-allocation", "-t", help="Traffic percentage to allocate to this deployment (0-100)")
+        ] = None,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    ):
+    """Deploy online deployment to Azure ML workspace.
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
+    """
+    print(f"[deploy online-deployment] Deploying online deployment")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Endpoint: {endpoint_name}")
+    print(f"  Filepath: {filepath}")
+    if traffic_allocation is not None:
+        print(f"  Traffic Allocation: {traffic_allocation}%")
+
+    print("[deploy online-deployment] Creating workspace client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    print("[deploy online-deployment] Loading deployment configuration from file")
+    deployment: ManagedOnlineDeployment = load_online_deployment(source=filepath)
+    deployment.endpoint_name = endpoint_name
+    if tags:
+        if deployment.tags:
+            deployment.tags.update(tags)
+        else:
+            deployment.tags = tags
+
+    print("[deploy online-deployment] Creating or updating online deployment")
+    poller = client.online_deployments.begin_create_or_update(deployment)
+    deployment_result = poller.result()
+
+    if traffic_allocation is not None:
+        print(f"[deploy online-deployment] Updating endpoint traffic allocation")
+        endpoint = client.online_endpoints.get(name=endpoint_name)
+        endpoint.traffic = endpoint.traffic or {}
+        endpoint.traffic[deployment_result.name] = traffic_allocation
+        poller = client.online_endpoints.begin_create_or_update(endpoint)
+        poller.result()
+        print(f"  Traffic updated: {endpoint.traffic}")
+
+    print(f"[deploy online-deployment] ✅ Online deployment deployed successfully")
+    print(f"  Name: {deployment_result.name}")
+    print(f"  Endpoint: {deployment_result.endpoint_name}")
+    print(f"  Provisioning State: {deployment_result.provisioning_state}")
+    print(f"  Resource ID: {deployment_result.id}")
+    github_output({
+        "reference": f"azureml:{endpoint_name}/deployments/{deployment_result.name}",
+        "version": deployment_result.name,
+        "resource-id": deployment_result.id,
+    })
 
 
 if __name__ == "__main__":
