@@ -53,6 +53,9 @@ inputs:
   job-name:
     description: "Azure ML job name (for waitfor job operations)"
     required: false
+  endpoint-name:
+    description: "Azure ML endpoint name"
+    required: false
   tags:
     description: "Tags to set (format: 'key1=value1,key2=value2')"
     required: false
@@ -81,7 +84,7 @@ runs:
   args:
     - ${{ inputs.verb }}
     - ${{ inputs.subject }}
-    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name }}
+    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name || inputs.endpoint-name }}
     - --subscription
     - ${{ inputs.subscription-id }}
     - --resource-group
