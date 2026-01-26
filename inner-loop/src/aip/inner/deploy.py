@@ -27,7 +27,8 @@ from .util import (
     get_workspace_client, 
     github_output, 
     load_safe_tags,
-    empty_string_to_none
+    empty_string_to_none,
+    empty_string_to_none_int,
 )
 import yaml
 from pathlib import Path
@@ -57,7 +58,8 @@ def data(
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Deploy data asset to Azure ML workspace"""
     print(f"[deploy data] Deploying data asset")
@@ -111,7 +113,8 @@ def environment(
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Deploy environment to Azure ML workspace"""
     print(f"[deploy environment] Deploying environment")
@@ -166,7 +169,8 @@ def component(
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Deploy component to Azure ML workspace"""
     print(f"[deploy component] Deploying component")
@@ -250,7 +254,8 @@ def model(
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Deploy model to Azure ML workspace"""
     print(f"[deploy model] Deploying model")
@@ -304,7 +309,8 @@ def job(
         # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
         registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Submit job to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-pipeline?view=azureml-api-2
@@ -362,6 +368,7 @@ def online_endpoint(
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Deploy online endpoint to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-endpoint-online?view=azureml-api-2
@@ -410,7 +417,6 @@ def online_deployment(
         resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
         filepath: str,
-        endpoint_name: Annotated[str, typer.Option("--endpoint-name", "-e", help="Name of the online endpoint")],
         traffic_allocation: Annotated[
             Optional[int],
             typer.Option("--traffic-allocation", "-t", help="Traffic percentage to allocate to this deployment (0-100)")
@@ -429,10 +435,17 @@ def online_deployment(
     """Deploy online deployment to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
     """
+    print("[deploy online-deployment] Loading deployment configuration from file")
+    deployment: ManagedOnlineDeployment = load_online_deployment(source=filepath)
+    endpoint_name = deployment.endpoint_name
+    if not endpoint_name:
+        raise typer.BadParameter("Deployment YAML must contain 'endpoint_name' field")
+
     print(f"[deploy online-deployment] Deploying online deployment")
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")
     print(f"  Endpoint: {endpoint_name}")
+    print(f"  Deployment: {deployment.name}")
     print(f"  Filepath: {filepath}")
     if traffic_allocation is not None:
         print(f"  Traffic Allocation: {traffic_allocation}%")
@@ -446,9 +459,6 @@ def online_deployment(
         expires_on=expires_on,
     )
 
-    print("[deploy online-deployment] Loading deployment configuration from file")
-    deployment: ManagedOnlineDeployment = load_online_deployment(source=filepath)
-    deployment.endpoint_name = endpoint_name
     if tags:
         if deployment.tags:
             deployment.tags.update(tags)

@@ -8,7 +8,7 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 
 ## Implementation Status
 
-**✅ FULLY IMPLEMENTED** - All deploy, share, and waitfor operations are complete and ready for production use.
+**✅ FULLY IMPLEMENTED** - All deploy, share, waitfor, and delete operations are complete and ready for production use.
 
 ### Deploy Operations
 - ✅ **deploy data**: Deploy data assets to Azure ML workspace
@@ -16,6 +16,8 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 - ✅ **deploy component**: Deploy Azure ML components with automatic versioning
 - ✅ **deploy model**: Register Azure ML models from YAML specifications
 - ✅ **deploy job**: Submit Azure ML jobs to workspace
+- ✅ **deploy online-endpoint**: Deploy managed online endpoints
+- ✅ **deploy online-deployment**: Deploy managed online deployments with traffic allocation
 
 ### Share Operations
 - ✅ **share data**: Share data assets from workspace to registry
@@ -29,6 +31,12 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 - ✅ **waitfor component**: Track component registrations until provisioning succeeds or fails
 - ✅ **waitfor model**: Ensure model registrations finish before dependent stages continue
 - ✅ **waitfor job**: Observe Azure ML job lifecycle until it reaches a terminal status (Completed/Failed)
+- ✅ **waitfor online-endpoint**: Wait for online endpoint provisioning to complete
+- ✅ **waitfor online-deployment**: Wait for online deployment provisioning to complete
+
+### Delete Operations
+- ✅ **delete online-endpoint**: Delete an online endpoint (and all its deployments)
+- ✅ **delete online-deployment**: Delete an online deployment (automatically removes traffic first)
 
 ## Architecture
 
@@ -39,6 +47,8 @@ The action is organized into modular Python files:
 - **main.py**: Entry point that routes commands using typer
 - **deploy.py**: All deploy operations with full Azure ML SDK integration
 - **share.py**: All share operations with registry support and stage promotion
+- **waitfor.py**: All waitfor operations for polling asset provisioning states
+- **delete.py**: Delete operations for online endpoints and deployments
 - **getasset.py**: Helper functions for retrieving and filtering Azure ML assets
 - **util.py**: Utility functions for authentication, tagging, and GitHub output
 - **action.yaml**: GitHub Action composite definition
@@ -152,6 +162,80 @@ The action supports two authentication methods:
     filepath: ./jobs/my-job.yaml
 ```
 
+### Deploy Online Endpoint
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: online-endpoint
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    filepath: ./endpoints/my-endpoint.yaml
+```
+
+**Endpoint YAML example** (`my-endpoint.yaml`):
+```yaml
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: my-inference-endpoint
+auth_mode: key
+```
+
+### Deploy Online Deployment with Traffic
+
+```yaml
+- name: Deploy Online Deployment
+  id: deploy-deployment
+  uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: online-deployment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    filepath: ./deployments/blue-deployment.yaml
+    traffic-allocation: 100
+```
+
+**Deployment YAML example** (`blue-deployment.yaml`):
+```yaml
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: my-inference-endpoint
+model: azureml:my-model:1
+instance_type: Standard_DS3_v2
+instance_count: 1
+```
+
+### Wait for Online Deployment
+
+```yaml
+- name: Wait for Deployment
+  uses: ./inner-loop
+  with:
+    verb: waitfor
+    subject: online-deployment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    deployment-resource: ${{ steps.deploy-deployment.outputs.resource-id }}
+```
+
+### Delete Online Deployment
+
+```yaml
+- name: Delete Old Deployment
+  uses: ./inner-loop
+  with:
+    verb: delete
+    subject: online-deployment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    deployment-resource: /subscriptions/.../onlineEndpoints/my-endpoint/deployments/green
+```
+
 ### Wait for Environment Readiness
 
 ```yaml
@@ -206,8 +290,8 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 
 | Input | Required | Description |
 |-------|----------|-------------|
-| `verb` | Yes | Action verb: `deploy`, `share`, or `waitfor` |
-| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, or `job` |
+| `verb` | Yes | Action verb: `deploy`, `share`, `waitfor`, or `delete` |
+| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, or `online-deployment` |
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |
@@ -220,6 +304,9 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 | `env-ref` | No* | Environment name (*for share environment) |
 | `model-ref` | No* | Model name (*for share model) |
 | `job-name` | No* | Job name (*for waitfor job) |
+| `endpoint-name` | No* | Online endpoint name (*for waitfor/delete online-endpoint) |
+| `deployment-resource` | No* | Online deployment resource ID (*for waitfor/delete online-deployment) |
+| `traffic-allocation` | No | Traffic percentage (0-100) to allocate to deployment |
 | `tags` | No | Tags in format: `key1=value1,key2=value2` |
 | `promote-stage` | No | Stage to promote asset to (e.g., "Production") |
 | `image-build-compute` | No | Compute cluster name for environment builds (instead of serverless) |

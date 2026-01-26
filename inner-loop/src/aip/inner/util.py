@@ -123,6 +123,13 @@ def empty_string_to_none(value: Optional[str]) -> Optional[str]:
     return value
 
 
+def empty_string_to_none_int(value: Optional[str]) -> Optional[int]:
+    """Convert empty strings to None, or parse as int for optional int parameters"""
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        return None
+    return int(value)
+
+
 def check_and_replace_environment(ml_client_reg: MLClient, env: str) -> str:
     """
     Utility function to replace environment with its registry equivalent for custom environments
@@ -312,3 +319,36 @@ def get_ref_properties(reference: str) -> namedtuple:
     # return ref(*d)
     ref = namedtuple('Ref',['name','version'])
     return ref(name=d['name'],version=d['version'])
+
+
+def get_deployment_ref_properties(resource_id: str) -> namedtuple:
+    """
+    Parse Azure ML online deployment resource ID and extract endpoint and deployment names.
+    
+    Expected format:
+    /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>/onlineEndpoints/<endpoint>/deployments/<deployment>
+    
+    Returns:
+        namedtuple with endpoint_name and deployment_name attributes
+    """
+    pattern = re.compile(
+        r'^(?:azureml:)?/subscriptions/[^/]+'
+        r'/resourceGroups/[^/]+'
+        r'/providers/Microsoft\.MachineLearningServices'
+        r'/workspaces/[^/]+'
+        r'/onlineEndpoints/(?P<endpoint_name>[^/]+)'
+        r'/deployments/(?P<deployment_name>[^/]+)$'
+    )
+    
+    match = pattern.match(resource_id)
+    if not match:
+        raise ValueError(
+            f"Resource ID '{resource_id}' does not match expected deployment format: "
+            "/subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
+        )
+    
+    DeploymentRef = namedtuple('DeploymentRef', ['endpoint_name', 'deployment_name'])
+    return DeploymentRef(
+        endpoint_name=match.group('endpoint_name'),
+        deployment_name=match.group('deployment_name')
+    )

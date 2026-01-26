@@ -9,6 +9,7 @@ from .util import (
     get_workspace_client,
     github_output,
     empty_string_to_none,
+    get_deployment_ref_properties,
 )
 
 app = typer.Typer()
@@ -26,6 +27,7 @@ def online_endpoint(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     """Delete an online endpoint from Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-online-endpoints?view=azureml-api-2
@@ -60,18 +62,22 @@ def online_deployment(
     subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
     resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
     workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
-    endpoint_name: Annotated[str, typer.Option("--endpoint-name", "-e", help="Name of the online endpoint")],
-    deployment_name: str,
+    deployment_resource: str,
     token: Optional[str] = None,
     expires_on: Optional[int] = None,
     registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     """Delete an online deployment from Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-online-endpoints?view=azureml-api-2
     """
+    deployment_ref = get_deployment_ref_properties(deployment_resource)
+    endpoint_name = deployment_ref.endpoint_name
+    deployment_name = deployment_ref.deployment_name
+
     print(f"[delete online-deployment] Deleting online deployment")
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")

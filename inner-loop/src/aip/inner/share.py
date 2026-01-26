@@ -44,6 +44,7 @@ def data(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -149,6 +150,7 @@ def environment(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -253,6 +255,7 @@ def model(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share model from workspace to registry"""
     print(f"[share model] Sharing model")
@@ -353,6 +356,7 @@ def component(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")

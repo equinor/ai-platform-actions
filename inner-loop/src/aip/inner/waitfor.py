@@ -16,6 +16,7 @@ from .util import (
     load_safe_tags,
     empty_string_to_none,
     get_ref_properties,
+    get_deployment_ref_properties,
     github_output,
     Credential,
 )
@@ -496,6 +497,7 @@ def data(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor data] Waiting for data asset {data_ref}")
     data_props = get_ref_properties(data_ref)
@@ -550,6 +552,7 @@ def environment(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor environment] Waiting for environment {env_ref}")
     env_props = get_ref_properties(env_ref)
@@ -604,6 +607,7 @@ def component(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor component] Waiting for component {component_ref}")
     comp_props = get_ref_properties(component_ref)
@@ -658,6 +662,7 @@ def model(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor model] Waiting for model {model_ref}")
     model_props = get_ref_properties(model_ref)
@@ -712,6 +717,7 @@ def job(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor job] Waiting for job {job_name}")
 
@@ -764,6 +770,7 @@ def online_endpoint(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     """Wait for an online endpoint to reach a terminal state."""
     print(f"[waitfor online-endpoint] Waiting for online endpoint {endpoint_name}")
@@ -805,8 +812,7 @@ def online_deployment(
     subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
     resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
     workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
-    endpoint_name: Annotated[str, typer.Option("--endpoint-name", "-e", help="Name of the online endpoint")],
-    deployment_name: str,
+    deployment_resource: str,
     token: Optional[str] = None,
     expires_on: Optional[int] = None,
     tags: Annotated[
@@ -817,8 +823,13 @@ def online_deployment(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     """Wait for an online deployment to reach a terminal state."""
+    deployment_ref = get_deployment_ref_properties(deployment_resource)
+    endpoint_name = deployment_ref.endpoint_name
+    deployment_name = deployment_ref.deployment_name
+
     print(f"[waitfor online-deployment] Waiting for deployment {deployment_name} on endpoint {endpoint_name}")
 
     client = get_workspace_client(
