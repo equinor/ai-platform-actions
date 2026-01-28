@@ -19,6 +19,8 @@ from azure.ai.ml.entities import (
     Model,
     ManagedOnlineEndpoint,
     ManagedOnlineDeployment,
+    KubernetesOnlineEndpoint,
+    KubernetesOnlineDeployment,
 )
 from azure.core.polling import LROPoller
 import typer
@@ -388,7 +390,25 @@ def online_endpoint(
     )
 
     print("[deploy online-endpoint] Loading endpoint configuration from file")
-    endpoint: ManagedOnlineEndpoint = load_online_endpoint(source=filepath)
+    endpoint = load_online_endpoint(source=filepath)
+    is_kubernetes = isinstance(endpoint, KubernetesOnlineEndpoint)
+
+    if is_kubernetes:
+        print("  Type: KubernetesOnlineEndpoint")
+        if not hasattr(endpoint, 'compute') or not endpoint.compute:
+            raise typer.BadParameter("KubernetesOnlineEndpoint YAML must contain a 'compute' field")
+        
+        print(f"[deploy online-endpoint] Validating compute '{endpoint.compute}'")
+        available_k8s_computes = [c.name for c in client.compute.list() if c.type == "Kubernetes"]
+        compute_name = endpoint.compute.split('/')[-1] if '/' in endpoint.compute else endpoint.compute
+        if compute_name not in available_k8s_computes:
+            raise typer.BadParameter(
+                f"Compute '{compute_name}' not found in available Kubernetes computes: {available_k8s_computes}"
+            )
+        print(f"  ✅ Compute '{compute_name}' validated")
+    else:
+        print("  Type: ManagedOnlineEndpoint")
+
     if tags:
         if endpoint.tags:
             endpoint.tags.update(tags)
@@ -436,10 +456,12 @@ def online_deployment(
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
     """
     print("[deploy online-deployment] Loading deployment configuration from file")
-    deployment: ManagedOnlineDeployment = load_online_deployment(source=filepath)
+    deployment = load_online_deployment(source=filepath)
     endpoint_name = deployment.endpoint_name
     if not endpoint_name:
         raise typer.BadParameter("Deployment YAML must contain 'endpoint_name' field")
+
+    is_kubernetes = isinstance(deployment, KubernetesOnlineDeployment)
 
     print(f"[deploy online-deployment] Deploying online deployment")
     print(f"  Workspace: {workspace_name}")
@@ -447,6 +469,7 @@ def online_deployment(
     print(f"  Endpoint: {endpoint_name}")
     print(f"  Deployment: {deployment.name}")
     print(f"  Filepath: {filepath}")
+    print(f"  Type: {'KubernetesOnlineDeployment' if is_kubernetes else 'ManagedOnlineDeployment'}")
     if traffic_allocation is not None:
         print(f"  Traffic Allocation: {traffic_allocation}%")
 
@@ -459,6 +482,36 @@ def online_deployment(
         expires_on=expires_on,
     )
 
+    if is_kubernetes:
+        print(f"[deploy online-deployment] Validating Kubernetes deployment configuration")
+        if not hasattr(deployment, 'resources') or not deployment.resources:
+            raise typer.BadParameter(
+                "KubernetesOnlineDeployment YAML must contain a 'resources' field with 'requests' and 'limits'"
+            )
+        resources = deployment.resources
+        if not hasattr(resources, 'requests') or not resources.requests:
+            raise typer.BadParameter("KubernetesOnlineDeployment 'resources' must contain 'requests'")
+        if not hasattr(resources, 'limits') or not resources.limits:
+            raise typer.BadParameter("KubernetesOnlineDeployment 'resources' must contain 'limits'")
+        
+        for section_name, section in [('requests', resources.requests), ('limits', resources.limits)]:
+            if not hasattr(section, 'cpu') or not section.cpu:
+                raise typer.BadParameter(f"KubernetesOnlineDeployment 'resources.{section_name}' must contain 'cpu'")
+            if not hasattr(section, 'memory') or not section.memory:
+                raise typer.BadParameter(f"KubernetesOnlineDeployment 'resources.{section_name}' must contain 'memory'")
+        print(f"  ✅ Resources validated")
+
+        print(f"[deploy online-deployment] Validating endpoint type for Kubernetes deployment")
+        endpoint = client.online_endpoints.get(name=endpoint_name)
+        if not isinstance(endpoint, KubernetesOnlineEndpoint):
+            raise typer.BadParameter(
+                f"KubernetesOnlineDeployment requires a KubernetesOnlineEndpoint, but endpoint '{endpoint_name}' is not a Kubernetes endpoint"
+            )
+        print(f"  ✅ Endpoint '{endpoint_name}' is a Kubernetes endpoint")
+
+    if traffic_allocation is not None and (traffic_allocation < 0 or traffic_allocation > 100):
+        raise typer.BadParameter(f"Traffic allocation must be between 0 and 100, got {traffic_allocation}")
+
     if tags:
         if deployment.tags:
             deployment.tags.update(tags)
@@ -470,13 +523,31 @@ def online_deployment(
     deployment_result = poller.result()
 
     if traffic_allocation is not None:
-        print(f"[deploy online-deployment] Updating endpoint traffic allocation")
         endpoint = client.online_endpoints.get(name=endpoint_name)
-        endpoint.traffic = endpoint.traffic or {}
-        endpoint.traffic[deployment_result.name] = traffic_allocation
-        poller = client.online_endpoints.begin_create_or_update(endpoint)
-        poller.result()
-        print(f"  Traffic updated: {endpoint.traffic}")
+        existing_deployments = list(client.online_deployments.list(endpoint_name=endpoint_name))
+        other_deployments = [d for d in existing_deployments if d.name != deployment_result.name]
+
+        if other_deployments:
+            print(f"[deploy online-deployment] Updating endpoint traffic allocation")
+            remainder = 100 - traffic_allocation
+            current_traffic = endpoint.traffic or {}
+            other_total = sum(current_traffic.get(d.name, 0) for d in other_deployments)
+
+            new_traffic = {deployment_result.name: traffic_allocation}
+            if other_total > 0:
+                for d in other_deployments:
+                    old_share = current_traffic.get(d.name, 0)
+                    new_traffic[d.name] = round(old_share * remainder / other_total)
+            else:
+                share_per_deployment = remainder // len(other_deployments)
+                leftover = remainder - share_per_deployment * len(other_deployments)
+                for i, d in enumerate(other_deployments):
+                    new_traffic[d.name] = share_per_deployment + (1 if i < leftover else 0)
+
+            endpoint.traffic = new_traffic
+            poller = client.online_endpoints.begin_create_or_update(endpoint)
+            poller.result()
+            print(f"  Traffic updated: {endpoint.traffic}")
 
     print(f"[deploy online-deployment] ✅ Online deployment deployed successfully")
     print(f"  Name: {deployment_result.name}")
