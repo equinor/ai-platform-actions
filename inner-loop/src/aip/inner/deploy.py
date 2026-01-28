@@ -400,12 +400,11 @@ def online_endpoint(
         
         print(f"[deploy online-endpoint] Validating compute '{endpoint.compute}'")
         available_k8s_computes = [c.name for c in client.compute.list() if c.type == "Kubernetes"]
-        compute_name = endpoint.compute.split('/')[-1] if '/' in endpoint.compute else endpoint.compute
-        if compute_name not in available_k8s_computes:
+        if endpoint.compute not in available_k8s_computes:
             raise typer.BadParameter(
-                f"Compute '{compute_name}' not found in available Kubernetes computes: {available_k8s_computes}"
+                f"Compute '{endpoint.compute}' not found in available Kubernetes computes: {available_k8s_computes}"
             )
-        print(f"  ✅ Compute '{compute_name}' validated")
+        print(f"  ✅ Compute '{endpoint.compute}' validated")
     else:
         print("  Type: ManagedOnlineEndpoint")
 
