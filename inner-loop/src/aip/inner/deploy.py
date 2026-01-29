@@ -31,6 +31,7 @@ from .util import (
     load_safe_tags,
     empty_string_to_none,
     empty_string_to_none_int,
+    load_online_endpoint_safe,
 )
 import yaml
 from pathlib import Path
@@ -390,7 +391,7 @@ def online_endpoint(
     )
 
     print("[deploy online-endpoint] Loading endpoint configuration from file")
-    endpoint = load_online_endpoint(source=filepath)
+    endpoint = load_online_endpoint_safe(source=filepath)
     is_kubernetes = isinstance(endpoint, KubernetesOnlineEndpoint)
 
     if is_kubernetes:

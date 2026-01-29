@@ -4,7 +4,7 @@ Utility functions for Inner Loop Action
 
 import os
 import re
-from typing import Optional
+from typing import Optional, Union
 from azure.core.credentials import AccessToken
 from azure.identity import DefaultAzureCredential
 from azure.ai.ml import MLClient
@@ -351,4 +351,40 @@ def get_deployment_ref_properties(resource_id: str) -> namedtuple:
     return DeploymentRef(
         endpoint_name=match.group('endpoint_name'),
         deployment_name=match.group('deployment_name')
+    )
+
+
+def load_online_endpoint_safe(source: str):
+    """
+    Load an online endpoint from a YAML file, with workaround for KubernetesOnlineEndpoint.
+    
+    The azure.ai.ml.load_online_endpoint function has a bug where it fails to load
+    KubernetesOnlineEndpoint YAML files. This function detects the schema and manually
+    instantiates KubernetesOnlineEndpoint when needed.
+    
+    Args:
+        source: Path to the YAML file
+        
+    Returns:
+        ManagedOnlineEndpoint or KubernetesOnlineEndpoint instance
+    """
+    from azure.ai.ml import load_online_endpoint
+    from azure.ai.ml.entities import KubernetesOnlineEndpoint, ManagedOnlineEndpoint
+    
+    with open(source, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    schema = config.get('$schema', '')
+    is_kubernetes = 'kubernetesOnlineEndpoint' in schema.lower() or 'kubernetes' in schema.lower()
+    
+    if not is_kubernetes:
+        return load_online_endpoint(source=source)
+    
+    return KubernetesOnlineEndpoint(
+        name=config.get('name'),
+        compute=config.get('compute'),
+        description=config.get('description'),
+        tags=config.get('tags'),
+        properties=config.get('properties'),
+        auth_mode=config.get('auth_mode', 'key'),
     )
