@@ -172,7 +172,7 @@ def environment(
     list_env_ws = getenvironment(
         client=ws_client,
         name=env_name,
-        tags=tags
+        #tags=tags, # tags may be unique, so DON'T filter with them
     )
     if len(list_env_ws)<1:
         raise ValueError("There is no such environment in the workspace")
