@@ -416,6 +416,8 @@ def load_online_deployment_safe(source: str):
     if not is_kubernetes:
         return load_online_deployment(source=source)
     
+    base_path = Path(source).parent
+    
     code_config = config.get('code_configuration',{})
     resources_config = config.get('resources', {})
     requests_config = resources_config.get('requests', {})
@@ -455,4 +457,5 @@ def load_online_deployment_safe(source: str):
         tags=config.get('tags'),
         properties=config.get('properties'),
         environment_variables=config.get('environment_variables'),
+        base_path=str(base_path),
     )
