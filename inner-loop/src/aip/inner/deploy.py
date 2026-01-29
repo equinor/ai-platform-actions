@@ -400,7 +400,7 @@ def online_endpoint(
             raise typer.BadParameter("KubernetesOnlineEndpoint YAML must contain a 'compute' field")
         
         print(f"[deploy online-endpoint] Validating compute '{endpoint.compute}'")
-        available_k8s_computes = [c.name for c in client.compute.list() if c.type == "Kubernetes"]
+        available_k8s_computes = [c.name for c in client.compute.list(compute_type="Kubernetes")]
         if endpoint.compute not in available_k8s_computes:
             raise typer.BadParameter(
                 f"Compute '{endpoint.compute}' not found in available Kubernetes computes: {available_k8s_computes}"
