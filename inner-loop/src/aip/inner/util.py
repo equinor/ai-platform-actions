@@ -405,7 +405,7 @@ def load_online_deployment_safe(source: str):
         ManagedOnlineDeployment or KubernetesOnlineDeployment instance
     """
     from azure.ai.ml import load_online_deployment
-    from azure.ai.ml.entities import KubernetesOnlineDeployment, ResourceRequirementsSettings, ResourceSettings
+    from azure.ai.ml.entities import CodeConfiguration,KubernetesOnlineDeployment, ResourceRequirementsSettings, ResourceSettings
     
     with open(source, 'r') as f:
         config = yaml.safe_load(f)
@@ -416,10 +416,16 @@ def load_online_deployment_safe(source: str):
     if not is_kubernetes:
         return load_online_deployment(source=source)
     
+    code_config = config.get('code_configuration',{})
     resources_config = config.get('resources', {})
     requests_config = resources_config.get('requests', {})
     limits_config = resources_config.get('limits', {})
     
+    code_configuration = CodeConfiguration(
+        code=code_config.get('code'),
+        scoring_script=code_config.get('scoring_script')
+    )
+
     resources = ResourceRequirementsSettings(
         requests=ResourceSettings(
             cpu=requests_config.get('cpu'),
@@ -438,7 +444,7 @@ def load_online_deployment_safe(source: str):
         endpoint_name=config.get('endpoint_name'),
         model=config.get('model'),
         environment=config.get('environment'),
-        code_configuration=config.get('code_configuration'),
+        code_configuration=code_configuration,
         scoring_script=config.get('scoring_script'),
         code_path=config.get('code_path'),
         instance_type=config.get('instance_type'),
