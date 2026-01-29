@@ -32,6 +32,7 @@ from .util import (
     empty_string_to_none,
     empty_string_to_none_int,
     load_online_endpoint_safe,
+    load_online_deployment_safe,
 )
 import yaml
 from pathlib import Path
@@ -456,7 +457,7 @@ def online_deployment(
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
     """
     print("[deploy online-deployment] Loading deployment configuration from file")
-    deployment = load_online_deployment(source=filepath)
+    deployment = load_online_deployment_safe(source=filepath)
     endpoint_name = deployment.endpoint_name
     if not endpoint_name:
         raise typer.BadParameter("Deployment YAML must contain 'endpoint_name' field")

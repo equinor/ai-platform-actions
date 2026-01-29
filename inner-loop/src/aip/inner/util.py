@@ -388,3 +388,65 @@ def load_online_endpoint_safe(source: str):
         properties=config.get('properties'),
         auth_mode=config.get('auth_mode', 'key'),
     )
+
+
+def load_online_deployment_safe(source: str):
+    """
+    Load an online deployment from a YAML file, with workaround for KubernetesOnlineDeployment.
+    
+    The azure.ai.ml.load_online_deployment function has a bug where it fails to load
+    KubernetesOnlineDeployment YAML files. This function detects the schema and manually
+    instantiates KubernetesOnlineDeployment when needed.
+    
+    Args:
+        source: Path to the YAML file
+        
+    Returns:
+        ManagedOnlineDeployment or KubernetesOnlineDeployment instance
+    """
+    from azure.ai.ml import load_online_deployment
+    from azure.ai.ml.entities import KubernetesOnlineDeployment, ResourceRequirementsSettings, ResourceSettings
+    
+    with open(source, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    schema = config.get('$schema', '')
+    is_kubernetes = 'kubernetesonlinedeployment' in schema.lower()
+    
+    if not is_kubernetes:
+        return load_online_deployment(source=source)
+    
+    resources_config = config.get('resources', {})
+    requests_config = resources_config.get('requests', {})
+    limits_config = resources_config.get('limits', {})
+    
+    resources = ResourceRequirementsSettings(
+        requests=ResourceSettings(
+            cpu=requests_config.get('cpu'),
+            memory=requests_config.get('memory'),
+            gpu=requests_config.get('gpu'),
+        ),
+        limits=ResourceSettings(
+            cpu=limits_config.get('cpu'),
+            memory=limits_config.get('memory'),
+            gpu=limits_config.get('gpu'),
+        ),
+    )
+    
+    return KubernetesOnlineDeployment(
+        name=config.get('name'),
+        endpoint_name=config.get('endpoint_name'),
+        model=config.get('model'),
+        environment=config.get('environment'),
+        code_configuration=config.get('code_configuration'),
+        scoring_script=config.get('scoring_script'),
+        code_path=config.get('code_path'),
+        instance_type=config.get('instance_type'),
+        instance_count=config.get('instance_count', 1),
+        app_insights_enabled=config.get('app_insights_enabled', False),
+        resources=resources,
+        description=config.get('description'),
+        tags=config.get('tags'),
+        properties=config.get('properties'),
+        environment_variables=config.get('environment_variables'),
+    )
