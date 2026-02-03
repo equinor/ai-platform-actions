@@ -375,7 +375,7 @@ def load_online_endpoint_safe(source: str):
         config = yaml.safe_load(f)
     
     schema = config.get('$schema', '')
-    is_kubernetes = 'kubernetesOnlineEndpoint' in schema.lower() or 'kubernetes' in schema.lower()
+    is_kubernetes = 'kubernetesOnlineEndpoint' in schema.lower()
     
     if not is_kubernetes:
         return load_online_endpoint(source=source)
