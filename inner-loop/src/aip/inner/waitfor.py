@@ -42,7 +42,7 @@ ENDPOINT_SUCCESS_STATES = {"succeeded"}
 ENDPOINT_FAILURE_STATES = {"failed", "canceled", "cancelled", "deleting"}
 
 # Azure REST API version for Machine Learning Services
-REST_API_VERSION = "2025-09-01" #"2025-01-01-preview"
+REST_API_VERSION = "2025-10-01-preview" # The currently last API VERSION to have the necessary results
 
 app = typer.Typer()
 
