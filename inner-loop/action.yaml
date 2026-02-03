@@ -3,10 +3,10 @@ description: Unified action for Azure ML operations using command pattern
 
 inputs:
   verb:
-    description: "Action verb (deploy, share, waitfor)"
+    description: "Action verb (deploy, share, waitfor, delete)"
     required: true
   subject:
-    description: "Target subject (data, environment, component, model, job)"
+    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment)"
     required: true
   token:
     description: "From azLogin action. Required unless running locally."
@@ -53,6 +53,18 @@ inputs:
   job-name:
     description: "Azure ML job name (for waitfor job operations)"
     required: false
+  endpoint-name:
+    description: "Azure ML online endpoint name"
+    required: false
+  deployment-name:
+    description: "Azure ML online deployment name (for deploy online-deployment)"
+    required: false
+  deployment-resource:
+    description: "Azure ML online deployment resource ID (for waitfor/delete online-deployment). Format: /subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
+    required: false
+  traffic-allocation:
+    description: "Traffic percentage to allocate to deployment (0-100, for deploy online-deployment)"
+    required: false
   tags:
     description: "Tags to set (format: 'key1=value1,key2=value2')"
     required: false
@@ -81,7 +93,7 @@ runs:
   args:
     - ${{ inputs.verb }}
     - ${{ inputs.subject }}
-    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name }}
+    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name || inputs.endpoint-name || inputs.deployment-resource }}
     - --subscription
     - ${{ inputs.subscription-id }}
     - --resource-group
@@ -102,6 +114,8 @@ runs:
     - ${{ inputs.image-build-compute }}
     - --aml-token
     - ${{ inputs.aml-token }}
+    - --traffic-allocation
+    - ${{ inputs.traffic-allocation }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}

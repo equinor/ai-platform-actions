@@ -44,6 +44,7 @@ def data(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -149,6 +150,7 @@ def environment(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -193,7 +195,10 @@ def environment(
         req_int_version=True
     )
     # find latest registry version to use
-    latest_reg_version = int(ws_env.version) # Can cause error if set=0 like the other asset types.
+    try:
+        latest_reg_version=int(ws_env.version) # Can cause error if set=0 like the other asset types.
+    except:
+        latest_reg_version=0 # In the case that ws_version is None or a string not interpretable as an int
     if list_env_reg:
         for e in list_env_reg:
             lrv = int(e.version)
@@ -253,6 +258,7 @@ def model(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share model from workspace to registry"""
     print(f"[share model] Sharing model")
@@ -353,6 +359,7 @@ def component(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")

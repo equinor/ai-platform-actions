@@ -16,6 +16,7 @@ from .util import (
     load_safe_tags,
     empty_string_to_none,
     get_ref_properties,
+    get_deployment_ref_properties,
     github_output,
     Credential,
 )
@@ -37,9 +38,11 @@ FAILURE_STATES = {
     "notresponding",
     "not responding",
 }
+ENDPOINT_SUCCESS_STATES = {"succeeded"}
+ENDPOINT_FAILURE_STATES = {"failed", "canceled", "cancelled", "deleting"}
 
 # Azure REST API version for Machine Learning Services
-REST_API_VERSION = "2025-01-01-preview"
+REST_API_VERSION = "2025-10-01-preview" # The currently last API VERSION to have the necessary results
 
 app = typer.Typer()
 
@@ -243,6 +246,59 @@ def _get_job_state_from_rest(
     return None
 
 
+def _get_online_endpoint_state_from_rest(
+    subscription_id: str,
+    resource_group: str,
+    workspace_name: str,
+    endpoint_name: str,
+    access_token: str,
+) -> Optional[str]:
+    """
+    Get online endpoint provisioning state via Azure REST API.
+    """
+    base_url = _get_rest_api_base_url(subscription_id, resource_group, workspace_name)
+    url = f"{base_url}/onlineEndpoints/{endpoint_name}?api-version={REST_API_VERSION}"
+    
+    response_data = _call_rest_api(url, access_token)
+    if not response_data:
+        return None
+    
+    properties = response_data.get("properties", {})
+    provisioning_state = properties.get("provisioningState")
+    
+    if provisioning_state:
+        return str(provisioning_state).strip().lower()
+    
+    return None
+
+
+def _get_online_deployment_state_from_rest(
+    subscription_id: str,
+    resource_group: str,
+    workspace_name: str,
+    endpoint_name: str,
+    deployment_name: str,
+    access_token: str,
+) -> Optional[str]:
+    """
+    Get online deployment provisioning state via Azure REST API.
+    """
+    base_url = _get_rest_api_base_url(subscription_id, resource_group, workspace_name)
+    url = f"{base_url}/onlineEndpoints/{endpoint_name}/deployments/{deployment_name}?api-version={REST_API_VERSION}"
+    
+    response_data = _call_rest_api(url, access_token)
+    if not response_data:
+        return None
+    
+    properties = response_data.get("properties", {})
+    provisioning_state = properties.get("provisioningState")
+    
+    if provisioning_state:
+        return str(provisioning_state).strip().lower()
+    
+    return None
+
+
 def _normalize_state(state: Optional[Any]) -> Optional[str]:
     if state is None:
         return None
@@ -386,6 +442,37 @@ def _emit_github_output(entity: Any) -> None:
         github_output(output)
 
 
+def _emit_endpoint_github_output(entity: Any) -> None:
+    """Emit GitHub output for online endpoints."""
+    name = getattr(entity, "name", None)
+    resource_id = getattr(entity, "id", None)
+    scoring_uri = getattr(entity, "scoring_uri", None)
+    output: dict[str, str] = {}
+    if name:
+        output["reference"] = f"azureml:{name}"
+        output["version"] = str(name)
+    if resource_id:
+        output["resource-id"] = resource_id
+    if scoring_uri:
+        output["scoring-uri"] = scoring_uri
+    if output:
+        github_output(output)
+
+
+def _emit_deployment_github_output(entity: Any, endpoint_name: str) -> None:
+    """Emit GitHub output for online deployments."""
+    name = getattr(entity, "name", None)
+    resource_id = getattr(entity, "id", None)
+    output: dict[str, str] = {}
+    if name:
+        output["reference"] = f"azureml:{endpoint_name}/deployments/{name}"
+        output["version"] = str(name)
+    if resource_id:
+        output["resource-id"] = resource_id
+    if output:
+        github_output(output)
+
+
 def _require_version(subject: str, version: Optional[str]) -> str:
     if not version:
         raise typer.BadParameter(
@@ -410,6 +497,7 @@ def data(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor data] Waiting for data asset {data_ref}")
     data_props = get_ref_properties(data_ref)
@@ -464,6 +552,7 @@ def environment(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor environment] Waiting for environment {env_ref}")
     env_props = get_ref_properties(env_ref)
@@ -518,6 +607,7 @@ def component(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor component] Waiting for component {component_ref}")
     comp_props = get_ref_properties(component_ref)
@@ -572,6 +662,7 @@ def model(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor model] Waiting for model {model_ref}")
     model_props = get_ref_properties(model_ref)
@@ -626,6 +717,7 @@ def job(
     promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
 ):
     print(f"[waitfor job] Waiting for job {job_name}")
 
@@ -660,6 +752,120 @@ def job(
 
     print(f"[waitfor job] ✅ Job '{entity.name}' completed with state '{final_state}'.")
     _emit_github_output(entity)
+
+
+@app.command()
+def online_endpoint(
+    subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+    resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+    workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+    endpoint_name: str,
+    token: Optional[str] = None,
+    expires_on: Optional[int] = None,
+    tags: Annotated[
+        Optional[str],
+        typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+    ] = None,
+    registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+    promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+    image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+    aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+):
+    """Wait for an online endpoint to reach a terminal state."""
+    print(f"[waitfor online-endpoint] Waiting for online endpoint {endpoint_name}")
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    token_manager = TokenManager(token=token, expires_on=expires_on)
+
+    entity, final_state = _wait_for_asset(
+        subject="online-endpoint",
+        fetch_entity=lambda: client.online_endpoints.get(name=endpoint_name),
+        tags=tags,
+        fetch_state=lambda access_token: _get_online_endpoint_state_from_rest(
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            endpoint_name=endpoint_name,
+            access_token=access_token,
+        ),
+        token_manager=token_manager,
+    )
+
+    if final_state not in ENDPOINT_SUCCESS_STATES:
+        print(f"[waitfor online-endpoint] ❌ Online endpoint reached terminal state '{final_state}'.")
+        raise typer.Exit(code=1)
+
+    print(f"[waitfor online-endpoint] ✅ Online endpoint '{entity.name}' reached state '{final_state}'.")
+    _emit_endpoint_github_output(entity)
+
+
+@app.command()
+def online_deployment(
+    subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+    resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+    workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+    deployment_resource: str,
+    token: Optional[str] = None,
+    expires_on: Optional[int] = None,
+    tags: Annotated[
+        Optional[str],
+        typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+    ] = None,
+    registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+    promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+    image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+    aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+):
+    """Wait for an online deployment to reach a terminal state."""
+    deployment_ref = get_deployment_ref_properties(deployment_resource)
+    endpoint_name = deployment_ref.endpoint_name
+    deployment_name = deployment_ref.deployment_name
+
+    print(f"[waitfor online-deployment] Waiting for deployment {deployment_name} on endpoint {endpoint_name}")
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    token_manager = TokenManager(token=token, expires_on=expires_on)
+
+    entity, final_state = _wait_for_asset(
+        subject="online-deployment",
+        fetch_entity=lambda: client.online_deployments.get(
+            endpoint_name=endpoint_name,
+            name=deployment_name,
+        ),
+        tags=tags,
+        fetch_state=lambda access_token: _get_online_deployment_state_from_rest(
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            endpoint_name=endpoint_name,
+            deployment_name=deployment_name,
+            access_token=access_token,
+        ),
+        token_manager=token_manager,
+    )
+
+    if final_state not in ENDPOINT_SUCCESS_STATES:
+        print(f"[waitfor online-deployment] ❌ Online deployment reached terminal state '{final_state}'.")
+        raise typer.Exit(code=1)
+
+    print(f"[waitfor online-deployment] ✅ Deployment '{entity.name}' on endpoint '{endpoint_name}' reached state '{final_state}'.")
+    _emit_deployment_github_output(entity, endpoint_name)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ Utility functions for Inner Loop Action
 
 import os
 import re
-from typing import Optional
+from typing import Optional, Union
 from azure.core.credentials import AccessToken
 from azure.identity import DefaultAzureCredential
 from azure.ai.ml import MLClient
@@ -121,6 +121,13 @@ def empty_string_to_none(value: Optional[str]) -> Optional[str]:
     if value is None or (isinstance(value, str) and value.strip() == ""):
         return None
     return value
+
+
+def empty_string_to_none_int(value: Optional[str]) -> Optional[int]:
+    """Convert empty strings to None, or parse as int for optional int parameters"""
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        return None
+    return int(value)
 
 
 def check_and_replace_environment(ml_client_reg: MLClient, env: str) -> str:
@@ -312,3 +319,143 @@ def get_ref_properties(reference: str) -> namedtuple:
     # return ref(*d)
     ref = namedtuple('Ref',['name','version'])
     return ref(name=d['name'],version=d['version'])
+
+
+def get_deployment_ref_properties(resource_id: str) -> namedtuple:
+    """
+    Parse Azure ML online deployment resource ID and extract endpoint and deployment names.
+    
+    Expected format:
+    /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>/onlineEndpoints/<endpoint>/deployments/<deployment>
+    
+    Returns:
+        namedtuple with endpoint_name and deployment_name attributes
+    """
+    pattern = re.compile(
+        r'^(?:azureml:)?/subscriptions/[^/]+'
+        r'/resourceGroups/[^/]+'
+        r'/providers/Microsoft\.MachineLearningServices'
+        r'/workspaces/[^/]+'
+        r'/onlineEndpoints/(?P<endpoint_name>[^/]+)'
+        r'/deployments/(?P<deployment_name>[^/]+)$'
+    )
+    
+    match = pattern.match(resource_id)
+    if not match:
+        raise ValueError(
+            f"Resource ID '{resource_id}' does not match expected deployment format: "
+            "/subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
+        )
+    
+    DeploymentRef = namedtuple('DeploymentRef', ['endpoint_name', 'deployment_name'])
+    return DeploymentRef(
+        endpoint_name=match.group('endpoint_name'),
+        deployment_name=match.group('deployment_name')
+    )
+
+
+def load_online_endpoint_safe(source: str):
+    """
+    Load an online endpoint from a YAML file, with workaround for KubernetesOnlineEndpoint.
+    
+    The azure.ai.ml.load_online_endpoint function has a bug where it fails to load
+    KubernetesOnlineEndpoint YAML files. This function detects the schema and manually
+    instantiates KubernetesOnlineEndpoint when needed.
+    
+    Args:
+        source: Path to the YAML file
+        
+    Returns:
+        ManagedOnlineEndpoint or KubernetesOnlineEndpoint instance
+    """
+    from azure.ai.ml import load_online_endpoint
+    from azure.ai.ml.entities import KubernetesOnlineEndpoint, ManagedOnlineEndpoint
+    
+    with open(source, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    schema = config.get('$schema', '')
+    is_kubernetes = 'kubernetesOnlineEndpoint' in schema.lower()
+    
+    if not is_kubernetes:
+        return load_online_endpoint(source=source)
+    
+    return KubernetesOnlineEndpoint(
+        name=config.get('name'),
+        compute=config.get('compute'),
+        description=config.get('description'),
+        tags=config.get('tags'),
+        properties=config.get('properties'),
+        auth_mode=config.get('auth_mode', 'key'),
+    )
+
+
+def load_online_deployment_safe(source: str):
+    """
+    Load an online deployment from a YAML file, with workaround for KubernetesOnlineDeployment.
+    
+    The azure.ai.ml.load_online_deployment function has a bug where it fails to load
+    KubernetesOnlineDeployment YAML files. This function detects the schema and manually
+    instantiates KubernetesOnlineDeployment when needed.
+    
+    Args:
+        source: Path to the YAML file
+        
+    Returns:
+        ManagedOnlineDeployment or KubernetesOnlineDeployment instance
+    """
+    from azure.ai.ml import load_online_deployment
+    from azure.ai.ml.entities import CodeConfiguration,KubernetesOnlineDeployment, ResourceRequirementsSettings, ResourceSettings
+    
+    with open(source, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    schema = config.get('$schema', '')
+    is_kubernetes = 'kubernetesonlinedeployment' in schema.lower()
+    
+    if not is_kubernetes:
+        return load_online_deployment(source=source)
+    
+    base_path = Path(source).parent
+    
+    code_config = config.get('code_configuration',{})
+    resources_config = config.get('resources', {})
+    requests_config = resources_config.get('requests', {})
+    limits_config = resources_config.get('limits', {})
+    
+    code_configuration = CodeConfiguration(
+        code=code_config.get('code'),
+        scoring_script=code_config.get('scoring_script')
+    )
+
+    resources = ResourceRequirementsSettings(
+        requests=ResourceSettings(
+            cpu=requests_config.get('cpu'),
+            memory=requests_config.get('memory'),
+            gpu=requests_config.get('gpu'),
+        ),
+        limits=ResourceSettings(
+            cpu=limits_config.get('cpu'),
+            memory=limits_config.get('memory'),
+            gpu=limits_config.get('gpu'),
+        ),
+    )
+    
+    return KubernetesOnlineDeployment(
+        name=config.get('name'),
+        endpoint_name=config.get('endpoint_name'),
+        model=config.get('model'),
+        environment=config.get('environment'),
+        code_configuration=code_configuration,
+        scoring_script=config.get('scoring_script'),
+        code_path=config.get('code_path'),
+        instance_type=config.get('instance_type'),
+        instance_count=config.get('instance_count', 1),
+        app_insights_enabled=config.get('app_insights_enabled', False),
+        resources=resources,
+        description=config.get('description'),
+        tags=config.get('tags'),
+        properties=config.get('properties'),
+        environment_variables=config.get('environment_variables'),
+        base_path=str(base_path),
+    )
