@@ -195,7 +195,10 @@ def environment(
         req_int_version=True
     )
     # find latest registry version to use
-    latest_reg_version=ws_env.version # Can cause error if set=0 like the other asset types.
+    try:
+        latest_reg_version=int(ws_env.version) # Can cause error if set=0 like the other asset types.
+    except:
+        latest_reg_version=0 # In the case that ws_version is None or a string not interpretable as an int
     if list_env_reg:
         for e in list_env_reg:
             lrv = int(e.version)
