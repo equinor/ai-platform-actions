@@ -2,10 +2,10 @@
 Share operations for Inner Loop Action
 """
 
+import os
 import typer
 from typing import Optional, Annotated
 from .util import (
-    check_and_replace_environment,
     get_new_asset_version,
     get_registry_client,
     get_workspace_client,
@@ -160,6 +160,7 @@ def environment(
     print(f"  Tags: {tags}")
 
     env_name = get_ref_properties(env_ref).name
+    env_version = get_ref_properties(env_ref).version
 
     print("[share environment] Creating workspace client")
     ws_client = get_workspace_client(
@@ -174,6 +175,7 @@ def environment(
     list_env_ws = getenvironment(
         client=ws_client,
         name=env_name,
+        version=env_version,
         tags=tags
     )
     if len(list_env_ws)<1:
@@ -361,6 +363,8 @@ def component(
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
+    registry_env_ref = os.environ.get("REGISTRY_ENV_REF")
+
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")
     print(f"  Subscription: {subscription_id}")
@@ -368,9 +372,10 @@ def component(
     print(f"  Workspace: {workspace_name}")
     print(f"  Registry: {registry_name}")
     print(f"  Component-ID (of WS): {component_ref}")
+    print(f"  Components target Environment-ID (in Registry): {registry_env_ref}")
     print(f"  Tags: {tags}")
     print(f"  Promote Stage: {promote_stage}")
-    
+
     c_ref = get_ref_properties(component_ref)
     component_name = c_ref.name
     component_version = c_ref.version
@@ -382,7 +387,8 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_ws = getcomponent(client=ws_client,name=component_name)
+
+    list_comp_ws = getcomponent(client=ws_client, name=component_name, version=component_version)
     if len(list_comp_ws)<1:
         raise ValueError("There is no such component in the workspace")
     if len(list_comp_ws)>1:
@@ -402,19 +408,12 @@ def component(
         req_int_version=True
     )
 
-    latest_reg_version=0
-    if list_comp_reg:
-        for c in list_comp_reg:
-            lrv = int(c.version)
-            if lrv>latest_reg_version:
-                latest_reg_version=lrv
-    latest_reg_version=str(latest_reg_version+1)
-
     with tempfile.TemporaryDirectory() as tmpdirname:
         print('Created temporary directory:', tmpdirname)
         ws_client.components.download(name=ws_comp.name,download_path=tmpdirname,version=ws_comp.version)
         path_to_yaml = get_yaml_from_folder(asset_type="component",folder_path=Path(tmpdirname))
         component = load_component(source=path_to_yaml)
+        
         merged_tags = component.tags or {}
         if tags:
             merged_tags.update(tags)
@@ -422,9 +421,17 @@ def component(
             merged_tags.update({'stage':promote_stage})
         component.tags = merged_tags
 
-        component.environment = check_and_replace_environment(
-            reg_client, component.environment
-        )
+        component.environment = registry_env_ref
+
+        # Determine target version number in registry right before sharing
+        # to minimize chance of it becoming outdated
+        latest_reg_version=0
+        if list_comp_reg:
+            for c in list_comp_reg:
+                lrv = int(c.version)
+                if lrv>latest_reg_version:
+                    latest_reg_version=lrv
+        latest_reg_version=str(latest_reg_version+1)
 
         reg_comp = reg_client.components.create_or_update(
             component=component,
