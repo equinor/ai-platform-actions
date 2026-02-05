@@ -24,6 +24,7 @@ from .getasset import (
 import tempfile
 from azure.ai.ml import load_component
 from pathlib import Path
+from time import sleep
 
 app = typer.Typer()
 
@@ -123,7 +124,17 @@ def data(
         client=reg_client,
         name=data_name,
         version=latest_reg_version
-    )[0]
+    )
+
+    if len(data_result) < 1:
+        sleep(5)
+        data_result=getdata(
+            client=reg_client,
+            name=data_name,
+            version=latest_reg_version
+        )
+
+    data_result = data_result[0]
 
     print(f"[share data] ✅ Data shared successfully")
     print(f"  Name: {data_result.name}")
@@ -232,7 +243,18 @@ def environment(
         client=reg_client,
         name=env_name,
         version=latest_reg_version
-    )[0]
+    )
+
+    if len(environment_result) < 1:
+        sleep(5)
+        environment_result = getenvironment(
+            client=reg_client,
+            name=env_name,
+            version=latest_reg_version
+        )
+
+    environment_result = environment_result[0]
+
 
     print(f"[share environment] ✅ Environment shared successfully")
     print(f"  Name: {environment_result.name}")
@@ -335,7 +357,17 @@ def model(
         client=reg_client,
         name=model_name,
         version=latest_reg_version
-    )[0]
+    )
+
+    if len(model_result) < 1:
+        sleep(5)
+        model_result = getmodel(
+            client=reg_client,
+            name=model_name,
+            version=latest_reg_version
+        )
+
+    model_result = model_result[0]
 
     print(f"[share model] ✅ Model shared successfully")
     print(f"  Name: {model_result.name}")
@@ -442,7 +474,17 @@ def component(
         client=reg_client,
         name=component_name,
         version=latest_reg_version
-    )[0]
+    )
+    
+    if len(component_result) < 1:
+        sleep(5)
+        component_result = getcomponent(
+            client=reg_client,
+            name=component_name,
+            version=latest_reg_version
+        )
+
+    component_result = component_result[0]
 
     print(f"[share component] ✅ Component shared successfully")
     print(f"  Name: {component_result.name}")
