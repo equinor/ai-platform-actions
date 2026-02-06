@@ -396,6 +396,8 @@ def component(
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     registry_env_ref = os.environ.get("REGISTRY_ENV_REF")
+    if not registry_env_ref or registry_env_ref.strip() == "":
+        raise ValueError("registry-env-ref is required for share component operations. ")
 
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")
@@ -433,17 +435,11 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_reg = getcomponent(
-        client=reg_client,
-        name=component_name,
-        #tags=tags,
-        req_int_version=True
-    )
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         print('Created temporary directory:', tmpdirname)
-        ws_client.components.download(name=ws_comp.name,download_path=tmpdirname,version=ws_comp.version)
-        path_to_yaml = get_yaml_from_folder(asset_type="component",folder_path=Path(tmpdirname))
+        ws_client.components.download(name=ws_comp.name, download_path=tmpdirname, version=ws_comp.version)
+        path_to_yaml = get_yaml_from_folder(asset_type="component", folder_path=Path(tmpdirname))
         component = load_component(source=path_to_yaml)
         
         merged_tags = component.tags or {}
@@ -455,9 +451,19 @@ def component(
 
         component.environment = registry_env_ref
 
+        list_comp_reg = getcomponent(
+            client=reg_client,
+            name=component_name,
+            req_int_version=True
+        )
+
         # Determine target version number in registry right before sharing
         # to minimize chance of it becoming outdated
-        latest_reg_version=0
+        try:
+            latest_reg_version = int(list_comp_reg[0].version)
+        except:
+            latest_reg_version = 0
+        
         if list_comp_reg:
             for c in list_comp_reg:
                 lrv = int(c.version)
