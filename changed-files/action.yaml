@@ -23,7 +23,7 @@ outputs:
     description: 'List of changed Azure ML asset paths'
     value: ${{ steps.detect-changes.outputs.changed-files }}
   changed-files-json:
-    description: 'JSON array of Azure ML assets with asset-type and asset-path fields (deploy-x compatible)'
+    description: 'JSON array of Azure ML assets with subject and filepath fields (inner-loop compatible)'
     value: ${{ steps.detect-changes.outputs.changed-files-json }}
   has-changes:
     description: 'Whether any Azure ML assets were affected by changes'
@@ -79,7 +79,7 @@ runs:
     - name: Input summary
       shell: bash
       run: |
-        echo "🔎 changed-files input summary:"
+        echo "changed-files input summary:"
         echo "  base-ref:      '${{ inputs.base-ref }}'"
         echo "  head-ref:      '${{ inputs.head-ref }}'"
         echo "  filter-pattern:'${{ inputs.filter-pattern }}'"
@@ -214,7 +214,7 @@ runs:
         ASSET_MAP_FILE=$(mktemp)
         find . -name "*.yaml" -o -name "*.yml" | while read -r yaml_file; do
           if [ -f "$yaml_file" ]; then
-            SCHEMA_LINE=$(head -n 1 "$yaml_file" | grep '\$schema:' || true)
+            SCHEMA_LINE=$(grep -m1 '\$schema:' "$yaml_file" || true)
             ASSET_TYPE="unknown"
             if [[ "$SCHEMA_LINE" == *"commandComponent.schema.json"* ]]; then
               ASSET_TYPE="component"
@@ -244,7 +244,7 @@ runs:
         while IFS= read -r file; do
           # Direct YAML asset file change
           if [[ "$file" =~ \.(yaml|yml)$ ]] && [ -f "$file" ]; then
-            SCHEMA_LINE=$(head -n 1 "$file" | grep '\$schema:' || true)
+            SCHEMA_LINE=$(grep -m1 '\$schema:' "$file" || true)
             ASSET_TYPE="unknown"
             if [[ "$SCHEMA_LINE" == *"commandComponent.schema.json"* ]]; then
               ASSET_TYPE="component"
@@ -261,7 +261,7 @@ runs:
             fi
             # Add to asset list if type is recognized and not already processed
             if [[ "$ASSET_TYPE" != "unknown" ]] && [[ ! "$PROCESSED_ASSETS" =~ "$file" ]]; then
-              ASSET_LIST=$(echo "$ASSET_LIST" | jq --arg type "$ASSET_TYPE" --arg path "$file" '. += [{"asset-type": $type, "asset-path": $path}]')
+              ASSET_LIST=$(echo "$ASSET_LIST" | jq --arg type "$ASSET_TYPE" --arg path "$file" '. += [{"subject": $type, "filepath": $path}]')
               PROCESSED_ASSETS="$PROCESSED_ASSETS $file"
               echo "Direct asset change detected: $ASSET_TYPE at $file"
             fi
@@ -301,7 +301,7 @@ runs:
                 esac
                 
                 if [ "$SHOULD_INCLUDE" = true ]; then
-                  ASSET_LIST=$(echo "$ASSET_LIST" | jq --arg type "$asset_type" --arg path "$yaml_path" '. += [{"asset-type": $type, "asset-path": $path}]')
+                  ASSET_LIST=$(echo "$ASSET_LIST" | jq --arg type "$asset_type" --arg path "$yaml_path" '. += [{"subject": $type, "filepath": $path}]')
                   PROCESSED_ASSETS="$PROCESSED_ASSETS $yaml_path"
                   echo "Related file change detected: $file affects $asset_type at $yaml_path"
                 fi
@@ -324,7 +324,7 @@ runs:
         fi
         
         # Remove duplicates from ASSET_LIST (in case same asset was added multiple times)
-        ASSET_LIST=$(echo "$ASSET_LIST" | jq 'unique_by(.["asset-path"])')
+        ASSET_LIST=$(echo "$ASSET_LIST" | jq 'unique_by(.["filepath"])')
         # Format output based on requested format
         case "${{ inputs.output-format }}" in
           "json")
@@ -332,16 +332,16 @@ runs:
             echo "changed-files-json=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
             ;;
           "newline-separated")
-            # Output asset-paths, one per line
-            PATHS=$(echo "$ASSET_LIST" | jq -r '.[]."asset-path"')
+            # Output filepaths, one per line
+            PATHS=$(echo "$ASSET_LIST" | jq -r '.[]."filepath"')
             echo "changed-files<<EOF" >> "$GITHUB_OUTPUT"
             echo "$PATHS" >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
             echo "changed-files-json=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
             ;;
           *)
-            # Default: space-separated asset-paths
-            SPACE_SEPARATED=$(echo "$ASSET_LIST" | jq -r '.[]."asset-path"' | xargs)
+            # Default: space-separated filepaths
+            SPACE_SEPARATED=$(echo "$ASSET_LIST" | jq -r '.[]."filepath"' | xargs)
             echo "changed-files=$SPACE_SEPARATED" >> "$GITHUB_OUTPUT"
             echo "changed-files-json=$(echo "$ASSET_LIST" | jq -c '.')" >> "$GITHUB_OUTPUT"
             ;;

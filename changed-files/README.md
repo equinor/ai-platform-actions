@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Changed Files action detects Azure ML asset files (environments, components, data, jobs) that have been modified between two Git references and provides them in various output formats with asset-type detection. This action inspects YAML files' `$schema` fields to automatically determine asset types, making it perfect for integration with the deploy-x action for automated Azure ML deployments.
+The Changed Files action detects Azure ML asset files (environments, components, data, jobs) that have been modified between two Git references. It outputs a JSON array with `subject` and `filepath` fields that map directly to the [inner-loop](../inner-loop/README.md) action's inputs, enabling automated detect-and-deploy workflows.
+
+The action inspects each YAML file's `$schema` field to determine the asset type automatically.
 
 ## Usage
 
@@ -11,8 +13,7 @@ The Changed Files action detects Azure ML asset files (environments, components,
   uses: equinor/ai-platform-actions/changed-files@main
   id: changes
   with:
-    filter-pattern: "*.yaml"  # Optional: only YAML files
-    output-format: "json"     # Optional: output format
+    filter-pattern: "*.yaml"
 
 - name: Check if files changed
   if: steps.changes.outputs.has-changes == 'true'
@@ -35,23 +36,28 @@ The Changed Files action detects Azure ML asset files (environments, components,
 | Output | Description |
 |--------|-------------|
 | `changed-files` | List of changed asset paths in the specified format |
-| `changed-files-json` | JSON array of objects with `asset-type` and `asset-path` fields (compatible with deploy-x) |
+| `changed-files-json` | JSON array of objects with `subject` and `filepath` fields (inner-loop compatible) |
 | `has-changes` | Boolean indicating whether any valid Azure ML asset files were changed |
 
 ## Asset Type Detection
 
 The action automatically detects Azure ML asset types by inspecting the `$schema` field in YAML files:
 
-- **Components**: Files with `commandComponent.schema.json` in `$schema`
-- **Environments**: Files with `environment.schema.json` in `$schema` 
-- **Data Assets**: Files with `data.schema.json` or `mltable.schema.json` in `$schema`
-- **Jobs**: Files with `commandJob.schema.json` or `pipelineJob.schema.json` in `$schema`
+| Detected `subject` | Schema pattern |
+|---|---|
+| `component` | `commandComponent.schema.json` |
+| `environment` | `environment.schema.json` |
+| `data` | `data.schema.json` or `mltable.schema.json` |
+| `job` | `commandJob.schema.json` or `pipelineJob.schema.json` |
+
+Asset types without a standard `$schema` pattern (`model`, `online-endpoint`, `online-deployment`) are not auto-detected and should be deployed directly via inner-loop.
 
 Only files with recognized schemas are included in the output. Non-YAML files or YAML files without recognized schemas are ignored.
 
 ## Examples
 
 ### Basic Usage
+
 ```yaml
 - name: Detect changed Azure ML assets
   uses: equinor/ai-platform-actions/changed-files@main
@@ -64,74 +70,96 @@ Only files with recognized schemas are included in the output. Non-YAML files or
     echo "Asset details: ${{ steps.changes.outputs.changed-files-json }}"
 ```
 
-### Filter by Pattern
-```yaml
-- name: Detect changed YAML files
-  uses: equinor/ai-platform-actions/changed-files@main
-  id: yaml-changes
-  with:
-    filter-pattern: "*.yaml"
+### Filter and Ignore Patterns
 
-- name: Detect changed assets in components directory
-  uses: equinor/ai-platform-actions/changed-files@main
-  id: component-changes
-  with:
-    filter-pattern: "components/**"
-```
-
-### Ignore Patterns
 ```yaml
-- name: Detect changed files excluding tests
+- name: Detect YAML files but ignore test and docs
   uses: equinor/ai-platform-actions/changed-files@main
-  id: production-changes
+  id: changes
   with:
+    filter-pattern: "**/*.yaml"
     ignore-pattern: "test/**"
-
-- name: Detect YAML files but ignore documentation
-  uses: equinor/ai-platform-actions/changed-files@main
-  id: yaml-no-docs
-  with:
-    filter-pattern: "*.yaml"
-    ignore-pattern: "docs/**"
 ```
 
 ### Custom References
+
 ```yaml
 - name: Compare specific commits
   uses: equinor/ai-platform-actions/changed-files@main
-  id: custom-changes
+  id: changes
   with:
     base-ref: "abc123"
     head-ref: "def456"
     output-format: "json"
 ```
 
-### JSON Output with Asset Types
+## Integration with Inner-Loop
+
+The `changed-files-json` output produces objects with `subject` and `filepath` fields that map directly to inner-loop inputs. Use a [matrix strategy](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow) to deploy each changed asset in parallel:
+
 ```yaml
 jobs:
-  detect-changes:
+  detect:
     runs-on: ubuntu-latest
     outputs:
-      changed-assets: ${{ steps.changes.outputs.changed-files-json }}
+      assets: ${{ steps.changes.outputs.changed-files-json }}
       has-changes: ${{ steps.changes.outputs.has-changes }}
     steps:
       - uses: equinor/ai-platform-actions/changed-files@main
         id: changes
         with:
           filter-pattern: "**/*.yaml"
-          output-format: "json"
+          ignore-pattern: "test/**"
 
-  deploy-assets:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has-changes == 'true'
+  deploy:
+    needs: detect
+    if: needs.detect.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        asset: ${{ fromJson(needs.detect-changes.outputs.changed-assets) }}
+        asset: ${{ fromJson(needs.detect.outputs.assets) }}
+      fail-fast: false
     steps:
-      - name: Deploy asset
-        run: |
-          echo "Deploying ${{ matrix.asset.asset-type }}: ${{ matrix.asset.asset-path }}"
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: equinor/ai-platform-actions/inner-loop@main
+        with:
+          verb: deploy
+          subject: ${{ matrix.asset.subject }}
+          filepath: ${{ matrix.asset.filepath }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AZURE_ML_WORKSPACE }}
+```
+
+### With Override-Inputs
+
+Use [override-inputs](../override-inputs/README.md) between change detection and deployment to modify YAML values ephemerally (e.g., swapping compute targets per environment):
+
+```yaml
+      - uses: actions/checkout@v4
+
+      - uses: equinor/ai-platform-actions/override-inputs@main
+        with:
+          file: ${{ matrix.asset.filepath }}
+          path: settings.default_compute
+          set-value: azureml:my-gpu-cluster
+
+      - uses: equinor/ai-platform-actions/inner-loop@main
+        with:
+          verb: deploy
+          subject: ${{ matrix.asset.subject }}
+          filepath: ${{ matrix.asset.filepath }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AZURE_ML_WORKSPACE }}
 ```
 
 ## Filter Patterns
@@ -157,8 +185,6 @@ When both patterns are specified:
 1. **ignore-pattern** is applied first (excludes files)
 2. **filter-pattern** is applied second (includes files from remaining)
 
-Example: `filter-pattern: "*.yaml"` and `ignore-pattern: "test/**"` will include all YAML files except those in test directories.
-
 ## Event Type Support
 
 The action automatically detects the appropriate Git references based on the GitHub event type:
@@ -171,54 +197,31 @@ The action automatically detects the appropriate Git references based on the Git
 ## Output Formats
 
 ### Space-separated (default)
-Returns only the asset paths:
 ```
 environments/dev.yaml components/train.yaml data/dataset.yaml
 ```
 
 ### JSON
-Returns array of objects with asset-type and asset-path:
 ```json
 [
-  {"asset-type": "environment", "asset-path": "environments/dev.yaml"},
-  {"asset-type": "component", "asset-path": "components/train.yaml"},
-  {"asset-type": "data", "asset-path": "data/dataset.yaml"}
+  {"subject": "environment", "filepath": "environments/dev.yaml"},
+  {"subject": "component", "filepath": "components/train.yaml"},
+  {"subject": "data", "filepath": "data/dataset.yaml"}
 ]
 ```
 
 ### Newline-separated
-Returns only the asset paths, one per line:
 ```
 environments/dev.yaml
 components/train.yaml
 data/dataset.yaml
 ```
 
-**Note**: The `changed-files-json` output always contains the full object format with asset-type information, regardless of the `output-format` setting.
+The `changed-files-json` output always contains the full JSON object format regardless of the `output-format` setting.
 
-## Integration with Deploy-X
+## Related Documentation
 
-This action is designed to work seamlessly with deploy-x for automated Azure ML asset deployments. The `changed-files-json` output provides the exact format expected by deploy-x:
-
-```yaml
-- name: Detect changed Azure ML assets
-  uses: equinor/ai-platform-actions/changed-files@main
-  id: changes
-  with:
-    filter-pattern: "**/*.yaml"
-    ignore-pattern: "test/**"
-
-- name: Deploy changed assets
-  if: steps.changes.outputs.has-changes == 'true'
-  uses: equinor/ai-platform-actions/deploy-x@main
-  with:
-    client-id: ${{ vars.AZURE_CLIENT_ID }}
-    config: ${{ base64(steps.changes.outputs.changed-files-json) }}
-```
-
-### Why This Integration Works
-
-1. **Asset Type Detection**: The action automatically detects whether a YAML file is an environment, component, data asset, or job by inspecting its `$schema` field
-2. **Compatible Format**: The JSON output matches exactly what deploy-x expects: objects with `asset-type` and `asset-path` fields
-3. **Base64 Encoding**: Simply wrap the JSON output with `base64()` function to meet deploy-x's input requirements
-4. **Filtering**: Use pattern matching to target specific directories or file types for deployment
+- [Inner-Loop Action](../inner-loop/README.md)
+- [Override-Inputs Action](../override-inputs/README.md)
+- [Azure ML YAML schemas](https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-overview)
+- [GitHub Actions matrix strategy](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow)
