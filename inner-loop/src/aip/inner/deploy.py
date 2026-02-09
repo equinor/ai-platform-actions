@@ -341,6 +341,11 @@ def job(
     #with open(filepath, "r") as file:
     #    job_config = yaml.safe_load(file)
     job_config = load_job(source=filepath)
+    if tags:
+        if job_config.tags:
+            job_config.tags.update(tags)
+        else:
+            job_config.tags = tags
     
     print("[deploy job] Submitting job to workspace")
     job_result = client.jobs.create_or_update(job_config)
