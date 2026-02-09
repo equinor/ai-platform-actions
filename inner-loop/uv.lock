@@ -11,6 +11,7 @@ dependencies = [
     { name = "azure-core" },
     { name = "azure-identity" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "typer" },
 ]
 
@@ -20,6 +21,7 @@ requires-dist = [
     { name = "azure-core", specifier = ">=1.37.0" },
     { name = "azure-identity", specifier = ">=1.25.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "typer", specifier = ">=0.20.0" },
 ]
 

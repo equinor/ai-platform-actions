@@ -3,16 +3,19 @@ description: Unified action for Azure ML operations using command pattern
 
 inputs:
   verb:
-    description: "Action verb (deploy, share)"
+    description: "Action verb (deploy, share, waitfor, delete)"
     required: true
   subject:
-    description: "Target subject (data, environment, component, model, job)"
+    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment)"
     required: true
   token:
     description: "From azLogin action. Required unless running locally."
     required: false
   expires-on:
     description: "From azLogin action. Required unless running locally."
+    required: false
+  aml-token:
+    description: "Access token with Azure ML scope (https://ml.azure.com/.default). Required for job operations."
     required: false
   tenant-id:
     description: "Azure tenant ID"
@@ -38,6 +41,9 @@ inputs:
   component-ref:
     description: "Component reference (for share component operations)"
     required: false
+  registry-env-ref:
+    description: "Reference to environment in a registry for component sharing operations"
+    required: false
   data-ref:
     description: "Data reference (for share data operations)"
     required: false
@@ -46,6 +52,21 @@ inputs:
     required: false
   model-ref:
     description: "Model reference (for share model operations)"
+    required: false
+  job-name:
+    description: "Azure ML job name (for waitfor job operations)"
+    required: false
+  endpoint-name:
+    description: "Azure ML online endpoint name"
+    required: false
+  deployment-name:
+    description: "Azure ML online deployment name (for deploy online-deployment)"
+    required: false
+  deployment-resource:
+    description: "Azure ML online deployment resource ID (for waitfor/delete online-deployment). Format: /subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
+    required: false
+  traffic-allocation:
+    description: "Traffic percentage to allocate to deployment (0-100, for deploy online-deployment)"
     required: false
   tags:
     description: "Tags to set (format: 'key1=value1,key2=value2')"
@@ -56,6 +77,10 @@ inputs:
   image-build-compute:
     description: "When building environments and you need specific compute instead of serverless, set this to the name of the cluster in the workspace"
     required: false
+  timeout-minutes:
+    description: "When using waitfor verb, override default timeout of 30"
+    required: false
+    default: "30"
 
 outputs:
   resource-id:
@@ -71,7 +96,7 @@ runs:
   args:
     - ${{ inputs.verb }}
     - ${{ inputs.subject }}
-    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref }}
+    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name || inputs.endpoint-name || inputs.deployment-resource }}
     - --subscription
     - ${{ inputs.subscription-id }}
     - --resource-group
@@ -90,5 +115,11 @@ runs:
     - ${{ inputs.promote-stage }}
     - --image-build-compute
     - ${{ inputs.image-build-compute }}
+    - --aml-token
+    - ${{ inputs.aml-token }}
+    - --traffic-allocation
+    - ${{ inputs.traffic-allocation }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
+    TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+    REGISTRY_ENV_REF: ${{ inputs.registry-env-ref }}

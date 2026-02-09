@@ -2,10 +2,10 @@
 Share operations for Inner Loop Action
 """
 
+import os
 import typer
 from typing import Optional, Annotated
 from .util import (
-    check_and_replace_environment,
     get_new_asset_version,
     get_registry_client,
     get_workspace_client,
@@ -24,6 +24,7 @@ from .getasset import (
 import tempfile
 from azure.ai.ml import load_component
 from pathlib import Path
+from time import sleep
 
 app = typer.Typer()
 
@@ -41,7 +42,10 @@ def data(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -84,7 +88,7 @@ def data(
     list_data_reg = getdata(
         client=reg_client,
         name=data_name,
-        tags=tags,
+        #tags=tags,
         req_int_version=True
     )
     # find latest registry version to use
@@ -120,7 +124,17 @@ def data(
         client=reg_client,
         name=data_name,
         version=latest_reg_version
-    )[0]
+    )
+
+    if len(data_result) < 1:
+        sleep(5)
+        data_result=getdata(
+            client=reg_client,
+            name=data_name,
+            version=latest_reg_version
+        )
+
+    data_result = data_result[0]
 
     print(f"[share data] ✅ Data shared successfully")
     print(f"  Name: {data_result.name}")
@@ -144,7 +158,10 @@ def environment(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -154,6 +171,7 @@ def environment(
     print(f"  Tags: {tags}")
 
     env_name = get_ref_properties(env_ref).name
+    env_version = get_ref_properties(env_ref).version
 
     print("[share environment] Creating workspace client")
     ws_client = get_workspace_client(
@@ -168,6 +186,7 @@ def environment(
     list_env_ws = getenvironment(
         client=ws_client,
         name=env_name,
+        version=env_version,
         tags=tags
     )
     if len(list_env_ws)<1:
@@ -185,17 +204,20 @@ def environment(
     list_env_reg = getenvironment(
         client=reg_client,
         name=env_name,
-        tags=tags,
+        #tags=tags, # tags may be unique, so DON'T filter with them
         req_int_version=True
     )
     # find latest registry version to use
-    latest_reg_version=0
+    try:
+        latest_reg_version=int(ws_env.version) # Can cause error if set=0 like the other asset types.
+    except:
+        latest_reg_version=0 # In the case that ws_version is None or a string not interpretable as an int
     if list_env_reg:
         for e in list_env_reg:
             lrv = int(e.version)
             if lrv>latest_reg_version:
                 latest_reg_version=lrv
-    latest_reg_version=str(latest_reg_version+1)
+        latest_reg_version=str(latest_reg_version+1) # only if name exists
     
     print("[share environment] Sharing environment to registry")
     ws_client.environments.share(
@@ -221,7 +243,18 @@ def environment(
         client=reg_client,
         name=env_name,
         version=latest_reg_version
-    )[0]
+    )
+
+    if len(environment_result) < 1:
+        sleep(5)
+        environment_result = getenvironment(
+            client=reg_client,
+            name=env_name,
+            version=latest_reg_version
+        )
+
+    environment_result = environment_result[0]
+
 
     print(f"[share environment] ✅ Environment shared successfully")
     print(f"  Name: {environment_result.name}")
@@ -246,7 +279,10 @@ def model(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
     """Share model from workspace to registry"""
     print(f"[share model] Sharing model")
@@ -284,7 +320,7 @@ def model(
     list_m_reg = getmodel(
         client=reg_client,
         name=model_name,
-        tags=tags,
+        #tags=tags,
         req_int_version=True
     )
 
@@ -321,7 +357,17 @@ def model(
         client=reg_client,
         name=model_name,
         version=latest_reg_version
-    )[0]
+    )
+
+    if len(model_result) < 1:
+        sleep(5)
+        model_result = getmodel(
+            client=reg_client,
+            name=model_name,
+            version=latest_reg_version
+        )
+
+    model_result = model_result[0]
 
     print(f"[share model] ✅ Model shared successfully")
     print(f"  Name: {model_result.name}")
@@ -344,8 +390,15 @@ def component(
             Optional[str],
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
-        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None
+        promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
     ):
+    registry_env_ref = os.environ.get("REGISTRY_ENV_REF")
+    if not registry_env_ref or registry_env_ref.strip() == "":
+        raise ValueError("registry-env-ref is required for share component operations. ")
+
     """Share component from workspace to registry"""
     print(f"[share component] Sharing component")
     print(f"  Subscription: {subscription_id}")
@@ -353,9 +406,10 @@ def component(
     print(f"  Workspace: {workspace_name}")
     print(f"  Registry: {registry_name}")
     print(f"  Component-ID (of WS): {component_ref}")
+    print(f"  Components target Environment-ID (in Registry): {registry_env_ref}")
     print(f"  Tags: {tags}")
     print(f"  Promote Stage: {promote_stage}")
-    
+
     c_ref = get_ref_properties(component_ref)
     component_name = c_ref.name
     component_version = c_ref.version
@@ -367,7 +421,8 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_ws = getcomponent(client=ws_client,name=component_name)
+
+    list_comp_ws = getcomponent(client=ws_client, name=component_name, version=component_version)
     if len(list_comp_ws)<1:
         raise ValueError("There is no such component in the workspace")
     if len(list_comp_ws)>1:
@@ -380,26 +435,13 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_reg = getcomponent(
-        client=reg_client,
-        name=component_name,
-        tags=tags,
-        req_int_version=True
-    )
-
-    latest_reg_version=0
-    if list_comp_reg:
-        for c in list_comp_reg:
-            lrv = int(c.version)
-            if lrv>latest_reg_version:
-                latest_reg_version=lrv
-    latest_reg_version=str(latest_reg_version+1)
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         print('Created temporary directory:', tmpdirname)
-        ws_client.components.download(name=ws_comp.name,download_path=tmpdirname,version=ws_comp.version)
-        path_to_yaml = get_yaml_from_folder(asset_type="component",folder_path=Path(tmpdirname))
+        ws_client.components.download(name=ws_comp.name, download_path=tmpdirname, version=ws_comp.version)
+        path_to_yaml = get_yaml_from_folder(asset_type="component", folder_path=Path(tmpdirname))
         component = load_component(source=path_to_yaml)
+        
         merged_tags = component.tags or {}
         if tags:
             merged_tags.update(tags)
@@ -407,9 +449,27 @@ def component(
             merged_tags.update({'stage':promote_stage})
         component.tags = merged_tags
 
-        component.environment = check_and_replace_environment(
-            reg_client, component.environment
+        component.environment = registry_env_ref
+
+        list_comp_reg = getcomponent(
+            client=reg_client,
+            name=component_name,
+            req_int_version=True
         )
+
+        # Determine target version number in registry right before sharing
+        # to minimize chance of it becoming outdated
+        try:
+            latest_reg_version = int(list_comp_reg[0].version)
+        except:
+            latest_reg_version = 0
+        
+        if list_comp_reg:
+            for c in list_comp_reg:
+                lrv = int(c.version)
+                if lrv>latest_reg_version:
+                    latest_reg_version=lrv
+        latest_reg_version=str(latest_reg_version+1)
 
         reg_comp = reg_client.components.create_or_update(
             component=component,
@@ -420,7 +480,17 @@ def component(
         client=reg_client,
         name=component_name,
         version=latest_reg_version
-    )[0]
+    )
+    
+    if len(component_result) < 1:
+        sleep(5)
+        component_result = getcomponent(
+            client=reg_client,
+            name=component_name,
+            version=latest_reg_version
+        )
+
+    component_result = component_result[0]
 
     print(f"[share component] ✅ Component shared successfully")
     print(f"  Name: {component_result.name}")

@@ -2,35 +2,49 @@
 Utility functions for Inner Loop Action
 """
 
+import datetime
 import os
 import re
-from typing import Optional
+import secrets
+from collections import namedtuple
+from pathlib import Path
+from typing import Optional, Union
+
+import yaml
+from azure.ai.ml import MLClient
 from azure.core.credentials import AccessToken
 from azure.identity import DefaultAzureCredential
-from azure.ai.ml import MLClient
-import datetime
-import secrets
-from pathlib import Path
-import yaml
-from collections import namedtuple
+
+AML_SCOPE = "https://ml.azure.com/.default"
+
 
 class Credential:
-    """Simple credential wrapper for Azure SDK"""
-    def __init__(self, access_token: str, expires_on: int):
+    """
+    Credential wrapper for Azure SDK that handles Azure ML's scope requirements.
+    
+    Azure ML operations (especially job submission) require tokens with the
+    https://ml.azure.com/.default scope. When this scope is requested, the
+    wrapper returns the dedicated AML token if provided.
+    """
+    def __init__(self, access_token: str, expires_on: int, aml_token: Optional[str] = None):
         self._access_token = AccessToken(token=access_token, expires_on=expires_on)
+        self._aml_token = AccessToken(token=aml_token, expires_on=expires_on) if aml_token else None
     
     def get_token(self, *scopes: str, claims: str | None = None, 
                    tenant_id: str | None = None, enable_cae: bool = False, 
                    **kwargs) -> AccessToken:
+        if AML_SCOPE in scopes and self._aml_token:
+            return self._aml_token
         return self._access_token
 
 
 def get_workspace_client(subscription_id: str, resource_group: str, 
                          workspace_name: str, token: Optional[str] = None, 
-                         expires_on: Optional[int] = None) -> MLClient:
+                         expires_on: Optional[int] = None,
+                         aml_token: Optional[str] = None) -> MLClient:
     """Create MLClient for workspace"""
     if token and expires_on:
-        credential = Credential(token, expires_on)
+        credential = Credential(token, expires_on, aml_token)
     else:
         credential = DefaultAzureCredential()
     return MLClient(
@@ -43,11 +57,12 @@ def get_workspace_client(subscription_id: str, resource_group: str,
 def get_registry_client(
         registry_name: str, 
         token: Optional[str] = None, 
-        expires_on: Optional[int] = None
+        expires_on: Optional[int] = None,
+        aml_token: Optional[str] = None
     ) -> MLClient:
     """Create MLClient for registry"""
     if token and expires_on:
-        credential = Credential(token, expires_on)
+        credential = Credential(token, expires_on, aml_token)
     else:
         credential = DefaultAzureCredential()
     return MLClient(
@@ -88,7 +103,7 @@ def load_safe_tags(tags: None|str) -> dict[str, str]:
         for t in tl:
             kv = re.split(r"\s*=\s*",t,1)
             if type(kv)==str:
-                key=tag
+                key=kv
                 val=None
             else:
                 key=kv[0]
@@ -109,37 +124,12 @@ def empty_string_to_none(value: Optional[str]) -> Optional[str]:
     return value
 
 
-def check_and_replace_environment(ml_client_reg: MLClient, env: str) -> str:
-    """
-    Utility function to replace environment with its registry equivalent for custom environments
+def empty_string_to_none_int(value: Optional[str]) -> Optional[int]:
+    """Convert empty strings to None, or parse as int for optional int parameters"""
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        return None
+    return int(value)
 
-    If environment is on the form 'azureml:<env_name>:<version>' or 'azureml:<env_name>@latest', the function will
-    replace it with the corresponding environment ID from the registry. If the environment is a curated environment,
-    it will be left as is.
-    """
-
-    pattern_latest = re.compile(r"^([\w\-]+)@latest$")
-    pattern_version = re.compile(r"^([\w\-]+):(\d+)$") # need to update this, or add another pattern
-    pattern_azureml = re.compile(r"^azureml://registries/azureml/.+")
-
-    match_latest = pattern_latest.match(env)
-    match_version = pattern_version.match(env)
-    match_azureml = pattern_azureml.match(env)
-
-    # The latest registered version of the environment is used,
-    # as the environment registration happens right before the component registration
-    if match_latest:
-        env_name = match_latest.group(1)
-        return ml_client_reg.environments.get(name=env_name, label="latest").id
-    elif match_version:
-        env_name = match_version.group(1)
-        return ml_client_reg.environments.get(name=env_name, label="latest").id
-    elif match_azureml:
-        return env
-    else:
-        raise ValueError(
-            f"Environment string '{env}' does not match any expected pattern"
-        )
 
 def get_yaml_from_folder(asset_type:str, folder_path:Path)->Path|None:
     asset_map = {
@@ -298,3 +288,148 @@ def get_ref_properties(reference: str) -> namedtuple:
     # return ref(*d)
     ref = namedtuple('Ref',['name','version'])
     return ref(name=d['name'],version=d['version'])
+
+
+def get_deployment_ref_properties(resource_id: str) -> namedtuple:
+    """
+    Parse Azure ML online deployment resource ID and extract endpoint and deployment names.
+    
+    Expected format:
+    /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>/onlineEndpoints/<endpoint>/deployments/<deployment>
+    
+    Returns:
+        namedtuple with endpoint_name and deployment_name attributes
+    """
+    pattern = re.compile(
+        r'^(?:azureml:)?/subscriptions/[^/]+'
+        r'/resourceGroups/[^/]+'
+        r'/providers/Microsoft\.MachineLearningServices'
+        r'/workspaces/[^/]+'
+        r'/onlineEndpoints/(?P<endpoint_name>[^/]+)'
+        r'/deployments/(?P<deployment_name>[^/]+)$'
+    )
+    
+    match = pattern.match(resource_id)
+    if not match:
+        raise ValueError(
+            f"Resource ID '{resource_id}' does not match expected deployment format: "
+            "/subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
+        )
+    
+    DeploymentRef = namedtuple('DeploymentRef', ['endpoint_name', 'deployment_name'])
+    return DeploymentRef(
+        endpoint_name=match.group('endpoint_name'),
+        deployment_name=match.group('deployment_name')
+    )
+
+
+def load_online_endpoint_safe(source: str):
+    """
+    Load an online endpoint from a YAML file, with workaround for KubernetesOnlineEndpoint.
+    
+    The azure.ai.ml.load_online_endpoint function has a bug where it fails to load
+    KubernetesOnlineEndpoint YAML files. This function detects the schema and manually
+    instantiates KubernetesOnlineEndpoint when needed.
+    
+    Args:
+        source: Path to the YAML file
+        
+    Returns:
+        ManagedOnlineEndpoint or KubernetesOnlineEndpoint instance
+    """
+    from azure.ai.ml import load_online_endpoint
+    from azure.ai.ml.entities import KubernetesOnlineEndpoint, ManagedOnlineEndpoint
+    
+    with open(source, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    schema = config.get('$schema', '')
+    is_kubernetes = 'kubernetesOnlineEndpoint' in schema.lower()
+    
+    if not is_kubernetes:
+        return load_online_endpoint(source=source)
+    
+    return KubernetesOnlineEndpoint(
+        name=config.get('name'),
+        compute=config.get('compute'),
+        description=config.get('description'),
+        tags=config.get('tags'),
+        properties=config.get('properties'),
+        auth_mode=config.get('auth_mode', 'key'),
+    )
+
+
+def load_online_deployment_safe(source: str):
+    """
+    Load an online deployment from a YAML file, with workaround for KubernetesOnlineDeployment.
+    
+    The azure.ai.ml.load_online_deployment function has a bug where it fails to load
+    KubernetesOnlineDeployment YAML files. This function detects the schema and manually
+    instantiates KubernetesOnlineDeployment when needed.
+    
+    Args:
+        source: Path to the YAML file
+        
+    Returns:
+        ManagedOnlineDeployment or KubernetesOnlineDeployment instance
+    """
+    from azure.ai.ml import load_online_deployment
+    from azure.ai.ml.entities import (
+        CodeConfiguration,
+        KubernetesOnlineDeployment,
+        ResourceRequirementsSettings,
+        ResourceSettings,
+    )
+    
+    with open(source, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    schema = config.get('$schema', '')
+    is_kubernetes = 'kubernetesonlinedeployment' in schema.lower()
+    
+    if not is_kubernetes:
+        return load_online_deployment(source=source)
+    
+    base_path = Path(source).parent
+    
+    code_config = config.get('code_configuration',{})
+    resources_config = config.get('resources', {})
+    requests_config = resources_config.get('requests', {})
+    limits_config = resources_config.get('limits', {})
+    
+    code_configuration = CodeConfiguration(
+        code=code_config.get('code'),
+        scoring_script=code_config.get('scoring_script')
+    )
+
+    resources = ResourceRequirementsSettings(
+        requests=ResourceSettings(
+            cpu=requests_config.get('cpu'),
+            memory=requests_config.get('memory'),
+            gpu=requests_config.get('gpu'),
+        ),
+        limits=ResourceSettings(
+            cpu=limits_config.get('cpu'),
+            memory=limits_config.get('memory'),
+            gpu=limits_config.get('gpu'),
+        ),
+    )
+    
+    return KubernetesOnlineDeployment(
+        name=config.get('name'),
+        endpoint_name=config.get('endpoint_name'),
+        model=config.get('model'),
+        environment=config.get('environment'),
+        code_configuration=code_configuration,
+        scoring_script=config.get('scoring_script'),
+        code_path=config.get('code_path'),
+        instance_type=config.get('instance_type'),
+        instance_count=config.get('instance_count', 1),
+        app_insights_enabled=config.get('app_insights_enabled', False),
+        resources=resources,
+        description=config.get('description'),
+        tags=config.get('tags'),
+        properties=config.get('properties'),
+        environment_variables=config.get('environment_variables'),
+        base_path=str(base_path),
+    )

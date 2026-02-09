@@ -4,11 +4,11 @@ A unified GitHub Action for Azure ML operations using typer for clean command ro
 
 ## Overview
 
-The Inner Loop action consolidates various Azure ML operations (deploy, share) for different resource types (data, environment, component, model, job) into a single, flexible action. It uses typer to provide a clean, intuitive CLI-style interface.
+The Inner Loop action consolidates various Azure ML operations (deploy, share, waitfor) for different resource types (data, environment, component, model, job) into a single, flexible action. It uses typer to provide a clean, intuitive CLI-style interface.
 
 ## Implementation Status
 
-**✅ FULLY IMPLEMENTED** - All deploy and share operations are complete and ready for production use.
+**✅ FULLY IMPLEMENTED** - All deploy, share, waitfor, and delete operations are complete and ready for production use.
 
 ### Deploy Operations
 - ✅ **deploy data**: Deploy data assets to Azure ML workspace
@@ -16,12 +16,27 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share) f
 - ✅ **deploy component**: Deploy Azure ML components with automatic versioning
 - ✅ **deploy model**: Register Azure ML models from YAML specifications
 - ✅ **deploy job**: Submit Azure ML jobs to workspace
+- ✅ **deploy online-endpoint**: Deploy managed online endpoints
+- ✅ **deploy online-deployment**: Deploy managed online deployments with traffic allocation
 
 ### Share Operations
 - ✅ **share data**: Share data assets from workspace to registry
 - ✅ **share environment**: Share environments from workspace to registry with stage promotion
 - ✅ **share component**: Share components from workspace to registry with environment replacement
 - ✅ **share model**: Share models from workspace to registry with stage promotion
+
+### Waitfor Operations
+- ✅ **waitfor data**: Poll workspace until a specific data asset version is registered successfully
+- ✅ **waitfor environment**: Monitor environment builds (including image verification) until completion
+- ✅ **waitfor component**: Track component registrations until provisioning succeeds or fails
+- ✅ **waitfor model**: Ensure model registrations finish before dependent stages continue
+- ✅ **waitfor job**: Observe Azure ML job lifecycle until it reaches a terminal status (Completed/Failed)
+- ✅ **waitfor online-endpoint**: Wait for online endpoint provisioning to complete
+- ✅ **waitfor online-deployment**: Wait for online deployment provisioning to complete
+
+### Delete Operations
+- ✅ **delete online-endpoint**: Delete an online endpoint (and all its deployments)
+- ✅ **delete online-deployment**: Delete an online deployment (automatically removes traffic first)
 
 ## Architecture
 
@@ -32,6 +47,8 @@ The action is organized into modular Python files:
 - **main.py**: Entry point that routes commands using typer
 - **deploy.py**: All deploy operations with full Azure ML SDK integration
 - **share.py**: All share operations with registry support and stage promotion
+- **waitfor.py**: All waitfor operations for polling asset provisioning states
+- **delete.py**: Delete operations for online endpoints and deployments
 - **getasset.py**: Helper functions for retrieving and filtering Azure ML assets
 - **util.py**: Utility functions for authentication, tagging, and GitHub output
 - **action.yaml**: GitHub Action composite definition
@@ -46,6 +63,14 @@ Each module uses typer's `@app.command()` decorator for clean, self-documenting 
 - **Stage Promotion**: Share operations support promoting assets to specific stages (e.g., "Production")
 - **Environment Replacement**: Component sharing automatically replaces workspace environments with registry equivalents
 - **Flexible Authentication**: Supports both token-based (federated credentials) and DefaultAzureCredential
+
+## Waitfor Logic Analysis
+
+- **AzureML provisioning states**: Every waitfor command queries AzureML via `MLClient` and interprets standard provisioning statuses (`Succeeded`, `Failed`, `Creating`, etc.) exposed on workspace assets as `provisioning_state`/`status`. This mirrors how Azure signals asynchronous registrations and image builds, so the polling logic aligns with service semantics.
+- **Timeout and backoff**: Polls happen every 10 seconds with a 30-minute cutoff, which matches common AzureML build durations (environment image builds rarely exceed this) while preventing pipelines from hanging indefinitely when Azure reports no progress.
+- **Deploy alignment**: Deploy commands return as soon as Azure accepts a registration request, whereas actual materialization (image build, artifact copy) may still be running. The waitfor verb bridges that gap by blocking downstream steps until the deploy-requested asset reaches `Succeeded`, reducing race conditions in chained workflows.
+- **Job lifecycle integration**: AzureML jobs expose a richer status model (`Queued`, `Running`, `Completed`, `Failed`). The waitfor job subject specifically looks for terminal states, enabling automated triggering of share/promote logic once a training job finishes without having to embed custom SDK scripts.
+- **Tag consistency**: Because waitfor enforces optional tag matches, it works with deploy-time tagging conventions and ensures that pipelines do not accidentally observe stale assets with the same name/version but different metadata.
 
 ### Authentication
 
@@ -137,6 +162,96 @@ The action supports two authentication methods:
     filepath: ./jobs/my-job.yaml
 ```
 
+### Deploy Online Endpoint
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: online-endpoint
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    filepath: ./endpoints/my-endpoint.yaml
+```
+
+**Endpoint YAML example** (`my-endpoint.yaml`):
+```yaml
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: my-inference-endpoint
+auth_mode: key
+```
+
+### Deploy Online Deployment with Traffic
+
+```yaml
+- name: Deploy Online Deployment
+  id: deploy-deployment
+  uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: online-deployment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    filepath: ./deployments/blue-deployment.yaml
+    traffic-allocation: 100
+```
+
+**Deployment YAML example** (`blue-deployment.yaml`):
+```yaml
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: my-inference-endpoint
+model: azureml:my-model:1
+instance_type: Standard_DS3_v2
+instance_count: 1
+```
+
+### Wait for Online Deployment
+
+```yaml
+- name: Wait for Deployment
+  uses: ./inner-loop
+  with:
+    verb: waitfor
+    subject: online-deployment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    deployment-resource: ${{ steps.deploy-deployment.outputs.resource-id }}
+```
+
+### Delete Online Deployment
+
+```yaml
+- name: Delete Old Deployment
+  uses: ./inner-loop
+  with:
+    verb: delete
+    subject: online-deployment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    deployment-resource: /subscriptions/.../onlineEndpoints/my-endpoint/deployments/green
+```
+
+### Wait for Environment Readiness
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: waitfor
+    subject: environment
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    env-ref: my-env:5
+    tags: "stage=build"
+```
+
+The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the specified asset exists and reports a success status. If the asset reports a failure state or the timeout expires, the action stops with a failure, allowing pipelines to halt early when provisioned artifacts break.
+
 ### Share to Registry with Stage Promotion
 
 ```yaml
@@ -175,8 +290,8 @@ The action supports two authentication methods:
 
 | Input | Required | Description |
 |-------|----------|-------------|
-| `verb` | Yes | Action verb: `deploy` or `share` |
-| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, or `job` |
+| `verb` | Yes | Action verb: `deploy`, `share`, `waitfor`, or `delete` |
+| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, or `online-deployment` |
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |
@@ -188,6 +303,10 @@ The action supports two authentication methods:
 | `data-ref` | No* | Data asset name (*for share data) |
 | `env-ref` | No* | Environment name (*for share environment) |
 | `model-ref` | No* | Model name (*for share model) |
+| `job-name` | No* | Job name (*for waitfor job) |
+| `endpoint-name` | No* | Online endpoint name (*for waitfor/delete online-endpoint) |
+| `deployment-resource` | No* | Online deployment resource ID (*for waitfor/delete online-deployment) |
+| `traffic-allocation` | No | Traffic percentage (0-100) to allocate to deployment |
 | `tags` | No | Tags in format: `key1=value1,key2=value2` |
 | `promote-stage` | No | Stage to promote asset to (e.g., "Production") |
 | `image-build-compute` | No | Compute cluster name for environment builds (instead of serverless) |
@@ -250,6 +369,16 @@ jobs:
           filepath: ./components/training-component.yaml
           tags: "type=training"
       
+      - name: Wait for Environment
+        uses: ./inner-loop
+        with:
+          verb: waitfor
+          subject: environment
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resource-group: my-resource-group
+          workspace-name: my-workspace
+          env-ref: training-env:${{ steps.deploy-env.outputs.version }}
+
       - name: Share Environment to Registry
         uses: ./inner-loop
         with:

@@ -86,13 +86,26 @@ def getenvironment(
     # This time, get a list that contains both version and tags.
     env_list =list(client.environments.list(name=name))
 
+    # If latest_version is None (e.g., when using a registry client),
+    # find the latest environment by creation date, respecting req_int_version filter
+    if latest_version is None and env_list:
+        # Filter by req_int_version first if required
+        candidates = [e for e in env_list if e.version.isdigit()] if req_int_version else env_list
+        if candidates:
+            # Find the environment with the latest creation date
+            latest_env = max(
+                candidates,
+                key=lambda e: e.creation_context.created_at if e.creation_context and e.creation_context.created_at else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            )
+            latest_version = latest_env.version
+
     if version:
         env_list = filter_assets_by_version(assets=env_list,version=version)
     else:
         env_list=[client.environments.get(name=name,version=latest_version)]
 
     if tags:
-        env_list = filter_assets_by_tag(env_list,tags)
+        env_list = filter_assets_by_tag(assets=env_list,tag=tags)
 
     if req_int_version:
         env_list = [e for e in env_list if e.version.isdigit()]
@@ -110,8 +123,11 @@ def getcomponent(
     comp_list = list(client.components.list())
     #print(f"GC [1]: {comp_list}")
     comp_list = [c for c in comp_list if c.name==name]
+    latest_version = None
     if comp_list:
         latest_version = comp_list[0].latest_version
+    else:
+        return []
     # Beware: If this is a workspace, AND there exists a version that is non-standard,
     # then latest_version may be None.
     #print(f"GC [2]: {latest_version}")
@@ -119,14 +135,29 @@ def getcomponent(
     comp_list = list(client.components.list(name=name))
     #print(f"GC [3]: {comp_list}")
 
+    # If latest_version is None (e.g., when using a registry client),
+    # find the latest component by creation date, respecting req_int_version filter
+    if latest_version is None and comp_list:
+        # Filter by req_int_version first if required
+        candidates = [c for c in comp_list if c.version.isdigit()] if req_int_version else comp_list
+        if candidates:
+            # Find the component with the latest creation date
+            latest_comp = max(
+                candidates,
+                key=lambda c: c.creation_context.created_at if c.creation_context and c.creation_context.created_at else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            )
+            latest_version = latest_comp.version
+
     if version:
         comp_list = filter_assets_by_version(assets=comp_list,version=version)
-    else:
+    elif latest_version:
         comp_list = [client.components.get(name=name,version=latest_version)]
+    else:
+        return []
     #print(f"GC [4]: {comp_list}")
 
     if tags:
-        comp_list = filter_assets_by_tag(comp_list,tags)
+        comp_list = filter_assets_by_tag(assets=comp_list,tag=tags)
     #print(f"GC [5]: {comp_list}")
     
     if req_int_version:
@@ -170,7 +201,7 @@ def getmodel(
         m_list = filter_assets_by_version(m_list,version=latest_version)
 
     if tags:    
-        m_list = filter_assets_by_tag(m_list,tag=tags)
+        m_list = filter_assets_by_tag(assets=m_list,tag=tags)
 
     if req_int_version:
         m_list = [m for m in m_list if m.version.isdigit()]
@@ -216,7 +247,7 @@ def getdata(
         data_list = [client.data.get(name=name,version=latest_version)]
 
     if tags:
-        data_list = filter_assets_by_tag(data_list,tags)
+        data_list = filter_assets_by_tag(assets=data_list,tag=tags)
 
     if req_int_version:
         data_list = [d for d in data_list if d.version.isdigit()]
@@ -248,7 +279,7 @@ def getjob(
         return None
 
     if tags:
-        job_list = filter_assets_by_tag(assets=job_list, tags)
+        job_list = filter_assets_by_tag(assets=job_list, tag=tags)
 
     return job_list
 
