@@ -41,6 +41,9 @@ inputs:
   component-ref:
     description: "Component reference (for share component operations)"
     required: false
+  registry-env-ref:
+    description: "Reference to environment in a registry for component sharing operations"
+    required: false
   data-ref:
     description: "Data reference (for share data operations)"
     required: false
@@ -119,3 +122,4 @@ runs:
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+    REGISTRY_ENV_REF: ${{ inputs.registry-env-ref }}

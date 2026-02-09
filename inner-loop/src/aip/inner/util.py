@@ -2,17 +2,18 @@
 Utility functions for Inner Loop Action
 """
 
+import datetime
 import os
 import re
+import secrets
+from collections import namedtuple
+from pathlib import Path
 from typing import Optional, Union
+
+import yaml
+from azure.ai.ml import MLClient
 from azure.core.credentials import AccessToken
 from azure.identity import DefaultAzureCredential
-from azure.ai.ml import MLClient
-import datetime
-import secrets
-from pathlib import Path
-import yaml
-from collections import namedtuple
 
 AML_SCOPE = "https://ml.azure.com/.default"
 
@@ -129,38 +130,6 @@ def empty_string_to_none_int(value: Optional[str]) -> Optional[int]:
         return None
     return int(value)
 
-
-def check_and_replace_environment(ml_client_reg: MLClient, env: str) -> str:
-    """
-    Utility function to replace environment with its registry equivalent for custom environments
-
-    If environment is on the form 'azureml:<env_name>:<version>' or 'azureml:<env_name>@latest', the function will
-    replace it with the corresponding environment ID from the registry. If the environment is a curated environment,
-    it will be left as is.
-    """
-
-    pattern_latest = re.compile(r"^([\w\-]+)@latest$")
-    pattern_version = re.compile(r"^([\w\-]+):(\d+)$") # need to update this, or add another pattern
-    pattern_azureml = re.compile(r"^azureml://registries/azureml/.+")
-
-    match_latest = pattern_latest.match(env)
-    match_version = pattern_version.match(env)
-    match_azureml = pattern_azureml.match(env)
-
-    # The latest registered version of the environment is used,
-    # as the environment registration happens right before the component registration
-    if match_latest:
-        env_name = match_latest.group(1)
-        return ml_client_reg.environments.get(name=env_name, label="latest").id
-    elif match_version:
-        env_name = match_version.group(1)
-        return ml_client_reg.environments.get(name=env_name, label="latest").id
-    elif match_azureml:
-        return env
-    else:
-        raise ValueError(
-            f"Environment string '{env}' does not match any expected pattern"
-        )
 
 def get_yaml_from_folder(asset_type:str, folder_path:Path)->Path|None:
     asset_map = {
@@ -405,7 +374,12 @@ def load_online_deployment_safe(source: str):
         ManagedOnlineDeployment or KubernetesOnlineDeployment instance
     """
     from azure.ai.ml import load_online_deployment
-    from azure.ai.ml.entities import CodeConfiguration,KubernetesOnlineDeployment, ResourceRequirementsSettings, ResourceSettings
+    from azure.ai.ml.entities import (
+        CodeConfiguration,
+        KubernetesOnlineDeployment,
+        ResourceRequirementsSettings,
+        ResourceSettings,
+    )
     
     with open(source, 'r') as f:
         config = yaml.safe_load(f)
