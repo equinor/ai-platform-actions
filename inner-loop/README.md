@@ -95,6 +95,8 @@ The action supports two authentication methods:
   with:
     verb: deploy
     subject: data
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -109,6 +111,8 @@ The action supports two authentication methods:
   with:
     verb: deploy
     subject: environment
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -123,6 +127,8 @@ The action supports two authentication methods:
   with:
     verb: deploy
     subject: component
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -142,6 +148,8 @@ The action supports two authentication methods:
   with:
     verb: deploy
     subject: model
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -156,11 +164,16 @@ The action supports two authentication methods:
   with:
     verb: deploy
     subject: job
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
+    aml-token: ${{ steps.azure-login.outputs.aml-token }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
     filepath: ./jobs/my-job.yaml
 ```
+
+**Note:** The `aml-token` input is required for job operations. This token has the Azure ML scope (`https://ml.azure.com/.default`) and is provided by the Azure login action.
 
 ### Deploy Online Endpoint
 
@@ -169,6 +182,8 @@ The action supports two authentication methods:
   with:
     verb: deploy
     subject: online-endpoint
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -191,6 +206,8 @@ auth_mode: key
   with:
     verb: deploy
     subject: online-deployment
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -216,6 +233,8 @@ instance_count: 1
   with:
     verb: waitfor
     subject: online-deployment
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -230,6 +249,8 @@ instance_count: 1
   with:
     verb: delete
     subject: online-deployment
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -243,6 +264,8 @@ instance_count: 1
   with:
     verb: waitfor
     subject: environment
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -261,6 +284,8 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
   with:
     verb: deploy
     subject: component
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -271,6 +296,8 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
   with:
     verb: share
     subject: component
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     resource-group: my-resource-group
     workspace-name: my-workspace
@@ -292,6 +319,9 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 |-------|----------|-------------|
 | `verb` | Yes | Action verb: `deploy`, `share`, `waitfor`, or `delete` |
 | `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, or `online-deployment` |
+| `token` | No* | Access token from Azure login action (*required for GitHub Actions) |
+| `expires-on` | No* | Token expiration timestamp from Azure login action (*required for GitHub Actions) |
+| `aml-token` | No* | Access token with Azure ML scope (*required for job operations) |
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |
@@ -339,6 +369,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Azure Login
+        id: azure-login
         uses: azure/login@v1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -351,6 +382,8 @@ jobs:
         with:
           verb: deploy
           subject: environment
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: my-resource-group
           workspace-name: my-workspace
@@ -363,6 +396,8 @@ jobs:
         with:
           verb: deploy
           subject: component
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: my-resource-group
           workspace-name: my-workspace
@@ -374,6 +409,8 @@ jobs:
         with:
           verb: waitfor
           subject: environment
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: my-resource-group
           workspace-name: my-workspace
@@ -384,6 +421,8 @@ jobs:
         with:
           verb: share
           subject: environment
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: my-resource-group
           workspace-name: my-workspace
@@ -396,6 +435,8 @@ jobs:
         with:
           verb: share
           subject: component
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: my-resource-group
           workspace-name: my-workspace
@@ -408,6 +449,9 @@ jobs:
         with:
           verb: deploy
           subject: job
+          token: ${{ steps.azure-login.outputs.access-token }}
+          expires-on: ${{ steps.azure-login.outputs.expires-on }}
+          aml-token: ${{ steps.azure-login.outputs.aml-token }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: my-resource-group
           workspace-name: my-workspace

@@ -1,0 +1,158 @@
+name: Inner Loop Demo
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/onlineendpoints/testoe/**'
+      - 'assets/environments/inf_313_generic/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          tenant-id: ${{ vars.TENANT_ID }}
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+
+      - name: Get Access Token
+        id: get-token
+        shell: bash
+        run: |
+          TOKEN=$(az account get-access-token --query accessToken --output tsv)
+          EXPIRES_ON=$(az account get-access-token --query expires_on --output tsv)
+          # Get AML-scoped token for job operations
+          AML_TOKEN=$(az account get-access-token --resource https://ml.azure.com --query accessToken --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "::add-mask::$AML_TOKEN"
+          echo "access-token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "expires-on=$EXPIRES_ON" >> $GITHUB_OUTPUT
+          echo "aml-token=$AML_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Deploy Environment
+        id: deploy-env
+        uses: &inner-loop equinor/ai-platform-actions/inner-loop@online-endpoint
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: deploy
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          filepath: ./assets/environments/inf_313_generic/environment.yml
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+    
+      - name: Waitfor Environment
+        id: waitfor-env
+        uses: equinor/ai-platform-actions/inner-loop@develop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: waitfor
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          env-ref: ${{ steps.deploy-env.outputs.reference }}
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+
+      - name: Generate Endpoint Name
+        id: endpoint-name
+        run: echo "name=$(echo "testoe${{ github.sha }}" | cut -c -32)" >> $GITHUB_OUTPUT
+
+      - name: Set Endpoint Name
+        uses: &override-inputs equinor/ai-platform-actions/override-inputs@online-endpoint
+        with:
+            file: ./assets/onlineendpoints/testoe/oe.yaml
+            path: name
+            set-value: ${{ steps.endpoint-name.outputs.name }}
+
+      - name: Deploy Online Endpoint
+        id: deploy-online-endpoint
+        uses: *inner-loop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: deploy
+          subject: online-endpoint
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          filepath: ./assets/onlineendpoints/testoe/oe.yaml
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+
+      - name: Waitfor Online Endpoint
+        id: waitfor-online-endpoint
+        uses: *inner-loop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: waitfor
+          subject: online-endpoint
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          endpoint-name: ${{ steps.deploy-online-endpoint.outputs.version }}
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+    
+      - name: Set Deployment Endpoint Name
+        uses: *override-inputs
+        with:
+            file: ./assets/onlineendpoints/testoe/od.yaml
+            path: endpoint_name
+            set-value: ${{ steps.deploy-online-endpoint.outputs.version }}
+
+      - name: Set Deployment Model Name
+        uses: *override-inputs
+        with:
+            file: ./assets/onlineendpoints/testoe/od.yaml
+            path: model
+            set-value: azureml:regmodel_20251201145527:1
+    
+      - name: Set Deployment Environment
+        uses: *override-inputs
+        with:
+            file: ./assets/onlineendpoints/testoe/od.yaml
+            path: environment
+            set-value: ${{ steps.deploy-env.outputs.reference }}
+
+      - name: Deploy Online Deployment
+        id: deploy-online-deployment
+        uses: *inner-loop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: deploy
+          subject: online-deployment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          filepath: ./assets/onlineendpoints/testoe/od.yaml
+          traffic-allocation: 100
+
+      - name: Waitfor Online Deployment
+        id: waitfor-online-deployment
+        uses: *inner-loop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: waitfor
+          subject: online-deployment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          deployment-resource: ${{ steps.deploy-online-deployment.outputs.resource-id }}
+          
