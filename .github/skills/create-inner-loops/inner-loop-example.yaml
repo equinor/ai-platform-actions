@@ -1,0 +1,82 @@
+name: Inner Loop Env
+
+on:
+  pull_request:
+    branches: [mybranch]
+    paths:
+      - 'assets/environments/myenv/'
+
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          tenant-id: ${{ vars.TENANT_ID }}
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+
+      - name: Get Access Token
+        id: get-token
+        shell: bash
+        run: |
+          # Get access token using Azure CLI
+          TOKEN=$(az account get-access-token --query accessToken --output tsv)
+          EXPIRES_ON=$(az account get-access-token --query expires_on --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "access-token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "expires-on=$EXPIRES_ON" >> $GITHUB_OUTPUT
+
+      - name: Deploy Environment
+        id: deploy-env
+        uses: equinor/ai-platform-actions/inner-loop@develop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: deploy
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          filepath: ./assets/environments/myenv/environment.yaml
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+
+      - name: Waitfor Environment
+        id: wait-for-env
+        uses: equinor/ai-platform-actions/inner-loop@develop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: waitfor
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          env-ref: ${{ steps.deploy-env.outputs.reference }}
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+
+      - name: Share Environment
+        id: share-env
+        uses: equinor/ai-platform-actions/inner-loop@develop
+        with:
+          token: ${{ steps.get-token.outputs.access-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: share
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          registry-name: ${{ vars.REGISTRY }}
+          env-ref: ${{ steps.deploy-env.outputs.reference }}
+          tags: "stage=dev,commit-id=${{ github.sha }}"
