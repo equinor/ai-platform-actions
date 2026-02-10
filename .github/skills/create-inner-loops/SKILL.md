@@ -1,6 +1,6 @@
 ---
 name: create-inner-loops
-description: Guide for creating and updating inner-loop workflows. Use this when asked to create or updatean inner-loop workflow.
+description: Guide for creating and updating inner-loop workflows. Use this when asked to create or update an inner-loop workflow.
 ---
 
 # Create inner-loop workflow
@@ -40,10 +40,10 @@ Do actions in this order: Deploy -> Waitfor -> Share.
 - Deploy environment (might use several minutes)
 - Deploy component
 - Waitfor environment
+- Deploy job (might use a lot of time)
 - Waitfor job
 - Deploy model (only for some usecases)
 - Waitfor model (only for some usecases)
-- Deploy job (might use a lot of time)
 - Deploy online endpoint (might use a bit of time)
 - Waitfor online endpoint
 - Deploy online endpoint
@@ -55,13 +55,13 @@ Do actions in this order: Deploy -> Waitfor -> Share.
 
 For a particular project, some assets types might not apply.
 The user is expected to provide the required assets as input.
-The share data action should only be done if the data is used as a fairly stable resource mant for reusing multiple times,
+The share data action should only be done if the data is used as a fairly stable resource meant for reusing multiple times,
 as sharing data to a registry causes a copy to be made each time. Also the data will only be usable within jobs or pipelines.
 Job in this context can both be a commandJob (a single use invocation of a command or a component),
 or a pipeline comprised of one or more components.
 In some projects, jobs may register a model as part of running (deploying) them, 
 while other projects may deploy models based on yaml definitions.
-Note that it matters for and endpoint or deployment whether or not it is a managed online-endpoint or a kubernetes online-endpoint.
+Note that it matters for an endpoint or deployment whether or not it is a managed online-endpoint or a kubernetes online-endpoint.
 They use different schemas, and the content differs somewhat. The same goes for online-deployments.
 Unlike other assets, for endpoints and deployments there is a delete action.
 For the online-deployments, they are special in that they need a resource-id as input instead of a reference.
