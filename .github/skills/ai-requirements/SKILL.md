@@ -32,7 +32,7 @@ The objects we aim for are the different asset types in AzureML. In addition, th
 ## Other requirements
 
 ### Avoid
-- Altering files not referenced in the in the prompt. Ask for permission if unsure.
+- Altering files not referenced in the prompt. Ask for permission if unsure.
 
 ## Do
 - Keep code legible and transparent
