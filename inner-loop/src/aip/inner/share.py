@@ -46,6 +46,9 @@ def data(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -162,6 +165,9 @@ def environment(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -283,6 +289,9 @@ def model(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Share model from workspace to registry"""
     print(f"[share model] Sharing model")
@@ -394,6 +403,9 @@ def component(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     registry_env_ref = os.environ.get("REGISTRY_ENV_REF")
     if not registry_env_ref or registry_env_ref.strip() == "":

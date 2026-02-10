@@ -81,6 +81,18 @@ inputs:
     description: "When using waitfor verb, override default timeout of 30"
     required: false
     default: "30"
+  job-ref:
+    description: "Job reference (for deploy schedule)"
+    required: false
+  schedule-name:
+    description: "Name for the schedule to be deployed"
+    required: false
+  cron-expression:
+    description: "CRON expression defining the schedule"
+    required: false
+  time-zone:
+    description: "Time zone to use when interpreting the CRON expression"
+    required: false
 
 outputs:
   resource-id:
@@ -119,6 +131,12 @@ runs:
     - ${{ inputs.aml-token }}
     - --traffic-allocation
     - ${{ inputs.traffic-allocation }}
+    - --schedule-name
+    - ${{ inputs.schedule-name }}
+    - --cron-expression
+    - ${{ inputs.cron-expression }}
+    - --time-zone
+    - ${{ inputs.time-zone }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
