@@ -1,6 +1,8 @@
 """
 Deploy operations for Inner Loop Action
 """
+from datetime import datetime
+
 from azure.ai.ml import (
     load_data,
     load_environment,
@@ -13,9 +15,11 @@ from azure.ai.ml import (
 from azure.ai.ml.entities import (
     CommandComponent,
     Component,
+    CronTrigger,
     Data,
     Environment,
     BuildContext,
+    JobSchedule,
     Model,
     ManagedOnlineEndpoint,
     ManagedOnlineDeployment,
@@ -64,6 +68,9 @@ def data(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy data asset to Azure ML workspace"""
     print(f"[deploy data] Deploying data asset")
@@ -119,6 +126,9 @@ def environment(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy environment to Azure ML workspace"""
     print(f"[deploy environment] Deploying environment")
@@ -175,6 +185,9 @@ def component(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy component to Azure ML workspace"""
     print(f"[deploy component] Deploying component")
@@ -260,6 +273,9 @@ def model(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy model to Azure ML workspace"""
     print(f"[deploy model] Deploying model")
@@ -315,6 +331,9 @@ def job(
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Submit job to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-pipeline?view=azureml-api-2
@@ -378,6 +397,9 @@ def online_endpoint(
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy online endpoint to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-endpoint-online?view=azureml-api-2
@@ -457,6 +479,9 @@ def online_deployment(
         promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
         image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy online deployment to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
@@ -566,6 +591,70 @@ def online_deployment(
         "resource-id": deployment_result.id,
     })
 
+
+
+@app.command()
+def schedule(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        job_name: str,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")],
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")],
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = "UTC",
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+):
+    print(f"[deploy schedule] Deploying Schedule")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Job Reference: {job_name}")
+    print(f"  Schedule Name: {schedule_name}")
+    print(f"  CRON Expression: {cron_expression}")
+    print(f"  Time Zone: {time_zone}")
+
+    print("[deploy schedule] Creating workspace client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    print("[deploy schedule] Instantiating Schedule")
+
+    cron_trigger = CronTrigger(
+        expression=cron_expression,
+        start_time=datetime.now(),
+        time_zone=time_zone,
+    )
+
+    job_schedule = JobSchedule(
+        name=schedule_name, trigger=cron_trigger, create_job=job_name
+    )
+    
+    print("[deploy schedule] Submitting Schedule")
+
+    result = client.schedules.begin_create_or_update(job_schedule).result()
+
+    print(f"[deploy schedule] ✅ Schedule deployed successfully")
+    print(f"  Name: {result.name}")
+    print(f"  Resource ID: {result.id}")
+    github_output({
+        "reference": "",
+        "version": result.name,
+        "resource-id": result.id,
+    })
 
 if __name__ == "__main__":
     app()
