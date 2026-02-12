@@ -466,8 +466,8 @@ def online_deployment(
         workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
         filepath: str,
         traffic_allocation: Annotated[
-            Optional[int],
-            typer.Option("--traffic-allocation", "-t", help="Traffic percentage to allocate to this deployment (0-100)")
+            Optional[str],
+            typer.Option("--traffic-allocation", "-t", help="Traffic percentage to allocate to this deployment (0-100)", callback=empty_string_to_none_int)
         ] = None,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
