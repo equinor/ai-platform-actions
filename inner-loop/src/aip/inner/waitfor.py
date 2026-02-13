@@ -498,6 +498,9 @@ def data(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     print(f"[waitfor data] Waiting for data asset {data_ref}")
     data_props = get_ref_properties(data_ref)
@@ -553,6 +556,9 @@ def environment(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     print(f"[waitfor environment] Waiting for environment {env_ref}")
     env_props = get_ref_properties(env_ref)
@@ -608,6 +614,9 @@ def component(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     print(f"[waitfor component] Waiting for component {component_ref}")
     comp_props = get_ref_properties(component_ref)
@@ -663,6 +672,9 @@ def model(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     print(f"[waitfor model] Waiting for model {model_ref}")
     model_props = get_ref_properties(model_ref)
@@ -718,6 +730,9 @@ def job(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     print(f"[waitfor job] Waiting for job {job_name}")
 
@@ -771,6 +786,9 @@ def online_endpoint(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     """Wait for an online endpoint to reach a terminal state."""
     print(f"[waitfor online-endpoint] Waiting for online endpoint {endpoint_name}")
@@ -824,6 +842,9 @@ def online_deployment(
     image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
     aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
 ):
     """Wait for an online deployment to reach a terminal state."""
     deployment_ref = get_deployment_ref_properties(deployment_resource)
