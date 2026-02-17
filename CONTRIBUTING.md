@@ -11,6 +11,10 @@ This is how you should do it:
 
 Use our [issue list](../../issues) to report a **bug** or **propose a new feature**, including
 
+## Versioning
+
+We strive to keep versioning according to [Semantic Versioning 2.0.0](https://semver.org/#semantic-versioning-200)
+
 ### For **bug report**  
 - A quick summary and/or background
 - Steps to reproduce
