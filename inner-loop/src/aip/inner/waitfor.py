@@ -207,7 +207,8 @@ def _get_provisioning_state_from_rest(
     properties = response_data.get("properties", {})
     provisioning_state = properties.get("provisioningState")
     if asset_type=='environment':
-        image_exists = properties.get("imageDetails").get("exists")
+            image_details = properties.get("imageDetails") or {}
+            image_exists = image_details.get("exists") if isinstance(image_details, dict) else None
         if provisioning_state=='Succeeded' and not image_exists:
             provisioning_state='Running'
     
