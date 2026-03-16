@@ -28,6 +28,7 @@ asset/
 
 - You have an AzureML workspace and the necessary permissions to deploy assets.
 - You have set up federated credentials or a service principal for GitHub Actions to authenticate to Azure.
+- Your workflow grants `id-token: write` permission so `azure/login` can use OpenID Connect.
 - You have configured the following secrets or variables in your repository or organization:
   - `AZURE_CLIENT_ID`
   - `AZURE_TENANT_ID`
@@ -48,10 +49,37 @@ on:
     paths:
       - 'asset/**'
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  deploy-assets:
+  detect-assets:
     runs-on: ubuntu-latest
     environment: dev
+    outputs:
+      assets: ${{ steps.changed.outputs.changed-files-json }}
+      has-changes: ${{ steps.changed.outputs.has-changes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed files
+        id: changed
+        uses: equinor/ai-platform-actions/changed-files@main
+        with:
+          filter-pattern: 'asset/**/*.yaml'
+          output-format: json
+
+  deploy-assets:
+    needs: detect-assets
+    if: needs.detect-assets.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        asset: ${{ fromJson(needs.detect-assets.outputs.assets) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,32 +93,43 @@ jobs:
           enable-AzPSSession: true
           auth-type: SERVICE_PRINCIPAL
 
-      - name: Detect changed files
-        id: changed
-        uses: equinor/ai-platform-actions/changed-files@main
-        with:
-          filter-pattern: 'asset/**/*.yaml'
-          output-format: json
+      - name: Get access tokens
+        id: get-token
+        shell: bash
+        run: |
+          TOKEN=$(az account get-access-token --query accessToken --output tsv)
+          AML_TOKEN=$(az account get-access-token --resource https://ml.azure.com --query accessToken --output tsv)
+          EXPIRES_ON=$(az account get-access-token --query expires_on --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "::add-mask::$AML_TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "aml-token=$AML_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "expires-on=$EXPIRES_ON" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy Environments
-        if: steps.changed.outputs.has-changes == 'true'
-        uses: equinor/ai-platform-actions/deploy-x@main
+      - name: Deploy changed asset
+        uses: equinor/ai-platform-actions/inner-loop@main
         with:
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          token: ${{ steps.get-token.outputs.token }}
+          aml-token: ${{ steps.get-token.outputs.aml-token }}
+          expires-on: ${{ steps.get-token.outputs.expires-on }}
+          verb: deploy
+          subject: ${{ matrix.asset.subject }}
+          filepath: ${{ matrix.asset.filepath }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
           workspace-name: ${{ secrets.AZURE_ML_WORKSPACE_NAME }}
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          config: ${{ steps.changed.outputs.changed-files-json }}
 ```
 
 ## How It Works
 
 1. **Trigger**: The workflow runs on every push or pull request that changes any YAML file under the `asset/` folder.
-2. **Checkout**: The repository is checked out.
-3. **Azure Login**: Authenticates to Azure using federated credentials or a service principal.
-4. **Detect Changed Files**: Uses the `changed-files` action to find all changed asset YAML files.
-5. **Deploy Assets**: Uses the `deploy-x` action to deploy all changed assets to the AzureML workspace. The action will automatically route each asset to the correct deployment action based on its type.
+2. **Detect Changed Files**: A first job checks out the repository and uses the `changed-files` action to find all changed asset YAML files.
+3. **Create Deployment Matrix**: The detected assets are exposed as job outputs and converted into a matrix for parallel deployment.
+4. **Azure Login**: Each deployment job authenticates to Azure using federated credentials or a service principal.
+5. **Get Tokens**: Each deployment job fetches the ARM token, the Azure ML token, and the token expiry timestamp used by `inner-loop`.
+6. **Deploy Assets**: The `inner-loop` action deploys each changed asset to the AzureML workspace using the detected `subject` and `filepath` values.
+
+The `aml-token` input is only required for job operations, but it is safe to pass it for all subjects in a shared matrix workflow.
 
 ## Customization
 
