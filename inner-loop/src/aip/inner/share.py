@@ -228,7 +228,7 @@ def environment(
     print("[share environment] Sharing environment to registry")
     ws_client.environments.share(
         name=ws_env.name,
-        version=ws_env.version,
+        version=str(ws_env.version),
         registry_name=registry_name,
         share_with_name=ws_env.name,
         share_with_version=latest_reg_version
