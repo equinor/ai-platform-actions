@@ -223,17 +223,14 @@ def environment(
             lrv = int(e.version)
             if lrv>latest_reg_version:
                 latest_reg_version=lrv
-        latest_reg_version=str(latest_reg_version+1) # only if name exists
-    
+        latest_reg_version=latest_reg_version+1 # only if name exists
     print("[share environment] Sharing environment to registry")
-    print(f"ws version  : {str(ws_env.version)}")
-    print(f"reg version : {str(latest_reg_version)}")
     ws_client.environments.share(
         name=ws_env.name,
         version=str(ws_env.version),
         registry_name=registry_name,
         share_with_name=ws_env.name,
-        share_with_version=latest_reg_version
+        share_with_version=f"{latest_reg_version}"
     )
 
     print("[share environment] Applying stage promotion if provided")
