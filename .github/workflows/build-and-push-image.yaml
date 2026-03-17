@@ -15,6 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Derive image tags
+        id: image-tags
+        shell: bash
+        run: |
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          MAJOR_TAG=$(echo "$RELEASE_TAG" | sed -E 's/^((v)?[0-9]+).*/\1/')
+          echo "major-tag=$MAJOR_TAG" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -30,3 +38,4 @@ jobs:
           tags: |
             ghcr.io/equinor/ai-platform-actions/inner-loop:latest
             ghcr.io/equinor/ai-platform-actions/inner-loop:${{ github.event.release.tag_name }}
+            ghcr.io/equinor/ai-platform-actions/inner-loop:${{ steps.image-tags.outputs.major-tag }}
