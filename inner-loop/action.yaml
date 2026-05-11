@@ -60,7 +60,7 @@ inputs:
     description: "Azure ML online endpoint name"
     required: false
   deployment-name:
-    description: "Azure ML online deployment name (for deploy online-deployment)"
+    description: "Azure ML online deployment name (for deploy online-deployment or rollback online-deployment)"
     required: false
   deployment-resource:
     description: "Azure ML online deployment resource ID (for waitfor/delete online-deployment). Format: /subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
@@ -93,6 +93,9 @@ inputs:
   time-zone:
     description: "Time zone to use when interpreting the CRON expression"
     required: false
+  experiment-name:
+    description: "Azure ML experiment name (for deploy job, deploy sweep-job). Overrides the experiment name in the YAML."
+    required: false
 
 outputs:
   resource-id:
@@ -101,6 +104,10 @@ outputs:
     description: "Reference string within Azure ML"
   version:
     description: "Version of the resource"
+  lineage-metadata:
+    description: "JSON-encoded lineage metadata for the submitted job (git SHA, branch, workflow run ID)"
+  best-trial-run-id:
+    description: "Run ID of the best trial in a completed sweep job"
 
 runs:
   using: docker
@@ -137,6 +144,10 @@ runs:
     - ${{ inputs.cron-expression }}
     - --time-zone
     - ${{ inputs.time-zone }}
+    - --experiment-name
+    - ${{ inputs.experiment-name }}
+    - --deployment-name
+    - ${{ inputs.deployment-name }}
   env:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}

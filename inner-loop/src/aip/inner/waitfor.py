@@ -890,5 +890,93 @@ def online_deployment(
     _emit_deployment_github_output(entity, endpoint_name)
 
 
+@app.command()
+def sweep_job(
+    subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+    resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+    workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+    job_name: str,
+    token: Optional[str] = None,
+    expires_on: Optional[int] = None,
+    tags: Annotated[
+        Optional[str],
+        typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+    ] = None,
+    registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+    promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+    image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+    aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+    schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+    cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+    time_zone: Annotated[Optional[str], typer.Option("--time-zone")] = None,
+):
+    """Wait for a hyperparameter sweep job to complete and output the best trial (US4).
+
+    Polls until the sweep job reaches a terminal state, then retrieves the best
+    child trial run (as identified by AzureML) and emits its name as both
+    'version' and a dedicated 'best-trial-run-id' output.
+    """
+    print(f"[waitfor sweep-job] Waiting for sweep job {job_name}")
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    token_manager = TokenManager(token=token, expires_on=expires_on)
+
+    entity, final_state = _wait_for_asset(
+        subject="sweep-job",
+        fetch_entity=lambda: client.jobs.get(name=job_name),
+        tags=tags,
+        fetch_state=lambda access_token: _get_job_state_from_rest(
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=workspace_name,
+            job_name=job_name,
+            access_token=access_token,
+        ),
+        token_manager=token_manager,
+    )
+
+    if final_state not in SUCCESS_STATES:
+        print(f"[waitfor sweep-job] ❌ Sweep job reached terminal state '{final_state}'.")
+        raise typer.Exit(code=1)
+
+    print(f"[waitfor sweep-job] ✅ Sweep job '{entity.name}' completed with state '{final_state}'.")
+
+    # Retrieve the best trial child run
+    best_trial_run_id: Optional[str] = None
+    best_child = getattr(entity, "best_child_run_id", None)
+    if best_child:
+        best_trial_run_id = str(best_child)
+        print(f"[waitfor sweep-job] Best trial run ID: {best_trial_run_id}")
+    else:
+        # Fallback: inspect child jobs and pick the one with the best primary metric
+        print("[waitfor sweep-job] best_child_run_id not available on entity; listing child jobs")
+        try:
+            child_jobs = list(client.jobs.list(parent_job_name=job_name))
+            succeeded = [j for j in child_jobs if _normalize_state(getattr(j, "status", "")) in SUCCESS_STATES]
+            if succeeded:
+                best_child_job = succeeded[0]
+                best_trial_run_id = best_child_job.name
+                print(f"[waitfor sweep-job] Best trial (first succeeded child): {best_trial_run_id}")
+        except Exception as exc:
+            print(f"[waitfor sweep-job] Warning: could not list child jobs: {exc}")
+
+    output: dict[str, str] = {
+        "reference": f"azureml:{entity.name}",
+        "version": entity.name,
+        "resource-id": entity.id or "",
+    }
+    if best_trial_run_id:
+        output["best-trial-run-id"] = best_trial_run_id
+    github_output(output)
+
+
 if __name__ == "__main__":
     app()
