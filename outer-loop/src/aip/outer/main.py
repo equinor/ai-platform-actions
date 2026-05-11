@@ -5,7 +5,6 @@ Routes verb/subject pairs to the appropriate command module.
 """
 
 import typer
-from typing import Optional
 from . import evaluate
 from . import compare
 from . import report

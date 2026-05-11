@@ -20,23 +20,13 @@ from .util import (
 app = typer.Typer()
 
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def experiment(
+    ctx: typer.Context,
     mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
-    # passthrough args (unused here)
-    subscription: Annotated[Optional[str], typer.Option("--subscription", callback=empty_string_to_none, hidden=True)] = None,
-    resource_group: Annotated[Optional[str], typer.Option("--resource-group", callback=empty_string_to_none, hidden=True)] = None,
-    workspace_name: Annotated[Optional[str], typer.Option("--workspace-name", callback=empty_string_to_none, hidden=True)] = None,
-    run_id: Annotated[Optional[str], typer.Option("--run-id", callback=empty_string_to_none, hidden=True)] = None,
-    run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none, hidden=True)] = None,
-    thresholds_file: Annotated[Optional[str], typer.Option("--thresholds-file", callback=empty_string_to_none, hidden=True)] = None,
-    ranking_criteria_file: Annotated[Optional[str], typer.Option("--ranking-criteria-file", callback=empty_string_to_none, hidden=True)] = None,
-    policy_config_file: Annotated[Optional[str], typer.Option("--policy-config-file", callback=empty_string_to_none, hidden=True)] = None,
-    model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none, hidden=True)] = None,
-    model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none, hidden=True)] = None,
 ):
     """
     Generate an experiment summary and post it as a GitHub step summary (US3 — Experiment Tracking).
@@ -44,14 +34,21 @@ def experiment(
     Fetches the most recent runs from the MLFlow proxy, computes a run count and
     metric trend (latest run vs. the run before it), and renders a Markdown report.
     """
-    print(f"[report experiment] Experiment: {experiment_name}")
+    if not mlflow_proxy_url:
+        typer.echo("[report experiment] ERROR: --mlflow-proxy-url is required", err=True)
+        raise typer.Exit(1)
+    if not experiment_name:
+        typer.echo("[report experiment] ERROR: --experiment-name is required", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"[report experiment] Experiment: {experiment_name}")
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
     client = MLFlowProxyClient(mlflow_proxy_url, credential)
 
     runs = client.get_experiment_runs(experiment_name, max_results=20)
-    print(f"[report experiment] Found {len(runs)} recent runs")
+    typer.echo(f"[report experiment] Found {len(runs)} recent runs")
 
     summary_lines = [
         f"## Experiment Report: `{experiment_name}`",

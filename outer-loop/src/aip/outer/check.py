@@ -30,23 +30,15 @@ KNOWN_SIGNALS = {
 }
 
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def monitoring(
+    ctx: typer.Context,
     mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none)] = None,
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
-    # passthrough args (unused here)
-    subscription: Annotated[Optional[str], typer.Option("--subscription", callback=empty_string_to_none, hidden=True)] = None,
-    resource_group: Annotated[Optional[str], typer.Option("--resource-group", callback=empty_string_to_none, hidden=True)] = None,
-    workspace_name: Annotated[Optional[str], typer.Option("--workspace-name", callback=empty_string_to_none, hidden=True)] = None,
-    run_id: Annotated[Optional[str], typer.Option("--run-id", callback=empty_string_to_none, hidden=True)] = None,
-    run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none, hidden=True)] = None,
-    thresholds_file: Annotated[Optional[str], typer.Option("--thresholds-file", callback=empty_string_to_none, hidden=True)] = None,
-    ranking_criteria_file: Annotated[Optional[str], typer.Option("--ranking-criteria-file", callback=empty_string_to_none, hidden=True)] = None,
-    policy_config_file: Annotated[Optional[str], typer.Option("--policy-config-file", callback=empty_string_to_none, hidden=True)] = None,
 ):
     """
     Read latest monitoring signals from the MLFlow proxy and emit a drift/quality report (US8).
@@ -55,12 +47,16 @@ def monitoring(
     named ``monitoring-<model-name>`` (or the experiment name supplied directly).
     The command outputs a structured JSON report and a Markdown step summary.
     """
+    if not mlflow_proxy_url:
+        typer.echo("[check monitoring] ERROR: --mlflow-proxy-url is required", err=True)
+        raise typer.Exit(1)
+
     monitoring_experiment = experiment_name or (f"monitoring-{model_name}" if model_name else None)
     if not monitoring_experiment:
         typer.echo("[check monitoring] ERROR: supply --experiment-name or --model-name", err=True)
         raise typer.Exit(1)
 
-    print(f"[check monitoring] Monitoring experiment: {monitoring_experiment}")
+    typer.echo(f"[check monitoring] Monitoring experiment: {monitoring_experiment}")
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
@@ -69,14 +65,14 @@ def monitoring(
     monitoring_run = client.get_monitoring_run(monitoring_experiment)
 
     if monitoring_run is None:
-        print(f"[check monitoring] No monitoring run found for '{monitoring_experiment}'")
+        typer.echo(f"[check monitoring] No monitoring run found for '{monitoring_experiment}'")
         signals: dict = {}
         run_id_display = "N/A"
     else:
         signals = monitoring_run.get("metrics", {})
         run_id_display = monitoring_run.get("run_id", "?")
-        print(f"[check monitoring] Latest monitoring run: {run_id_display}")
-        print(f"[check monitoring] Signals: {signals}")
+        typer.echo(f"[check monitoring] Latest monitoring run: {run_id_display}")
+        typer.echo(f"[check monitoring] Signals: {signals}")
 
     # Build report
     summary_lines = [

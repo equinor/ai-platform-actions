@@ -96,7 +96,7 @@ outputs:
 
 runs:
   using: docker
-  image: docker://ghcr.io/equinor/ai-platform-actions/outer-loop:latest
+  image: docker://ghcr.io/equinor/ai-platform-actions/outer-loop:v0.1.0
   args:
     - ${{ inputs.verb }}
     - ${{ inputs.subject }}

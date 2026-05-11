@@ -61,10 +61,16 @@ Possible recommended actions: `retrain` | `data-refresh` | `label-improvement` |
 drift_threshold: 0.10
 performance_drop_threshold: 0.05
 label_quality_threshold: 0.05
+data_staleness_threshold: 0.20
+feature_drift_threshold: 0.15
+code_issue_threshold: 0.10
 actions:
   on_drift: retrain
   on_performance_drop: retrain
   on_label_quality: label-improvement
+  on_data_staleness: data-refresh
+  on_feature_drift: feature-change
+  on_code_issue: code-fix
   default: no-change
 ```
 

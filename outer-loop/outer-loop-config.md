@@ -134,10 +134,16 @@ Defines thresholds for monitoring signals and the action to recommend when each 
 drift_threshold: <float>
 performance_drop_threshold: <float>
 label_quality_threshold: <float>
+data_staleness_threshold: <float>
+feature_drift_threshold: <float>
+code_issue_threshold: <float>
 actions:
   on_drift: <action>
   on_performance_drop: <action>
   on_label_quality: <action>
+  on_data_staleness: <action>
+  on_feature_drift: <action>
+  on_code_issue: <action>
   default: <action>
 ```
 
@@ -148,9 +154,15 @@ actions:
 | `drift_threshold` | float | `0.10` | If `data_drift` signal exceeds this value, `on_drift` is recommended. |
 | `performance_drop_threshold` | float | `0.05` | If `performance_drop` signal exceeds this value, `on_performance_drop` is recommended. |
 | `label_quality_threshold` | float | `0.05` | If `label_quality_drop` signal exceeds this value, `on_label_quality` is recommended. |
+| `data_staleness_threshold` | float | `0.20` | If `data_staleness` signal exceeds this value, `on_data_staleness` is recommended. |
+| `feature_drift_threshold` | float | `0.15` | If `feature_drift` signal exceeds this value, `on_feature_drift` is recommended. |
+| `code_issue_threshold` | float | `0.10` | If `code_issue` signal exceeds this value, `on_code_issue` is recommended. |
 | `actions.on_drift` | string | `retrain` | Recommended action when data drift is detected. |
 | `actions.on_performance_drop` | string | `retrain` | Recommended action when performance drops below threshold. |
 | `actions.on_label_quality` | string | `label-improvement` | Recommended action when label quality drops. |
+| `actions.on_data_staleness` | string | `data-refresh` | Recommended action when training data is stale. |
+| `actions.on_feature_drift` | string | `feature-change` | Recommended action when feature distribution drifts. |
+| `actions.on_code_issue` | string | `code-fix` | Recommended action when a code/pipeline issue is detected. |
 | `actions.default` | string | `no-change` | Recommended action when no threshold is breached. |
 
 ### Supported action values
@@ -171,7 +183,10 @@ Rules are evaluated in this order; the first match wins:
 1. `data_drift` > `drift_threshold` → `on_drift`
 2. `performance_drop` > `performance_drop_threshold` → `on_performance_drop`
 3. `label_quality_drop` > `label_quality_threshold` → `on_label_quality`
-4. No match → `default`
+4. `data_staleness` > `data_staleness_threshold` → `on_data_staleness`
+5. `feature_drift` > `feature_drift_threshold` → `on_feature_drift`
+6. `code_issue` > `code_issue_threshold` → `on_code_issue`
+7. No match → `default`
 
 ### Example
 
@@ -179,10 +194,16 @@ Rules are evaluated in this order; the first match wins:
 drift_threshold: 0.10
 performance_drop_threshold: 0.05
 label_quality_threshold: 0.05
+data_staleness_threshold: 0.20
+feature_drift_threshold: 0.15
+code_issue_threshold: 0.10
 actions:
   on_drift: retrain
   on_performance_drop: retrain
   on_label_quality: label-improvement
+  on_data_staleness: data-refresh
+  on_feature_drift: feature-change
+  on_code_issue: code-fix
   default: no-change
 ```
 
@@ -192,10 +213,16 @@ actions:
 drift_threshold: 0.05
 performance_drop_threshold: 0.03
 label_quality_threshold: 0.08
+data_staleness_threshold: 0.15
+feature_drift_threshold: 0.10
+code_issue_threshold: 0.05
 actions:
   on_drift: data-refresh
   on_performance_drop: retrain
   on_label_quality: label-improvement
+  on_data_staleness: data-refresh
+  on_feature_drift: feature-change
+  on_code_issue: code-fix
   default: no-change
 ```
 

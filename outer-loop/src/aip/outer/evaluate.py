@@ -6,8 +6,6 @@ Verbs:
   evaluate policy  — apply decision policy rules to monitoring signals
 """
 
-import json
-import sys
 from typing import Annotated, Optional
 
 import typer
@@ -28,23 +26,15 @@ app = typer.Typer()
 # evaluate gate (US1)
 # ---------------------------------------------------------------------------
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def gate(
+    ctx: typer.Context,
     mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     thresholds_file: Annotated[str, typer.Option("--thresholds-file")],
     run_id: Annotated[Optional[str], typer.Option("--run-id", callback=empty_string_to_none)] = None,
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
-    # passthrough args from action.yaml (unused here)
-    subscription: Annotated[Optional[str], typer.Option("--subscription", callback=empty_string_to_none, hidden=True)] = None,
-    resource_group: Annotated[Optional[str], typer.Option("--resource-group", callback=empty_string_to_none, hidden=True)] = None,
-    workspace_name: Annotated[Optional[str], typer.Option("--workspace-name", callback=empty_string_to_none, hidden=True)] = None,
-    run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none, hidden=True)] = None,
-    ranking_criteria_file: Annotated[Optional[str], typer.Option("--ranking-criteria-file", callback=empty_string_to_none, hidden=True)] = None,
-    policy_config_file: Annotated[Optional[str], typer.Option("--policy-config-file", callback=empty_string_to_none, hidden=True)] = None,
-    model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none, hidden=True)] = None,
-    model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none, hidden=True)] = None,
 ):
     """
     Evaluate whether a training run meets metric thresholds (US1 — Evaluation Gates).
@@ -58,9 +48,19 @@ def gate(
       f1_score: {min: 0.80}
       loss: {max: 0.15}
     """
-    print(f"[evaluate gate] Experiment: {experiment_name}")
-    print(f"[evaluate gate] Run ID: {run_id or '(latest)'}")
-    print(f"[evaluate gate] Thresholds file: {thresholds_file}")
+    if not mlflow_proxy_url:
+        typer.echo("[evaluate gate] ERROR: --mlflow-proxy-url is required", err=True)
+        raise typer.Exit(1)
+    if not experiment_name:
+        typer.echo("[evaluate gate] ERROR: --experiment-name is required", err=True)
+        raise typer.Exit(1)
+    if not thresholds_file:
+        typer.echo("[evaluate gate] ERROR: --thresholds-file is required", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"[evaluate gate] Experiment: {experiment_name}")
+    typer.echo(f"[evaluate gate] Run ID: {run_id or '(latest)'}")
+    typer.echo(f"[evaluate gate] Thresholds file: {thresholds_file}")
 
     thresholds = load_yaml_file(thresholds_file, "thresholds")
 
@@ -74,13 +74,13 @@ def gate(
     else:
         runs = client.get_experiment_runs(experiment_name, max_results=1)
         if not runs:
-            print(f"[evaluate gate] ERROR: no runs found in experiment '{experiment_name}'", file=sys.stderr)
+            typer.echo(f"[evaluate gate] ERROR: no runs found in experiment '{experiment_name}'", err=True)
             raise typer.Exit(1)
         actual_run_id = runs[0]["run_id"]
-        print(f"[evaluate gate] Resolved to latest run: {actual_run_id}")
+        typer.echo(f"[evaluate gate] Resolved to latest run: {actual_run_id}")
 
     metrics = client.get_run_metrics(actual_run_id)
-    print(f"[evaluate gate] Metrics: {metrics}")
+    typer.echo(f"[evaluate gate] Metrics: {metrics}")
 
     # Evaluate each threshold
     rows: list[dict] = []
@@ -107,7 +107,7 @@ def gate(
         })
 
     result = "pass" if passed else "fail"
-    print(f"[evaluate gate] Overall result: {result.upper()}")
+    typer.echo(f"[evaluate gate] Overall result: {result.upper()}")
 
     # Build Markdown summary table
     summary_lines = [
@@ -132,7 +132,7 @@ def gate(
     })
 
     if not passed:
-        print("[evaluate gate] Gate FAILED — exiting with code 1")
+        typer.echo("[evaluate gate] Gate FAILED — exiting with code 1")
         raise typer.Exit(1)
 
 
@@ -140,23 +140,15 @@ def gate(
 # evaluate policy (US9)
 # ---------------------------------------------------------------------------
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def policy(
+    ctx: typer.Context,
     mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
     policy_config_file: Annotated[str, typer.Option("--policy-config-file")],
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
-    # passthrough args (unused here)
-    subscription: Annotated[Optional[str], typer.Option("--subscription", callback=empty_string_to_none, hidden=True)] = None,
-    resource_group: Annotated[Optional[str], typer.Option("--resource-group", callback=empty_string_to_none, hidden=True)] = None,
-    workspace_name: Annotated[Optional[str], typer.Option("--workspace-name", callback=empty_string_to_none, hidden=True)] = None,
-    run_id: Annotated[Optional[str], typer.Option("--run-id", callback=empty_string_to_none, hidden=True)] = None,
-    run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none, hidden=True)] = None,
-    thresholds_file: Annotated[Optional[str], typer.Option("--thresholds-file", callback=empty_string_to_none, hidden=True)] = None,
-    ranking_criteria_file: Annotated[Optional[str], typer.Option("--ranking-criteria-file", callback=empty_string_to_none, hidden=True)] = None,
-    model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none, hidden=True)] = None,
 ):
     """
     Apply decision policy rules to monitoring signals (US9 — Decision Policies).
@@ -168,14 +160,28 @@ def policy(
     Policy config YAML format:
       drift_threshold: 0.10
       performance_drop_threshold: 0.05
+      label_quality_threshold: 0.05
+      data_staleness_threshold: 0.20
+      feature_drift_threshold: 0.15
+      code_issue_threshold: 0.10
       actions:
         on_drift: retrain
         on_performance_drop: retrain
         on_label_quality: label-improvement
+        on_data_staleness: data-refresh
+        on_feature_drift: feature-change
+        on_code_issue: code-fix
         default: no-change
     """
-    print(f"[evaluate policy] Policy config: {policy_config_file}")
-    print(f"[evaluate policy] Monitoring experiment: {experiment_name or model_name}")
+    if not mlflow_proxy_url:
+        typer.echo("[evaluate policy] ERROR: --mlflow-proxy-url is required", err=True)
+        raise typer.Exit(1)
+    if not policy_config_file:
+        typer.echo("[evaluate policy] ERROR: --policy-config-file is required", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"[evaluate policy] Policy config: {policy_config_file}")
+    typer.echo(f"[evaluate policy] Monitoring experiment: {experiment_name or model_name}")
 
     policy_config = load_yaml_file(policy_config_file, "policy config")
 
@@ -187,15 +193,15 @@ def policy(
     monitoring_run = client.get_monitoring_run(monitoring_experiment)
 
     if monitoring_run is None:
-        print(f"[evaluate policy] No monitoring run found — defaulting to no-change")
+        typer.echo("[evaluate policy] No monitoring run found — defaulting to no-change")
         recommended_action = "no-change"
         signals: dict = {}
     else:
         signals = monitoring_run.get("metrics", {})
         recommended_action = _apply_policy(signals, policy_config)
 
-    print(f"[evaluate policy] Signals: {signals}")
-    print(f"[evaluate policy] Recommended action: {recommended_action}")
+    typer.echo(f"[evaluate policy] Signals: {signals}")
+    typer.echo(f"[evaluate policy] Recommended action: {recommended_action}")
 
     summary_lines = [
         "## Decision Policy Evaluation",
@@ -220,7 +226,10 @@ def policy(
 
 
 def _apply_policy(signals: dict, policy_config: dict) -> str:
-    """Apply policy rules to monitoring signals and return the recommended action."""
+    """Apply policy rules to monitoring signals and return the recommended action.
+
+    Rules are evaluated in priority order; the first matching threshold wins.
+    """
     actions_config = policy_config.get("actions", {})
 
     drift = signals.get("data_drift", 0.0)
@@ -237,5 +246,20 @@ def _apply_policy(signals: dict, policy_config: dict) -> str:
     label_threshold = policy_config.get("label_quality_threshold", 0.05)
     if label_quality > label_threshold:
         return actions_config.get("on_label_quality", "label-improvement")
+
+    data_staleness = signals.get("data_staleness", 0.0)
+    data_staleness_threshold = policy_config.get("data_staleness_threshold", 0.20)
+    if data_staleness > data_staleness_threshold:
+        return actions_config.get("on_data_staleness", "data-refresh")
+
+    feature_drift = signals.get("feature_drift", 0.0)
+    feature_drift_threshold = policy_config.get("feature_drift_threshold", 0.15)
+    if feature_drift > feature_drift_threshold:
+        return actions_config.get("on_feature_drift", "feature-change")
+
+    code_issue = signals.get("code_issue", 0.0)
+    code_issue_threshold = policy_config.get("code_issue_threshold", 0.10)
+    if code_issue > code_issue_threshold:
+        return actions_config.get("on_code_issue", "code-fix")
 
     return actions_config.get("default", "no-change")
