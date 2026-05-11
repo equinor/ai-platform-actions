@@ -1,0 +1,130 @@
+name: Outer Loop
+description: |
+  Unified action for ML experiment analytics and evaluation: evaluate gates, compare
+  candidates, report on experiments, check monitoring signals, and apply decision policies.
+
+inputs:
+  verb:
+    description: "Action verb (evaluate, compare, report, check)"
+    required: true
+  subject:
+    description: "Target subject (gate, candidates, experiment, monitoring, policy)"
+    required: true
+
+  # --- Authentication ---
+  token:
+    description: "Access token from azLogin action. Required unless running locally."
+    required: false
+  expires-on:
+    description: "Token expiry epoch seconds from azLogin action."
+    required: false
+
+  # --- MLFlow Proxy ---
+  mlflow-proxy-url:
+    description: "Base URL of the MLFlow proxy API (e.g. https://mlflow-proxy.cluster.aurora.equinor.com)"
+    required: false
+
+  # --- Experiment / Run targeting ---
+  experiment-name:
+    description: "Azure ML / MLFlow experiment name"
+    required: false
+  run-id:
+    description: "Single MLFlow run ID"
+    required: false
+  run-ids:
+    description: "Comma-separated list of MLFlow run IDs for multi-run operations"
+    required: false
+
+  # --- Config files ---
+  thresholds-file:
+    description: |
+      Path to YAML file containing metric pass/fail thresholds for evaluate gate.
+      Example:
+        accuracy: {min: 0.85}
+        f1_score: {min: 0.80}
+        loss: {max: 0.15}
+    required: false
+  ranking-criteria-file:
+    description: |
+      Path to YAML file containing ranking criteria for compare candidates.
+      Example:
+        primary: accuracy
+        direction: maximize
+        weights:
+          accuracy: 0.7
+          f1_score: 0.3
+    required: false
+  policy-config-file:
+    description: |
+      Path to YAML file containing decision policy rules for evaluate policy.
+      Example:
+        drift_threshold: 0.1
+        performance_threshold: 0.05
+        actions:
+          on_drift: retrain
+          on_performance_drop: retrain
+    required: false
+
+  # --- Azure ML workspace (needed for SDK-backed operations) ---
+  subscription-id:
+    description: "Azure subscription ID"
+    required: false
+  resource-group:
+    description: "Azure resource group name"
+    required: false
+  workspace-name:
+    description: "Azure Machine Learning workspace name"
+    required: false
+
+  # --- Model targeting (for monitoring / lineage) ---
+  model-name:
+    description: "Azure ML registered model name"
+    required: false
+  model-version:
+    description: "Azure ML registered model version"
+    required: false
+
+outputs:
+  result:
+    description: "Pass/fail result for gate evaluation, or action recommendation for policy"
+  best-run-id:
+    description: "Run ID of the best candidate (compare candidates)"
+  best-run-metrics:
+    description: "JSON-encoded metrics of the best candidate run"
+  summary:
+    description: "Human-readable summary (also posted as GitHub step summary)"
+
+runs:
+  using: docker
+  image: docker://ghcr.io/equinor/ai-platform-actions/outer-loop:latest
+  args:
+    - ${{ inputs.verb }}
+    - ${{ inputs.subject }}
+    - --token
+    - ${{ inputs.token }}
+    - --expires-on
+    - ${{ inputs.expires-on }}
+    - --mlflow-proxy-url
+    - ${{ inputs.mlflow-proxy-url }}
+    - --experiment-name
+    - ${{ inputs.experiment-name }}
+    - --run-id
+    - ${{ inputs.run-id }}
+    - --run-ids
+    - ${{ inputs.run-ids }}
+    - --thresholds-file
+    - ${{ inputs.thresholds-file }}
+    - --ranking-criteria-file
+    - ${{ inputs.ranking-criteria-file }}
+    - --policy-config-file
+    - ${{ inputs.policy-config-file }}
+    - --subscription
+    - ${{ inputs.subscription-id }}
+    - --resource-group
+    - ${{ inputs.resource-group }}
+    - --workspace-name
+    - ${{ inputs.workspace-name }}
+    - --model-name
+    - ${{ inputs.model-name }}
+    - --model-version
+    - ${{ inputs.model-version }}
