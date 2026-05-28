@@ -12,6 +12,7 @@ Provides:
 
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
@@ -360,12 +361,28 @@ def load_yaml_file(path: str, label: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def github_output(outputs: dict[str, str]) -> None:
-    """Write key=value pairs to GITHUB_OUTPUT."""
+    """Write key=value pairs to GITHUB_OUTPUT.
+
+    Multi-line values use the heredoc delimiter syntax required by GitHub Actions::
+
+        key<<ghadelimiter_<uuid>
+        multi
+        line
+        value
+        ghadelimiter_<uuid>
+
+    Single-line values use the simple ``key=value`` format.
+    """
     env_file = os.environ.get("GITHUB_OUTPUT")
     if env_file:
         with open(env_file, "a") as f:
             for key, value in outputs.items():
-                f.write(f"{key}={value}\n")
+                str_value = str(value)
+                if "\n" in str_value:
+                    delimiter = f"ghadelimiter_{uuid.uuid4().hex}"
+                    f.write(f"{key}<<{delimiter}\n{str_value}\n{delimiter}\n")
+                else:
+                    f.write(f"{key}={str_value}\n")
 
 
 def github_step_summary(markdown: str) -> None:
