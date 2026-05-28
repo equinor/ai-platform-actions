@@ -29,6 +29,7 @@ def candidates(
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     ranking_criteria_file: Annotated[str, typer.Option("--ranking-criteria-file")],
     run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none)] = None,
+    run_name: Annotated[Optional[str], typer.Option("--run-name", callback=empty_string_to_none)] = None,
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
 ):
@@ -65,13 +66,26 @@ def candidates(
     criteria = load_yaml_file(ranking_criteria_file, "ranking criteria")
 
     run_id_list = [r.strip() for r in run_ids.split(",") if r.strip()] if run_ids else None
-    typer.echo(f"[compare candidates] Scoped to run IDs: {run_id_list or '(all experiment runs)'}")
+
+    if run_id_list and run_name:
+        typer.echo(
+            "[compare candidates] WARNING: both --run-ids and --run-name supplied; --run-ids takes precedence",
+            err=True,
+        )
+        run_name = None
+
+    if run_id_list:
+        typer.echo(f"[compare candidates] Scoped to run IDs: {run_id_list}")
+    elif run_name:
+        typer.echo(f"[compare candidates] Scoped to run name: {run_name!r}")
+    else:
+        typer.echo("[compare candidates] Scoped to: (all experiment runs)")
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
     client = create_mlflow_client(mlflow_url, credential)
 
-    runs = client.compare_runs(experiment_name, run_ids=run_id_list)
+    runs = client.compare_runs(experiment_name, run_ids=run_id_list, run_name=run_name)
     if not runs:
         typer.echo(f"[compare candidates] ERROR: no runs found in experiment '{experiment_name}'", err=True)
         raise typer.Exit(1)

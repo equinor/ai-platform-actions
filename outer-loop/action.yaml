@@ -38,6 +38,11 @@ inputs:
   run-ids:
     description: "Comma-separated list of MLFlow run IDs for multi-run operations"
     required: false
+  run-name:
+    description: |
+      Filter compare candidates to runs with this exact display name (mlflow.runName tag).
+      Ignored when run-ids is also supplied.
+    required: false
 
   # --- Config files ---
   thresholds-file:
@@ -116,6 +121,8 @@ runs:
     - ${{ inputs.run-id }}
     - --run-ids
     - ${{ inputs.run-ids }}
+    - --run-name
+    - ${{ inputs.run-name }}
     - --thresholds-file
     - ${{ inputs.thresholds-file }}
     - --ranking-criteria-file

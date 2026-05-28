@@ -41,16 +41,30 @@ class MLFlowBackend(Protocol):
         {"run_id": str, "status": str, "metrics": dict[str, float], "tags": dict[str, str]}
     """
 
-    def get_experiment_runs(self, experiment_name: str, max_results: int = 100) -> list[dict]:
-        """Return a list of runs for an experiment, most recent first."""
+    def get_experiment_runs(
+        self, experiment_name: str, max_results: int = 100, run_name: Optional[str] = None
+    ) -> list[dict]:
+        """Return a list of runs for an experiment, most recent first.
+
+        If ``run_name`` is supplied, only runs whose ``mlflow.runName`` tag matches
+        exactly are returned.
+        """
         ...
 
     def get_run_metrics(self, run_id: str) -> dict[str, float]:
         """Return the final metric values for a single run."""
         ...
 
-    def compare_runs(self, experiment_name: str, run_ids: Optional[list[str]] = None) -> list[dict]:
-        """Return comparison data for multiple runs in an experiment."""
+    def compare_runs(
+        self,
+        experiment_name: str,
+        run_ids: Optional[list[str]] = None,
+        run_name: Optional[str] = None,
+    ) -> list[dict]:
+        """Return comparison data for multiple runs in an experiment.
+
+        ``run_ids`` takes precedence over ``run_name`` when both are supplied.
+        """
         ...
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
@@ -152,21 +166,38 @@ class MLFlowProxyClient:
 
     # --- Experiment endpoints ---
 
-    def get_experiment_runs(self, experiment_name: str, max_results: int = 100) -> list[dict]:
-        """Return a list of runs for an experiment, most recent first."""
+    def get_experiment_runs(
+        self, experiment_name: str, max_results: int = 100, run_name: Optional[str] = None
+    ) -> list[dict]:
+        """Return a list of runs for an experiment, most recent first.
+
+        If ``run_name`` is supplied, the returned list is filtered client-side to runs
+        whose ``mlflow.runName`` tag matches exactly.  The proxy API is external and
+        uncontrolled, so filtering is performed after fetching.
+        """
         data = self._get(
             f"/experiments/{experiment_name}/runs",
             params={"max_results": max_results},
         )
-        return data.get("runs", [])
+        runs = data.get("runs", [])
+        if run_name:
+            runs = [r for r in runs if r.get("tags", {}).get("mlflow.runName") == run_name]
+        return runs
 
     def get_run_metrics(self, run_id: str) -> dict[str, float]:
         """Return the final metric values for a single run."""
         data = self._get(f"/runs/{run_id}/metrics")
         return data.get("metrics", {})
 
-    def compare_runs(self, experiment_name: str, run_ids: Optional[list[str]] = None) -> list[dict]:
+    def compare_runs(
+        self,
+        experiment_name: str,
+        run_ids: Optional[list[str]] = None,
+        run_name: Optional[str] = None,
+    ) -> list[dict]:
         """Return comparison data for multiple runs in an experiment.
+
+        ``run_ids`` takes precedence over ``run_name`` when both are supplied.
 
         Raises ``RuntimeError`` with a clear message if the proxy does not
         support the ``/experiments/{name}/compare`` endpoint (HTTP 404).
@@ -184,7 +215,10 @@ class MLFlowProxyClient:
                     "Ensure your proxy version supports server-side run comparison."
                 ) from exc
             raise
-        return data.get("runs", [])
+        runs = data.get("runs", [])
+        if run_name and not run_ids:
+            runs = [r for r in runs if r.get("tags", {}).get("mlflow.runName") == run_name]
+        return runs
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
         """List artifacts for a run."""
@@ -273,8 +307,14 @@ class AzureMLBackend:
             "tags": tags,
         }
 
-    def get_experiment_runs(self, experiment_name: str, max_results: int = 100) -> list[dict]:
-        """Return a list of runs for an experiment, most recent first."""
+    def get_experiment_runs(
+        self, experiment_name: str, max_results: int = 100, run_name: Optional[str] = None
+    ) -> list[dict]:
+        """Return a list of runs for an experiment, most recent first.
+
+        If ``run_name`` is supplied, the filter is pushed to the MLflow REST API
+        search query (server-side), which avoids over-fetching runs.
+        """
         try:
             data = self._get(
                 "/api/2.0/mlflow/experiments/get-by-name",
@@ -285,10 +325,14 @@ class AzureMLBackend:
                 return []
             raise
         experiment_id = data["experiment"]["experiment_id"]
-        runs_data = self._post(
-            "/api/2.0/mlflow/runs/search",
-            {"experiment_ids": [experiment_id], "max_results": max_results, "order_by": ["start_time DESC"]},
-        )
+        body: dict[str, Any] = {
+            "experiment_ids": [experiment_id],
+            "max_results": max_results,
+            "order_by": ["start_time DESC"],
+        }
+        if run_name:
+            body["filter"] = f"run_name = '{run_name}'"
+        runs_data = self._post("/api/2.0/mlflow/runs/search", body)
         return [self._normalize_run(r) for r in runs_data.get("runs", [])]
 
     def get_run_metrics(self, run_id: str) -> dict[str, float]:
@@ -297,15 +341,23 @@ class AzureMLBackend:
         run_data = data.get("run", {}).get("data", {})
         return {m["key"]: m["value"] for m in run_data.get("metrics", [])}
 
-    def compare_runs(self, experiment_name: str, run_ids: Optional[list[str]] = None) -> list[dict]:
-        """Return comparison data for multiple runs in an experiment."""
+    def compare_runs(
+        self,
+        experiment_name: str,
+        run_ids: Optional[list[str]] = None,
+        run_name: Optional[str] = None,
+    ) -> list[dict]:
+        """Return comparison data for multiple runs in an experiment.
+
+        ``run_ids`` takes precedence over ``run_name`` when both are supplied.
+        """
         if run_ids:
             runs = []
             for rid in run_ids:
                 data = self._get("/api/2.0/mlflow/runs/get", params={"run_id": rid})
                 runs.append(self._normalize_run(data.get("run", {})))
             return runs
-        return self.get_experiment_runs(experiment_name, max_results=100)
+        return self.get_experiment_runs(experiment_name, max_results=100, run_name=run_name)
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
         """List artifacts for a run."""

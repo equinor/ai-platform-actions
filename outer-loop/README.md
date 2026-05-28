@@ -82,10 +82,18 @@ See [outer-loop-config.md](outer-loop-config.md#policyyaml----used-by-evaluate-p
 
 ### `compare candidates` — Candidate Comparison
 
-Queries MLFlow for all runs in the experiment (or a comma-separated subset via `run-ids`), scores each run using a weighted combination of metrics defined in `ranking-criteria-file`, and outputs the best run ID together with a ranked comparison table posted as a GitHub step summary.
+Queries MLFlow for all runs in the experiment (or a scoped subset), scores each run using a weighted combination of metrics defined in `ranking-criteria-file`, and outputs the best run ID together with a ranked comparison table posted as a GitHub step summary.
 
 **Required inputs:** `mlflow-url`, `experiment-name`, `ranking-criteria-file`  
-**Optional inputs:** `run-ids`, `token`, `expires-on`
+**Optional inputs:** `run-ids`, `run-name`, `token`, `expires-on`
+
+Scoping options (mutually exclusive — `run-ids` wins if both are supplied, with a warning):
+
+| Option | Effect |
+|--------|--------|
+| *(neither)* | Compares all runs in the experiment (up to 100). |
+| `run-ids` | Compares only the specified comma-separated run IDs. |
+| `run-name` | Compares only runs whose MLflow display name (`mlflow.runName` tag) exactly matches the given value. Useful when multiple training jobs reuse the same experiment name but have distinct display names and you don't know the individual run IDs. |
 
 **Ranking criteria file format:**
 
@@ -157,6 +165,7 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
 | `experiment-name` | Azure ML / MLFlow experiment name. | No |
 | `run-id` | Single MLFlow run ID. | No |
 | `run-ids` | Comma-separated list of MLFlow run IDs for multi-run operations. | No |
+| `run-name` | Filter `compare candidates` to runs with this exact display name (`mlflow.runName` tag). Ignored when `run-ids` is also supplied. | No |
 
 ### Config files
 
@@ -254,6 +263,27 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
     run-id: ${{ steps.compare.outputs.best-run-id }}
     # ... other share inputs
 ```
+
+### Compare candidates filtered by run display name
+
+When an experiment accumulates runs from different training jobs that share the same
+experiment name but have distinct display names (set via `mlflow.set_tag("mlflow.runName", "baseline-v2")`
+or `mlflow.start_run(run_name="baseline-v2")`), use `run-name` to scope the comparison:
+
+```yaml
+- name: Compare baseline-v2 candidates
+  id: compare
+  uses: equinor/ai-platform-actions/outer-loop@main
+  with:
+    verb: compare
+    subject: candidates
+    mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
+    experiment-name: my-training-experiment
+    run-name: baseline-v2
+    ranking-criteria-file: .azureml/ranking.yaml
+```
+
+If you know the exact run IDs, `run-ids` takes precedence and `run-name` is ignored (with a warning).
 
 ### Report on an experiment
 

@@ -438,6 +438,55 @@ class TestAzureMLBackend:
         assert result[0]["run_id"] == "r1"
         assert result[1]["run_id"] == "r2"
 
+    def test_get_experiment_runs_with_run_name_sends_filter_in_post_body(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"experiment": {"experiment_id": "exp1"}},
+            raise_for_status=lambda: None,
+        )
+        backend._session.post.return_value = MagicMock(
+            status_code=200,
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [{
+                "info": {"run_id": "r1", "status": "FINISHED"},
+                "data": {
+                    "metrics": [{"key": "accuracy", "value": 0.9}],
+                    "tags": [{"key": "mlflow.runName", "value": "baseline-v2"}],
+                },
+            }]},
+        )
+
+        runs = backend.get_experiment_runs("my-exp", run_name="baseline-v2")
+
+        post_call_kwargs = backend._session.post.call_args
+        body = post_call_kwargs[1]["json"]
+        assert body.get("filter") == "run_name = 'baseline-v2'"
+        assert len(runs) == 1
+        assert runs[0]["tags"]["mlflow.runName"] == "baseline-v2"
+
+    def test_compare_runs_with_run_name_delegates_to_get_experiment_runs(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"experiment": {"experiment_id": "exp1"}},
+            raise_for_status=lambda: None,
+        )
+        backend._session.post.return_value = MagicMock(
+            status_code=200,
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [{
+                "info": {"run_id": "r2", "status": "FINISHED"},
+                "data": {"metrics": [], "tags": [{"key": "mlflow.runName", "value": "my-run"}]},
+            }]},
+        )
+
+        result = backend.compare_runs("my-exp", run_name="my-run")
+
+        post_body = backend._session.post.call_args[1]["json"]
+        assert post_body.get("filter") == "run_name = 'my-run'"
+        assert result[0]["run_id"] == "r2"
+
     def test_get_monitoring_run_returns_none_when_no_runs(self):
         backend = self._make_backend()
         not_found = MagicMock(status_code=404)
@@ -449,6 +498,126 @@ class TestAzureMLBackend:
         result = backend.get_monitoring_run("monitoring-my-model")
 
         assert result is None
+
+
+# =============================================================================
+# MLFlowProxyClient — run_name client-side filter
+# =============================================================================
+
+class TestMLFlowProxyClientRunNameFilter:
+    """Tests for client-side run_name filtering in MLFlowProxyClient."""
+
+    def _make_client(self):
+        cred = MagicMock()
+        cred.get_token.return_value = MagicMock(token="tok", expires_on=9999999999)
+        with patch("aip.outer.util._make_requests_session") as mock_factory:
+            mock_factory.return_value = MagicMock()
+            client = MLFlowProxyClient("https://proxy.example.com", cred)
+        return client
+
+    def test_get_experiment_runs_filters_by_run_name(self):
+        client = self._make_client()
+        client._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [
+                {"run_id": "r1", "tags": {"mlflow.runName": "baseline-v2"}},
+                {"run_id": "r2", "tags": {"mlflow.runName": "experiment-x"}},
+                {"run_id": "r3", "tags": {"mlflow.runName": "baseline-v2"}},
+            ]},
+        )
+
+        runs = client.get_experiment_runs("my-exp", run_name="baseline-v2")
+
+        assert [r["run_id"] for r in runs] == ["r1", "r3"]
+
+    def test_get_experiment_runs_no_run_name_returns_all(self):
+        client = self._make_client()
+        client._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [
+                {"run_id": "r1", "tags": {"mlflow.runName": "a"}},
+                {"run_id": "r2", "tags": {"mlflow.runName": "b"}},
+            ]},
+        )
+
+        runs = client.get_experiment_runs("my-exp")
+
+        assert len(runs) == 2
+
+    def test_compare_runs_filters_by_run_name_when_no_run_ids(self):
+        client = self._make_client()
+        client._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [
+                {"run_id": "r1", "tags": {"mlflow.runName": "target"}},
+                {"run_id": "r2", "tags": {"mlflow.runName": "other"}},
+            ]},
+        )
+
+        runs = client.compare_runs("my-exp", run_name="target")
+
+        assert [r["run_id"] for r in runs] == ["r1"]
+
+
+# =============================================================================
+# compare candidates CLI — run-name option
+# =============================================================================
+
+from aip.outer.compare import app as compare_app
+
+
+class TestCompareCandidatesRunName:
+    """CLI-level tests for --run-name in compare candidates."""
+
+    CRITERIA_YAML = "primary: accuracy\ndirection: maximize\nweights:\n  accuracy: 1.0\n"
+
+    def _run_candidates(self, extra_args, mock_runs):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(self.CRITERIA_YAML)
+            tmp = f.name
+        try:
+            mock_client = MagicMock()
+            mock_client.compare_runs.return_value = mock_runs
+            with (
+                patch("aip.outer.compare.create_mlflow_client", return_value=mock_client),
+                patch("aip.outer.compare.get_credential", return_value=MagicMock()),
+            ):
+                result = runner.invoke(
+                    compare_app,
+                    [
+                        "candidates",
+                        "--mlflow-url", "https://proxy.example.com",
+                        "--experiment-name", "my-exp",
+                        "--ranking-criteria-file", tmp,
+                    ] + extra_args,
+                )
+                return result, mock_client
+        finally:
+            os.unlink(tmp)
+
+    def test_run_name_passed_to_compare_runs(self):
+        mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {"mlflow.runName": "baseline-v2"}}]
+        result, mock_client = self._run_candidates(["--run-name", "baseline-v2"], mock_runs)
+        assert result.exit_code == 0
+        mock_client.compare_runs.assert_called_once_with("my-exp", run_ids=None, run_name="baseline-v2")
+
+    def test_run_ids_takes_precedence_over_run_name_with_warning(self):
+        mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {}}]
+        result, mock_client = self._run_candidates(
+            ["--run-ids", "r1", "--run-name", "baseline-v2"], mock_runs
+        )
+        assert result.exit_code == 0
+        # run_name should be cleared when run_ids is present
+        call_kwargs = mock_client.compare_runs.call_args[1]
+        assert call_kwargs["run_ids"] == ["r1"]
+        assert call_kwargs["run_name"] is None
+        assert "WARNING" in result.stderr
+
+    def test_no_run_name_no_run_ids_compares_all(self):
+        mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {}}]
+        result, mock_client = self._run_candidates([], mock_runs)
+        assert result.exit_code == 0
+        mock_client.compare_runs.assert_called_once_with("my-exp", run_ids=None, run_name=None)
 
 
 if __name__ == "__main__":
