@@ -19,9 +19,13 @@ inputs:
     description: "Token expiry epoch seconds from azLogin action."
     required: false
 
-  # --- MLFlow Proxy ---
-  mlflow-proxy-url:
-    description: "Base URL of the MLFlow proxy API (e.g. https://mlflow-proxy.cluster.aurora.equinor.com)"
+  # --- MLFlow backend ---
+  mlflow-url:
+    description: |
+      MLFlow backend URL or AzureML tracking URI.
+      Accepts an https:// proxy URL (e.g. https://mlflow-proxy.cluster.aurora.equinor.com)
+      or an azureml:// tracking URI from an AzureML workspace
+      (e.g. azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>).
     required: false
 
   # --- Experiment / Run targeting ---
@@ -104,8 +108,8 @@ runs:
     - ${{ inputs.token }}
     - --expires-on
     - ${{ inputs.expires-on }}
-    - --mlflow-proxy-url
-    - ${{ inputs.mlflow-proxy-url }}
+    - --mlflow-url
+    - ${{ inputs.mlflow-url }}
     - --experiment-name
     - ${{ inputs.experiment-name }}
     - --run-id

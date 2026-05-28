@@ -23,12 +23,15 @@ sys.modules["azure.core.credentials"] = MagicMock()
 sys.modules["azure.identity"] = MagicMock()
 sys.modules["azure.ai"] = MagicMock()
 sys.modules["azure.ai.ml"] = MagicMock()
+sys.modules["mlflow"] = MagicMock()
+sys.modules["mlflow.entities"] = MagicMock()
 
 import pytest
 from typer.testing import CliRunner
 
 from aip.outer.compare import _compute_score
 from aip.outer.evaluate import _apply_policy, app as evaluate_app
+from aip.outer.util import AzureMLBackend, MLFlowProxyClient, create_mlflow_client
 
 runner = CliRunner(mix_stderr=False)
 
@@ -240,14 +243,14 @@ class TestGateEvaluation:
             mock_client = MagicMock()
             mock_client.get_run_metrics.return_value = metrics
             with (
-                patch("aip.outer.evaluate.MLFlowProxyClient", return_value=mock_client),
+                patch("aip.outer.evaluate.create_mlflow_client", return_value=mock_client),
                 patch("aip.outer.evaluate.get_credential", return_value=MagicMock()),
             ):
                 result = runner.invoke(
                     evaluate_app,
                     [
                         "gate",
-                        "--mlflow-proxy-url", "https://proxy.example.com",
+                        "--mlflow-url", "https://proxy.example.com",
                         "--experiment-name", "test-exp",
                         "--thresholds-file", tmp_path,
                         "--run-id", run_id,
@@ -316,6 +319,119 @@ class TestGateEvaluation:
         thresholds = "accuracy:\n  min: 0.80\nf1:\n  min: 0.75\nloss:\n  max: 0.20\n"
         result = self._run_gate({"accuracy": 0.90, "f1": 0.80, "loss": 0.10}, thresholds)
         assert result.exit_code == 0
+
+
+# =============================================================================
+# create_mlflow_client factory
+# =============================================================================
+
+class TestMLFlowClientFactory:
+    """Tests for the backend factory function in util.py."""
+
+    def test_https_url_returns_proxy_client(self):
+        cred = MagicMock()
+        with patch("aip.outer.util.MLFlowProxyClient.__init__", return_value=None):
+            client = create_mlflow_client("https://proxy.example.com", cred)
+        assert isinstance(client, MLFlowProxyClient)
+
+    def test_http_url_returns_proxy_client(self):
+        cred = MagicMock()
+        with patch("aip.outer.util.MLFlowProxyClient.__init__", return_value=None):
+            client = create_mlflow_client("http://localhost:5000", cred)
+        assert isinstance(client, MLFlowProxyClient)
+
+    def test_azureml_uri_returns_azureml_backend(self):
+        cred = MagicMock()
+        uri = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
+        with patch("aip.outer.util.mlflow.MlflowClient"):
+            client = create_mlflow_client(uri, cred)
+        assert isinstance(client, AzureMLBackend)
+
+    def test_unknown_scheme_raises_value_error(self):
+        with pytest.raises(ValueError, match="mlflow-url must be"):
+            create_mlflow_client("ftp://something.example.com", MagicMock())
+
+
+# =============================================================================
+# AzureMLBackend
+# =============================================================================
+
+class TestAzureMLBackend:
+    """Tests for AzureMLBackend normalisation and delegation logic."""
+
+    AZUREML_URI = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
+
+    @staticmethod
+    def _make_run(run_id: str, metrics: dict, status: str = "FINISHED", tags: dict | None = None):
+        """Build a mock mlflow Run object."""
+        run = MagicMock()
+        run.info.run_id = run_id
+        run.info.status = status
+        run.data.metrics = metrics
+        run.data.tags = tags or {}
+        return run
+
+    def test_get_experiment_runs_returns_normalized_dicts(self):
+        mock_run = self._make_run("r1", {"accuracy": 0.9})
+        mock_mlflow_client = MagicMock()
+        mock_mlflow_client.get_experiment_by_name.return_value = MagicMock(experiment_id="exp1")
+        mock_mlflow_client.search_runs.return_value = [mock_run]
+
+        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
+            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
+            runs = backend.get_experiment_runs("my-exp", max_results=10)
+
+        assert runs == [{"run_id": "r1", "status": "FINISHED", "metrics": {"accuracy": 0.9}, "tags": {}}]
+        mock_mlflow_client.search_runs.assert_called_once_with(
+            experiment_ids=["exp1"], max_results=10, order_by=["start_time DESC"]
+        )
+
+    def test_get_experiment_runs_returns_empty_when_experiment_not_found(self):
+        mock_mlflow_client = MagicMock()
+        mock_mlflow_client.get_experiment_by_name.return_value = None
+
+        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
+            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
+            runs = backend.get_experiment_runs("nonexistent-exp")
+
+        assert runs == []
+
+    def test_get_run_metrics_returns_metrics_dict(self):
+        mock_run = self._make_run("r1", {"f1": 0.85, "loss": 0.12})
+        mock_mlflow_client = MagicMock()
+        mock_mlflow_client.get_run.return_value = mock_run
+
+        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
+            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
+            metrics = backend.get_run_metrics("r1")
+
+        assert metrics == {"f1": 0.85, "loss": 0.12}
+
+    def test_compare_runs_with_explicit_run_ids_fetches_each(self):
+        runs_by_id = {
+            "r1": self._make_run("r1", {"accuracy": 0.9}),
+            "r2": self._make_run("r2", {"accuracy": 0.8}),
+        }
+        mock_mlflow_client = MagicMock()
+        mock_mlflow_client.get_run.side_effect = lambda rid: runs_by_id[rid]
+
+        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
+            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
+            result = backend.compare_runs("my-exp", run_ids=["r1", "r2"])
+
+        assert len(result) == 2
+        assert result[0]["run_id"] == "r1"
+        assert result[1]["run_id"] == "r2"
+
+    def test_get_monitoring_run_returns_none_when_no_runs(self):
+        mock_mlflow_client = MagicMock()
+        mock_mlflow_client.get_experiment_by_name.return_value = None
+
+        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
+            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
+            result = backend.get_monitoring_run("monitoring-my-model")
+
+        assert result is None
 
 
 if __name__ == "__main__":

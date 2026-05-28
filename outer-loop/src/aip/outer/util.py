@@ -2,7 +2,10 @@
 Shared utilities for the Outer Loop Action.
 
 Provides:
-- MLFlowProxyClient: authenticated HTTP client for the MLFlow proxy API
+- MLFlowBackend: Protocol defining the shared interface for all MLFlow backends
+- MLFlowProxyClient: authenticated HTTP client for the MLFlow proxy API (https://)
+- AzureMLBackend: MLFlow backend using the mlflow SDK with an AzureML tracking URI (azureml://)
+- create_mlflow_client: factory that selects the correct backend from the URL/URI scheme
 - github_output / github_step_summary: GitHub Actions integration helpers
 - Auth helpers (token credential, DefaultAzureCredential passthrough)
 """
@@ -10,8 +13,9 @@ Provides:
 import os
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Protocol, runtime_checkable
 
+import mlflow
 import requests
 import typer
 import yaml
@@ -22,6 +26,40 @@ from azure.identity import DefaultAzureCredential
 
 AML_SCOPE = "https://ml.azure.com/.default"
 MANAGEMENT_SCOPE = "https://management.azure.com/.default"
+
+
+# ---------------------------------------------------------------------------
+# MLFlow backend protocol
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class MLFlowBackend(Protocol):
+    """Shared interface for all MLFlow data-access backends.
+
+    Implementations must return run data as plain dicts with the shape::
+
+        {"run_id": str, "status": str, "metrics": dict[str, float], "tags": dict[str, str]}
+    """
+
+    def get_experiment_runs(self, experiment_name: str, max_results: int = 100) -> list[dict]:
+        """Return a list of runs for an experiment, most recent first."""
+        ...
+
+    def get_run_metrics(self, run_id: str) -> dict[str, float]:
+        """Return the final metric values for a single run."""
+        ...
+
+    def compare_runs(self, experiment_name: str, run_ids: Optional[list[str]] = None) -> list[dict]:
+        """Return comparison data for multiple runs in an experiment."""
+        ...
+
+    def get_run_artifacts(self, run_id: str) -> list[dict]:
+        """List artifacts for a run."""
+        ...
+
+    def get_monitoring_run(self, experiment_name: str) -> Optional[dict]:
+        """Return the latest monitoring run for a model/experiment, or None."""
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +107,13 @@ class MLFlowProxyClient:
     """
 
     def __init__(self, base_url: str, credential, scope: str = MANAGEMENT_SCOPE):
+        if not base_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"mlflow-proxy-url must be an http(s) URL of the MLFlow proxy service "
+                f"(e.g. https://mlflow-proxy.cluster.aurora.equinor.com), got: {base_url!r}. "
+                "This input is NOT the AzureML MLflow tracking URI (azureml://...); "
+                "it is the URL of the FastAPI mlflow-proxy that fronts MLflow."
+            )
         self._base_url = base_url.rstrip("/")
         self._credential = credential
         self._scope = scope
@@ -149,6 +194,89 @@ class MLFlowProxyClient:
         """Return the latest monitoring run for a model/experiment."""
         runs = self.get_experiment_runs(experiment_name, max_results=1)
         return runs[0] if runs else None
+
+
+# ---------------------------------------------------------------------------
+# AzureML backend (azureml:// tracking URI via mlflow SDK + azureml-mlflow)
+# ---------------------------------------------------------------------------
+
+class AzureMLBackend:
+    """MLFlow backend that connects directly to an AzureML workspace tracking URI.
+
+    Uses the ``mlflow`` Python SDK together with the ``azureml-mlflow`` plugin,
+    which intercepts calls to ``azureml://`` URIs and routes them through the
+    AzureML REST API.
+
+    **Authentication:** ``azureml-mlflow`` manages its own Azure credential chain
+    (``DefaultAzureCredential`` / environment variables set by ``azLogin``).  The
+    ``credential`` parameter is accepted for interface consistency with
+    ``MLFlowProxyClient`` but is not forwarded to the mlflow SDK calls.
+    """
+
+    def __init__(self, tracking_uri: str, credential):
+        self._tracking_uri = tracking_uri
+        self._client = mlflow.MlflowClient(tracking_uri=tracking_uri)
+
+    @staticmethod
+    def _normalize_run(run: "mlflow.entities.Run") -> dict:
+        return {
+            "run_id": run.info.run_id,
+            "status": run.info.status,
+            "metrics": dict(run.data.metrics),
+            "tags": dict(run.data.tags),
+        }
+
+    def get_experiment_runs(self, experiment_name: str, max_results: int = 100) -> list[dict]:
+        experiment = self._client.get_experiment_by_name(experiment_name)
+        if experiment is None:
+            return []
+        runs = self._client.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            max_results=max_results,
+            order_by=["start_time DESC"],
+        )
+        return [self._normalize_run(r) for r in runs]
+
+    def get_run_metrics(self, run_id: str) -> dict[str, float]:
+        run = self._client.get_run(run_id)
+        return dict(run.data.metrics)
+
+    def compare_runs(self, experiment_name: str, run_ids: Optional[list[str]] = None) -> list[dict]:
+        if run_ids:
+            return [self._normalize_run(self._client.get_run(rid)) for rid in run_ids]
+        return self.get_experiment_runs(experiment_name, max_results=100)
+
+    def get_run_artifacts(self, run_id: str) -> list[dict]:
+        artifacts = self._client.list_artifacts(run_id)
+        return [{"path": a.path, "size": a.file_size} for a in artifacts]
+
+    def get_monitoring_run(self, experiment_name: str) -> Optional[dict]:
+        runs = self.get_experiment_runs(experiment_name, max_results=1)
+        return runs[0] if runs else None
+
+
+# ---------------------------------------------------------------------------
+# Backend factory
+# ---------------------------------------------------------------------------
+
+def create_mlflow_client(url: str, credential) -> MLFlowBackend:
+    """Return the correct MLFlow backend based on the URL/URI scheme.
+
+    - ``https://`` or ``http://`` → :class:`MLFlowProxyClient` (HTTP proxy service)
+    - ``azureml://``              → :class:`AzureMLBackend`    (AzureML tracking URI)
+
+    Raises :class:`ValueError` for any other scheme.
+    """
+    if url.startswith(("http://", "https://")):
+        return MLFlowProxyClient(url, credential)
+    if url.startswith("azureml://"):
+        return AzureMLBackend(url, credential)
+    raise ValueError(
+        f"mlflow-url must be an https:// proxy URL or an azureml:// tracking URI, got: {url!r}. "
+        "Examples:\n"
+        "  https://mlflow-proxy.cluster.aurora.equinor.com\n"
+        "  azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/<sub>/..."
+    )
 
 
 # ---------------------------------------------------------------------------

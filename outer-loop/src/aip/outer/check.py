@@ -11,7 +11,7 @@ from typing import Annotated, Optional
 import typer
 
 from .util import (
-    MLFlowProxyClient,
+    create_mlflow_client,
     empty_string_to_none,
     get_credential,
     github_output,
@@ -33,7 +33,7 @@ KNOWN_SIGNALS = {
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def monitoring(
     ctx: typer.Context,
-    mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
+    mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none)] = None,
@@ -47,8 +47,8 @@ def monitoring(
     named ``monitoring-<model-name>`` (or the experiment name supplied directly).
     The command outputs a structured JSON report and a Markdown step summary.
     """
-    if not mlflow_proxy_url:
-        typer.echo("[check monitoring] ERROR: --mlflow-proxy-url is required", err=True)
+    if not mlflow_url:
+        typer.echo("[check monitoring] ERROR: --mlflow-url is required", err=True)
         raise typer.Exit(1)
 
     monitoring_experiment = experiment_name or (f"monitoring-{model_name}" if model_name else None)
@@ -60,7 +60,7 @@ def monitoring(
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
-    client = MLFlowProxyClient(mlflow_proxy_url, credential)
+    client = create_mlflow_client(mlflow_url, credential)
 
     monitoring_run = client.get_monitoring_run(monitoring_experiment)
 

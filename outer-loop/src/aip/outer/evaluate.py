@@ -11,7 +11,7 @@ from typing import Annotated, Optional
 import typer
 
 from .util import (
-    MLFlowProxyClient,
+    create_mlflow_client,
     empty_string_to_none,
     get_credential,
     github_output,
@@ -29,7 +29,7 @@ app = typer.Typer()
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def gate(
     ctx: typer.Context,
-    mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
+    mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     thresholds_file: Annotated[str, typer.Option("--thresholds-file")],
     run_id: Annotated[Optional[str], typer.Option("--run-id", callback=empty_string_to_none)] = None,
@@ -39,17 +39,17 @@ def gate(
     """
     Evaluate whether a training run meets metric thresholds (US1 — Evaluation Gates).
 
-    Reads metric thresholds from a YAML config file, fetches metrics from the
-    MLFlow proxy for the specified run (or the latest run in the experiment),
-    and outputs pass/fail plus a Markdown summary table.
+    Reads metric thresholds from a YAML config file, fetches metrics from MLFlow
+    for the specified run (or the latest run in the experiment), and outputs
+    pass/fail plus a Markdown summary table.
 
     Thresholds YAML format:
       accuracy: {min: 0.85}
       f1_score: {min: 0.80}
       loss: {max: 0.15}
     """
-    if not mlflow_proxy_url:
-        typer.echo("[evaluate gate] ERROR: --mlflow-proxy-url is required", err=True)
+    if not mlflow_url:
+        typer.echo("[evaluate gate] ERROR: --mlflow-url is required", err=True)
         raise typer.Exit(1)
     if not experiment_name:
         typer.echo("[evaluate gate] ERROR: --experiment-name is required", err=True)
@@ -66,7 +66,7 @@ def gate(
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
-    client = MLFlowProxyClient(mlflow_proxy_url, credential)
+    client = create_mlflow_client(mlflow_url, credential)
 
     # Resolve run ID — use latest run in experiment if not specified
     if run_id:
@@ -143,7 +143,7 @@ def gate(
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def policy(
     ctx: typer.Context,
-    mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
+    mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     policy_config_file: Annotated[str, typer.Option("--policy-config-file")],
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
@@ -153,9 +153,9 @@ def policy(
     """
     Apply decision policy rules to monitoring signals (US9 — Decision Policies).
 
-    Reads monitoring metrics from the MLFlow proxy (latest monitoring run),
-    applies policy rules defined in a YAML config, and outputs the recommended
-    action: retrain | data-refresh | label-improvement | feature-change | code-fix | no-change.
+    Reads monitoring metrics from MLFlow (latest monitoring run), applies policy
+    rules defined in a YAML config, and outputs the recommended action:
+    retrain | data-refresh | label-improvement | feature-change | code-fix | no-change.
 
     Policy config YAML format:
       drift_threshold: 0.10
@@ -173,8 +173,8 @@ def policy(
         on_code_issue: code-fix
         default: no-change
     """
-    if not mlflow_proxy_url:
-        typer.echo("[evaluate policy] ERROR: --mlflow-proxy-url is required", err=True)
+    if not mlflow_url:
+        typer.echo("[evaluate policy] ERROR: --mlflow-url is required", err=True)
         raise typer.Exit(1)
     if not policy_config_file:
         typer.echo("[evaluate policy] ERROR: --policy-config-file is required", err=True)
@@ -187,7 +187,7 @@ def policy(
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
-    client = MLFlowProxyClient(mlflow_proxy_url, credential)
+    client = create_mlflow_client(mlflow_url, credential)
 
     monitoring_experiment = experiment_name or f"monitoring-{model_name}"
     monitoring_run = client.get_monitoring_run(monitoring_experiment)

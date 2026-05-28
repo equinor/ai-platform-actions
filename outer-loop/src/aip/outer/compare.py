@@ -11,7 +11,7 @@ from typing import Annotated, Optional
 import typer
 
 from .util import (
-    MLFlowProxyClient,
+    create_mlflow_client,
     empty_string_to_none,
     get_credential,
     github_output,
@@ -25,7 +25,7 @@ app = typer.Typer()
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def candidates(
     ctx: typer.Context,
-    mlflow_proxy_url: Annotated[str, typer.Option("--mlflow-proxy-url")],
+    mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     ranking_criteria_file: Annotated[str, typer.Option("--ranking-criteria-file")],
     run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none)] = None,
@@ -49,8 +49,8 @@ def candidates(
         accuracy: 0.7
         f1_score: 0.3
     """
-    if not mlflow_proxy_url:
-        typer.echo("[compare candidates] ERROR: --mlflow-proxy-url is required", err=True)
+    if not mlflow_url:
+        typer.echo("[compare candidates] ERROR: --mlflow-url is required", err=True)
         raise typer.Exit(1)
     if not experiment_name:
         typer.echo("[compare candidates] ERROR: --experiment-name is required", err=True)
@@ -69,7 +69,7 @@ def candidates(
 
     expires_on_int = int(expires_on) if expires_on else None
     credential = get_credential(token, expires_on_int)
-    client = MLFlowProxyClient(mlflow_proxy_url, credential)
+    client = create_mlflow_client(mlflow_url, credential)
 
     runs = client.compare_runs(experiment_name, run_ids=run_id_list)
     if not runs:

@@ -6,7 +6,7 @@ A unified GitHub Action for ML experiment analytics and evaluation: evaluate gat
 
 ## Overview
 
-The Outer Loop action provides a single entry point for all post-training and production-monitoring workflows. It uses a `verb` + `subject` pattern (e.g. `evaluate gate`, `compare candidates`) to route requests to the appropriate command module. Authentication is handled via a token from the `azLogin` action or, when running locally, via `DefaultAzureCredential`. All metric data is read through the **MLFlow proxy** API — the action does not call Azure ML directly except where noted.
+The Outer Loop action provides a single entry point for all post-training and production-monitoring workflows. It uses a `verb` + `subject` pattern (e.g. `evaluate gate`, `compare candidates`) to route requests to the appropriate command module. Authentication is handled via a token from the `azLogin` action or, when running locally, via `DefaultAzureCredential`. All metric data is read through an MLFlow backend — either an **MLFlow proxy** service or directly from an **AzureML workspace tracking URI** — the action does not call Azure ML directly except where noted.
 
 ### Commands
 
@@ -24,9 +24,9 @@ The Outer Loop action provides a single entry point for all post-training and pr
 
 ### `evaluate gate` — Evaluation Gates
 
-Fetches metrics from the MLFlow proxy for a specific run (or the latest run in the experiment if `run-id` is omitted), compares each metric against the constraints in `thresholds-file`, and outputs a pass/fail result. If any metric fails or is missing the action exits with code 1, blocking downstream steps.
+Fetches metrics from MLFlow for a specific run (or the latest run in the experiment if `run-id` is omitted), compares each metric against the constraints in `thresholds-file`, and outputs a pass/fail result. If any metric fails or is missing the action exits with code 1, blocking downstream steps.
 
-**Required inputs:** `mlflow-proxy-url`, `experiment-name`, `thresholds-file`  
+**Required inputs:** `mlflow-url`, `experiment-name`, `thresholds-file`  
 **Optional inputs:** `run-id`, `token`, `expires-on`
 
 **Thresholds file format:**
@@ -48,11 +48,11 @@ See [outer-loop-config.md](outer-loop-config.md#thresholdsyaml----used-by-evalua
 
 ### `evaluate policy` — Decision Policies
 
-Reads the latest monitoring run from the MLFlow proxy (experiment `monitoring-<model-name>`, or `experiment-name` if supplied directly), applies the rules in `policy-config-file`, and outputs a recommended action.
+Reads the latest monitoring run from MLFlow (experiment `monitoring-<model-name>`, or `experiment-name` if supplied directly), applies the rules in `policy-config-file`, and outputs a recommended action.
 
 Possible recommended actions: `retrain` | `data-refresh` | `label-improvement` | `feature-change` | `code-fix` | `no-change`
 
-**Required inputs:** `mlflow-proxy-url`, `policy-config-file`  
+**Required inputs:** `mlflow-url`, `policy-config-file`  
 **Optional inputs:** `model-name` or `experiment-name`, `token`, `expires-on`
 
 **Policy config file format:**
@@ -82,9 +82,9 @@ See [outer-loop-config.md](outer-loop-config.md#policyyaml----used-by-evaluate-p
 
 ### `compare candidates` — Candidate Comparison
 
-Queries the MLFlow proxy for all runs in the experiment (or a comma-separated subset via `run-ids`), scores each run using a weighted combination of metrics defined in `ranking-criteria-file`, and outputs the best run ID together with a ranked comparison table posted as a GitHub step summary.
+Queries MLFlow for all runs in the experiment (or a comma-separated subset via `run-ids`), scores each run using a weighted combination of metrics defined in `ranking-criteria-file`, and outputs the best run ID together with a ranked comparison table posted as a GitHub step summary.
 
-**Required inputs:** `mlflow-proxy-url`, `experiment-name`, `ranking-criteria-file`  
+**Required inputs:** `mlflow-url`, `experiment-name`, `ranking-criteria-file`  
 **Optional inputs:** `run-ids`, `token`, `expires-on`
 
 **Ranking criteria file format:**
@@ -105,9 +105,9 @@ See [outer-loop-config.md](outer-loop-config.md#rankingyaml----used-by-compare-c
 
 ### `report experiment` — Experiment Tracking
 
-Fetches the 20 most recent runs from the MLFlow proxy for the named experiment, computes a metric trend (latest run vs. the run before it), and renders a Markdown report that is posted as a GitHub step summary.
+Fetches the 20 most recent runs from MLFlow for the named experiment, computes a metric trend (latest run vs. the run before it), and renders a Markdown report that is posted as a GitHub step summary.
 
-**Required inputs:** `mlflow-proxy-url`, `experiment-name`  
+**Required inputs:** `mlflow-url`, `experiment-name`  
 **Optional inputs:** `token`, `expires-on`
 
 **Outputs:** `summary` (Markdown report with trend table and run list)
@@ -116,7 +116,7 @@ Fetches the 20 most recent runs from the MLFlow proxy for the named experiment, 
 
 ### `check monitoring` — Monitoring Signals
 
-Reads the latest monitoring run from the MLFlow proxy. The monitoring experiment is resolved as `monitoring-<model-name>` unless `experiment-name` is provided directly. Known signals are mapped to a traffic-light status:
+Reads the latest monitoring run from MLFlow. The monitoring experiment is resolved as `monitoring-<model-name>` unless `experiment-name` is provided directly. Known signals are mapped to a traffic-light status:
 
 | Signal | Key |
 |--------|-----|
@@ -128,7 +128,7 @@ Reads the latest monitoring run from the MLFlow proxy. The monitoring experiment
 
 Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 0.10
 
-**Required inputs:** `mlflow-proxy-url`  
+**Required inputs:** `mlflow-url`  
 **Optional inputs:** `model-name` or `experiment-name`, `model-version`, `token`, `expires-on`
 
 **Outputs:** `result` (JSON-encoded signals dict), `summary` (Markdown report)
@@ -144,11 +144,11 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
 | `token` | Access token from the `azLogin` action. Not needed when running locally. | No |
 | `expires-on` | Token expiry as epoch seconds, from the `azLogin` action. | No |
 
-### MLFlow proxy
+### MLFlow backend
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `mlflow-proxy-url` | Base URL of the MLFlow proxy API (e.g. `https://mlflow-proxy.cluster.aurora.equinor.com`). | No |
+| `mlflow-url` | MLFlow backend URL or AzureML tracking URI. Accepts `https://` proxy URLs (e.g. `https://mlflow-proxy.cluster.aurora.equinor.com`) or `azureml://` tracking URIs from an AzureML workspace. | No |
 
 ### Experiment / run targeting
 
@@ -207,13 +207,28 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
     subject: gate
     token: ${{ steps.azLogin.outputs.token }}
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-proxy-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     experiment-name: my-training-experiment
     run-id: ${{ steps.train.outputs.run-id }}
     thresholds-file: .azureml/thresholds.yaml
 
 - name: Use gate result
   run: echo "Gate result: ${{ steps.gate.outputs.result }}"
+```
+
+### Evaluate a training gate using an AzureML tracking URI
+
+```yaml
+- name: Evaluate gate (AzureML direct)
+  id: gate
+  uses: equinor/ai-platform-actions/outer-loop@main
+  with:
+    verb: evaluate
+    subject: gate
+    mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
+    experiment-name: my-training-experiment
+    run-id: ${{ steps.train.outputs.run-id }}
+    thresholds-file: .azureml/thresholds.yaml
 ```
 
 ### Compare candidate runs and promote the best
@@ -227,7 +242,7 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
     subject: candidates
     token: ${{ steps.azLogin.outputs.token }}
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-proxy-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     experiment-name: my-training-experiment
     ranking-criteria-file: .azureml/ranking.yaml
 
@@ -250,7 +265,7 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
     subject: experiment
     token: ${{ steps.azLogin.outputs.token }}
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-proxy-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     experiment-name: my-training-experiment
 ```
 
@@ -265,7 +280,7 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
     subject: monitoring
     token: ${{ steps.azLogin.outputs.token }}
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-proxy-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     model-name: my-registered-model
 
 - name: Evaluate policy
@@ -276,7 +291,7 @@ Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 
     subject: policy
     token: ${{ steps.azLogin.outputs.token }}
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-proxy-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     model-name: my-registered-model
     policy-config-file: .azureml/policy.yaml
 
@@ -300,7 +315,7 @@ The action is organized into modular Python files under `src/aip/outer/`:
 | `compare.py` | `compare candidates` command |
 | `report.py` | `report experiment` command |
 | `check.py` | `check monitoring` command |
-| `util.py` | MLFlow proxy client, authentication helpers, GitHub output utilities |
+| `util.py` | MLFlow backend protocol, proxy client, AzureML backend, factory function, authentication helpers, GitHub output utilities |
 
 ### Command routing
 
@@ -324,11 +339,18 @@ The action runs as a Docker container:
 ghcr.io/equinor/ai-platform-actions/outer-loop:latest
 ```
 
-Built from `Dockerfile` using `astral/uv:python3.13-bookworm-slim` as the base image.
+Built from `Dockerfile` using `astral/uv:python3.12-bookworm-slim` as the base image.
 
 ### Authentication
 
 Two modes are supported:
 
-1. **Token-based** (recommended in GitHub Actions): pass `token` and `expires-on` from an upstream `azLogin` step. The token is wrapped in a `StaticTokenCredential` and used for all Azure SDK calls.
-2. **DefaultAzureCredential** (local development): when `token` is omitted, the standard Azure credential chain is used automatically.
+1. **Token-based** (recommended in GitHub Actions): pass `token` and `expires-on` from an upstream `azLogin` step. The token is wrapped in a `StaticTokenCredential` and used for all Azure SDK calls. This mode works with the `MLFlowProxyClient` backend.
+2. **DefaultAzureCredential** (local development and AzureML backend): when `token` is omitted, or when using an `azureml://` tracking URI, the standard Azure credential chain is used. The `AzureMLBackend` always uses this path — `azureml-mlflow` manages its own credential resolution via the environment variables set by `azLogin`.
+
+### MLFlow backends
+
+| Input `mlflow-url` prefix | Backend | Auth |
+|---------------------------|---------|------|
+| `https://` or `http://` | `MLFlowProxyClient` — authenticated HTTP calls to the proxy REST API | Bearer token from `token`/`expires-on` or DefaultAzureCredential |
+| `azureml://` | `AzureMLBackend` — uses `mlflow.MlflowClient` with `azureml-mlflow` plugin | Azure credential chain (env vars from `azLogin`) |

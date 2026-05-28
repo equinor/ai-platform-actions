@@ -1,4 +1,4 @@
-FROM astral/uv:python3.13-bookworm-slim
+FROM astral/uv:python3.12-bookworm-slim
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 
