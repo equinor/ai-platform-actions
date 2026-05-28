@@ -461,7 +461,7 @@ class TestAzureMLBackend:
 
         post_call_kwargs = backend._session.post.call_args
         body = post_call_kwargs[1]["json"]
-        assert body.get("filter") == "run_name = 'baseline-v2'"
+        assert body.get("filter") == "tags.`mlflow.runName` = 'baseline-v2'"
         assert len(runs) == 1
         assert runs[0]["tags"]["mlflow.runName"] == "baseline-v2"
 
@@ -484,7 +484,7 @@ class TestAzureMLBackend:
         result = backend.compare_runs("my-exp", run_name="my-run")
 
         post_body = backend._session.post.call_args[1]["json"]
-        assert post_body.get("filter") == "run_name = 'my-run'"
+        assert post_body.get("filter") == "tags.`mlflow.runName` = 'my-run'"
         assert result[0]["run_id"] == "r2"
 
     def test_get_monitoring_run_returns_none_when_no_runs(self):

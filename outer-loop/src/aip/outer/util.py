@@ -331,7 +331,7 @@ class AzureMLBackend:
             "order_by": ["start_time DESC"],
         }
         if run_name:
-            body["filter"] = f"run_name = '{run_name}'"
+            body["filter"] = f"tags.`mlflow.runName` = '{run_name}'"
         runs_data = self._post("/api/2.0/mlflow/runs/search", body)
         return [self._normalize_run(r) for r in runs_data.get("runs", [])]
 
