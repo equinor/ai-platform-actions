@@ -4,7 +4,7 @@ Shared utilities for the Outer Loop Action.
 Provides:
 - MLFlowBackend: Protocol defining the shared interface for all MLFlow backends
 - MLFlowProxyClient: authenticated HTTP client for the MLFlow proxy API (https://)
-- AzureMLBackend: MLFlow backend using the mlflow SDK with an AzureML tracking URI (azureml://)
+- AzureMLBackend: MLFlow backend using direct MLflow REST API calls against an AzureML workspace
 - create_mlflow_client: factory that selects the correct backend from the URL/URI scheme
 - github_output / github_step_summary: GitHub Actions integration helpers
 - Auth helpers (token credential, DefaultAzureCredential passthrough)
@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
-import mlflow
 import requests
 import typer
 import yaml
@@ -95,6 +94,21 @@ def get_bearer_token(credential, scope: str = MANAGEMENT_SCOPE) -> str:
 # MLFlow Proxy client
 # ---------------------------------------------------------------------------
 
+def _make_requests_session() -> requests.Session:
+    """Create a ``requests.Session`` with retry logic for transient server errors."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=[502, 503, 504],
+        allowed_methods=["GET", "POST"],
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 class MLFlowProxyClient:
     """
     Thin HTTP client for the MLFlow proxy API.
@@ -117,22 +131,8 @@ class MLFlowProxyClient:
         self._base_url = base_url.rstrip("/")
         self._credential = credential
         self._scope = scope
-        self._session = self._make_session()
+        self._session = _make_requests_session()
         self._cached_token = None
-
-    @staticmethod
-    def _make_session() -> requests.Session:
-        session = requests.Session()
-        retry = Retry(
-            total=3,
-            backoff_factor=0.5,
-            status_forcelist=[502, 503, 504],
-            allowed_methods=["GET"],
-        )
-        adapter = HTTPAdapter(max_retries=retry)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-        return session
 
     def _headers(self) -> dict[str, str]:
         now = int(time.time())
@@ -197,60 +197,122 @@ class MLFlowProxyClient:
 
 
 # ---------------------------------------------------------------------------
-# AzureML backend (azureml:// tracking URI via mlflow SDK + azureml-mlflow)
+# AzureML backend (azureml:// tracking URI → direct MLflow REST API over HTTPS)
 # ---------------------------------------------------------------------------
 
+def _azureml_uri_to_https(uri: str) -> str:
+    """Convert an ``azureml://`` tracking URI to the equivalent ``https://`` REST base URL.
+
+    The two schemes share the same host and path, so the conversion is a simple
+    prefix replacement::
+
+        azureml://swedencentral.api.azureml.ms/mlflow/v1.0/...
+        → https://swedencentral.api.azureml.ms/mlflow/v1.0/...
+    """
+    return "https://" + uri[len("azureml://"):]
+
+
 class AzureMLBackend:
-    """MLFlow backend that connects directly to an AzureML workspace tracking URI.
+    """MLFlow backend that talks directly to an AzureML workspace via the MLflow REST API.
 
-    Uses the ``mlflow`` Python SDK together with the ``azureml-mlflow`` plugin,
-    which intercepts calls to ``azureml://`` URIs and routes them through the
-    AzureML REST API.
+    The ``azureml://`` tracking URI encodes the same host and path as the HTTPS
+    MLflow tracking server, so authentication reuses the same bearer-token
+    mechanism as :class:`MLFlowProxyClient` (scope: ``AML_SCOPE``).  This avoids
+    any dependency on the ``azureml-mlflow`` SDK plugin and its internal
+    credential chain.
 
-    **Authentication:** ``azureml-mlflow`` manages its own Azure credential chain
-    (``DefaultAzureCredential`` / environment variables set by ``azLogin``).  The
-    ``credential`` parameter is accepted for interface consistency with
-    ``MLFlowProxyClient`` but is not forwarded to the mlflow SDK calls.
+    MLflow REST API reference:
+    https://mlflow.org/docs/latest/rest-api.html
     """
 
     def __init__(self, tracking_uri: str, credential):
-        self._tracking_uri = tracking_uri
-        self._client = mlflow.MlflowClient(tracking_uri=tracking_uri)
+        self._base_url = _azureml_uri_to_https(tracking_uri).rstrip("/")
+        self._credential = credential
+        self._scope = AML_SCOPE
+        self._session = _make_requests_session()
+        self._cached_token = None
+
+    def _headers(self) -> dict[str, str]:
+        now = int(time.time())
+        if self._cached_token is None or self._cached_token.expires_on - now < 60:
+            self._cached_token = self._credential.get_token(self._scope)
+        return {
+            "Authorization": f"Bearer {self._cached_token.token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+    def _get(self, path: str, params: Optional[dict] = None) -> Any:
+        url = f"{self._base_url}{path}"
+        response = self._session.get(url, headers=self._headers(), params=params, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def _post(self, path: str, body: dict) -> Any:
+        url = f"{self._base_url}{path}"
+        response = self._session.post(url, headers=self._headers(), json=body, timeout=30)
+        response.raise_for_status()
+        return response.json()
 
     @staticmethod
-    def _normalize_run(run: "mlflow.entities.Run") -> dict:
+    def _normalize_run(run: dict) -> dict:
+        """Normalize a MLflow REST API run object to the standard backend dict shape.
+
+        The MLflow REST API returns metrics as ``[{"key": k, "value": v, ...}]``
+        rather than a flat dict, so we convert them here.
+        """
+        info = run.get("info", {})
+        data = run.get("data", {})
+        metrics = {m["key"]: m["value"] for m in data.get("metrics", [])}
+        tags = {t["key"]: t["value"] for t in data.get("tags", [])}
         return {
-            "run_id": run.info.run_id,
-            "status": run.info.status,
-            "metrics": dict(run.data.metrics),
-            "tags": dict(run.data.tags),
+            "run_id": info.get("run_id", ""),
+            "status": info.get("status", ""),
+            "metrics": metrics,
+            "tags": tags,
         }
 
     def get_experiment_runs(self, experiment_name: str, max_results: int = 100) -> list[dict]:
-        experiment = self._client.get_experiment_by_name(experiment_name)
-        if experiment is None:
-            return []
-        runs = self._client.search_runs(
-            experiment_ids=[experiment.experiment_id],
-            max_results=max_results,
-            order_by=["start_time DESC"],
+        """Return a list of runs for an experiment, most recent first."""
+        try:
+            data = self._get(
+                "/api/2.0/mlflow/experiments/get-by-name",
+                params={"experiment_name": experiment_name},
+            )
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                return []
+            raise
+        experiment_id = data["experiment"]["experiment_id"]
+        runs_data = self._post(
+            "/api/2.0/mlflow/runs/search",
+            {"experiment_ids": [experiment_id], "max_results": max_results, "order_by": ["start_time DESC"]},
         )
-        return [self._normalize_run(r) for r in runs]
+        return [self._normalize_run(r) for r in runs_data.get("runs", [])]
 
     def get_run_metrics(self, run_id: str) -> dict[str, float]:
-        run = self._client.get_run(run_id)
-        return dict(run.data.metrics)
+        """Return the final metric values for a single run."""
+        data = self._get("/api/2.0/mlflow/runs/get", params={"run_id": run_id})
+        run_data = data.get("run", {}).get("data", {})
+        return {m["key"]: m["value"] for m in run_data.get("metrics", [])}
 
     def compare_runs(self, experiment_name: str, run_ids: Optional[list[str]] = None) -> list[dict]:
+        """Return comparison data for multiple runs in an experiment."""
         if run_ids:
-            return [self._normalize_run(self._client.get_run(rid)) for rid in run_ids]
+            runs = []
+            for rid in run_ids:
+                data = self._get("/api/2.0/mlflow/runs/get", params={"run_id": rid})
+                runs.append(self._normalize_run(data.get("run", {})))
+            return runs
         return self.get_experiment_runs(experiment_name, max_results=100)
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
-        artifacts = self._client.list_artifacts(run_id)
-        return [{"path": a.path, "size": a.file_size} for a in artifacts]
+        """List artifacts for a run."""
+        data = self._get("/api/2.0/mlflow/artifacts/list", params={"run_id": run_id})
+        return [{"path": f.get("path", ""), "size": f.get("file_size", 0)} for f in data.get("files", [])]
 
     def get_monitoring_run(self, experiment_name: str) -> Optional[dict]:
+        """Return the latest monitoring run for a model/experiment, or None."""
         runs = self.get_experiment_runs(experiment_name, max_results=1)
         return runs[0] if runs else None
 

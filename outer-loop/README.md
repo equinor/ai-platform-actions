@@ -353,4 +353,4 @@ Two modes are supported:
 | Input `mlflow-url` prefix | Backend | Auth |
 |---------------------------|---------|------|
 | `https://` or `http://` | `MLFlowProxyClient` — authenticated HTTP calls to the proxy REST API | Bearer token from `token`/`expires-on` or DefaultAzureCredential |
-| `azureml://` | `AzureMLBackend` — uses `mlflow.MlflowClient` with `azureml-mlflow` plugin | Azure credential chain (env vars from `azLogin`) |
+| `azureml://` | `AzureMLBackend` — converts URI to `https://` and calls the MLflow REST API directly; no `azureml-mlflow` SDK dependency | Bearer token via `AML_SCOPE` — same mechanism as proxy client, fully compatible with `token`/`expires-on` from `azLogin` |

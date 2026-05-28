@@ -16,6 +16,8 @@ import sys
 import tempfile
 from unittest.mock import MagicMock, patch
 
+import requests
+
 # Mock Azure SDK before importing aip modules to prevent import errors
 sys.modules["azure"] = MagicMock()
 sys.modules["azure.core"] = MagicMock()
@@ -23,8 +25,6 @@ sys.modules["azure.core.credentials"] = MagicMock()
 sys.modules["azure.identity"] = MagicMock()
 sys.modules["azure.ai"] = MagicMock()
 sys.modules["azure.ai.ml"] = MagicMock()
-sys.modules["mlflow"] = MagicMock()
-sys.modules["mlflow.entities"] = MagicMock()
 
 import pytest
 from typer.testing import CliRunner
@@ -343,7 +343,7 @@ class TestMLFlowClientFactory:
     def test_azureml_uri_returns_azureml_backend(self):
         cred = MagicMock()
         uri = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
-        with patch("aip.outer.util.mlflow.MlflowClient"):
+        with patch("aip.outer.util._make_requests_session"):
             client = create_mlflow_client(uri, cred)
         assert isinstance(client, AzureMLBackend)
 
@@ -357,79 +357,96 @@ class TestMLFlowClientFactory:
 # =============================================================================
 
 class TestAzureMLBackend:
-    """Tests for AzureMLBackend normalisation and delegation logic."""
+    """Tests for AzureMLBackend — uses HTTP mocks; no mlflow SDK dependency."""
 
     AZUREML_URI = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
+    BASE_URL = "https://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
 
-    @staticmethod
-    def _make_run(run_id: str, metrics: dict, status: str = "FINISHED", tags: dict | None = None):
-        """Build a mock mlflow Run object."""
-        run = MagicMock()
-        run.info.run_id = run_id
-        run.info.status = status
-        run.data.metrics = metrics
-        run.data.tags = tags or {}
-        return run
+    def _make_backend(self):
+        cred = MagicMock()
+        cred.get_token.return_value = MagicMock(token="test-token", expires_on=9999999999)
+        with patch("aip.outer.util._make_requests_session") as mock_session_factory:
+            mock_session_factory.return_value = MagicMock()
+            backend = AzureMLBackend(self.AZUREML_URI, cred)
+        return backend
 
     def test_get_experiment_runs_returns_normalized_dicts(self):
-        mock_run = self._make_run("r1", {"accuracy": 0.9})
-        mock_mlflow_client = MagicMock()
-        mock_mlflow_client.get_experiment_by_name.return_value = MagicMock(experiment_id="exp1")
-        mock_mlflow_client.search_runs.return_value = [mock_run]
-
-        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
-            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
-            runs = backend.get_experiment_runs("my-exp", max_results=10)
-
-        assert runs == [{"run_id": "r1", "status": "FINISHED", "metrics": {"accuracy": 0.9}, "tags": {}}]
-        mock_mlflow_client.search_runs.assert_called_once_with(
-            experiment_ids=["exp1"], max_results=10, order_by=["start_time DESC"]
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"experiment": {"experiment_id": "exp1"}},
+            raise_for_status=lambda: None,
+        )
+        backend._session.post.return_value = MagicMock(
+            status_code=200,
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [{
+                "info": {"run_id": "r1", "status": "FINISHED"},
+                "data": {"metrics": [{"key": "accuracy", "value": 0.9}], "tags": []},
+            }]},
         )
 
-    def test_get_experiment_runs_returns_empty_when_experiment_not_found(self):
-        mock_mlflow_client = MagicMock()
-        mock_mlflow_client.get_experiment_by_name.return_value = None
+        runs = backend.get_experiment_runs("my-exp", max_results=10)
 
-        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
-            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
-            runs = backend.get_experiment_runs("nonexistent-exp")
+        assert runs == [{"run_id": "r1", "status": "FINISHED", "metrics": {"accuracy": 0.9}, "tags": {}}]
+
+    def test_get_experiment_runs_returns_empty_on_404(self):
+        backend = self._make_backend()
+        not_found = MagicMock(status_code=404)
+        http_error = requests.HTTPError(response=not_found)
+        backend._session.get.return_value = MagicMock(
+            raise_for_status=MagicMock(side_effect=http_error),
+        )
+
+        runs = backend.get_experiment_runs("nonexistent")
 
         assert runs == []
 
-    def test_get_run_metrics_returns_metrics_dict(self):
-        mock_run = self._make_run("r1", {"f1": 0.85, "loss": 0.12})
-        mock_mlflow_client = MagicMock()
-        mock_mlflow_client.get_run.return_value = mock_run
+    def test_get_run_metrics_returns_flat_dict(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"run": {"info": {}, "data": {
+                "metrics": [{"key": "f1", "value": 0.85}, {"key": "loss", "value": 0.12}],
+                "tags": [],
+            }}},
+        )
 
-        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
-            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
-            metrics = backend.get_run_metrics("r1")
+        metrics = backend.get_run_metrics("r1")
 
         assert metrics == {"f1": 0.85, "loss": 0.12}
 
-    def test_compare_runs_with_explicit_run_ids_fetches_each(self):
-        runs_by_id = {
-            "r1": self._make_run("r1", {"accuracy": 0.9}),
-            "r2": self._make_run("r2", {"accuracy": 0.8}),
+    def test_compare_runs_with_explicit_run_ids(self):
+        backend = self._make_backend()
+        responses = {
+            "r1": {"run": {"info": {"run_id": "r1", "status": "FINISHED"}, "data": {"metrics": [{"key": "accuracy", "value": 0.9}], "tags": []}}},
+            "r2": {"run": {"info": {"run_id": "r2", "status": "FINISHED"}, "data": {"metrics": [{"key": "accuracy", "value": 0.8}], "tags": []}}},
         }
-        mock_mlflow_client = MagicMock()
-        mock_mlflow_client.get_run.side_effect = lambda rid: runs_by_id[rid]
+        call_count = [0]
 
-        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
-            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
-            result = backend.compare_runs("my-exp", run_ids=["r1", "r2"])
+        def side_effect(url, **kwargs):
+            rid = kwargs.get("params", {}).get("run_id")
+            m = MagicMock(raise_for_status=lambda: None)
+            m.json.return_value = responses[rid]
+            return m
+
+        backend._session.get.side_effect = side_effect
+
+        result = backend.compare_runs("my-exp", run_ids=["r1", "r2"])
 
         assert len(result) == 2
         assert result[0]["run_id"] == "r1"
         assert result[1]["run_id"] == "r2"
 
     def test_get_monitoring_run_returns_none_when_no_runs(self):
-        mock_mlflow_client = MagicMock()
-        mock_mlflow_client.get_experiment_by_name.return_value = None
+        backend = self._make_backend()
+        not_found = MagicMock(status_code=404)
+        http_error = requests.HTTPError(response=not_found)
+        backend._session.get.return_value = MagicMock(
+            raise_for_status=MagicMock(side_effect=http_error),
+        )
 
-        with patch("aip.outer.util.mlflow.MlflowClient", return_value=mock_mlflow_client):
-            backend = AzureMLBackend(self.AZUREML_URI, MagicMock())
-            result = backend.get_monitoring_run("monitoring-my-model")
+        result = backend.get_monitoring_run("monitoring-my-model")
 
         assert result is None
 
