@@ -1,7 +1,4 @@
-﻿# UV lock file (will be generated in container)
-uv.lock
-
-# Python cache and virtual environment
+﻿# Python cache and virtual environment
 __pycache__/
 *.py[cod]
 *$py.class
