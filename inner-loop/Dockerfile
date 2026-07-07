@@ -7,11 +7,11 @@ ENV UV_COMPILE_BYTECODE=1
 ENV TIMEOUT_MINUTES=30
 
 # Copy project files
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
-# Install dependencies and build the package
-RUN uv sync
+# Install dependencies and build the package using the committed lock file for reproducible builds
+RUN uv sync --locked
 
 # Add the virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
