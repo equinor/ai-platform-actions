@@ -131,6 +131,7 @@ Defines thresholds for monitoring signals and the action to recommend when each 
 ### Structure
 
 ```yaml
+version: <policy-version>
 drift_threshold: <float>
 performance_drop_threshold: <float>
 label_quality_threshold: <float>
@@ -151,6 +152,7 @@ actions:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `version` | string | Required | Version included in the deterministic decision identity and audit record. |
 | `drift_threshold` | float | `0.10` | If `data_drift` signal exceeds this value, `on_drift` is recommended. |
 | `performance_drop_threshold` | float | `0.05` | If `performance_drop` signal exceeds this value, `on_performance_drop` is recommended. |
 | `label_quality_threshold` | float | `0.05` | If `label_quality_drop` signal exceeds this value, `on_label_quality` is recommended. |
@@ -174,6 +176,7 @@ actions:
 | `label-improvement` | Review and correct labels in the training data |
 | `feature-change` | Revise or add input features |
 | `code-fix` | Address a bug or regression in model/pipeline code |
+| `rollback` | Restore the exact prior deployment recorded before promotion |
 | `no-change` | No action required |
 
 ### Evaluation order
@@ -191,6 +194,7 @@ Rules are evaluated in this order; the first match wins:
 ### Example
 
 ```yaml
+version: pilot-v1
 drift_threshold: 0.10
 performance_drop_threshold: 0.05
 label_quality_threshold: 0.05
@@ -210,6 +214,7 @@ actions:
 ### Example — stricter thresholds with data-refresh path
 
 ```yaml
+version: pilot-v2
 drift_threshold: 0.05
 performance_drop_threshold: 0.03
 label_quality_threshold: 0.08
@@ -229,6 +234,8 @@ actions:
 ### Behaviour
 
 - The `result` output is the recommended action string (e.g. `retrain`).
-- If no monitoring run exists for the experiment, the action defaults to `no-change` without failing.
+- Missing, stale, undersized, or identity-mismatched evidence returns `insufficient-evidence` and exits with code 2.
+- The `decision-id` output is deterministic for the monitoring experiment, evidence run, and policy version.
+- The JSON `decision` output includes every matching rule even though the first match remains the selected action.
 - The step summary lists every signal value alongside the recommended action.
 - Use `result` in downstream `if:` conditions to conditionally trigger retraining or other workflows.

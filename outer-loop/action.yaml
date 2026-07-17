@@ -92,6 +92,20 @@ inputs:
   model-version:
     description: "Azure ML registered model version"
     required: false
+  endpoint-name:
+    description: "Azure ML endpoint associated with monitoring evidence"
+    required: false
+  deployment-name:
+    description: "Azure ML deployment associated with monitoring evidence"
+    required: false
+  max-evidence-age-minutes:
+    description: "Maximum accepted age of monitoring evidence"
+    required: false
+    default: "1440"
+  min-sample-count:
+    description: "Minimum number of observations required for an autonomous decision"
+    required: false
+    default: "1"
 
 outputs:
   result:
@@ -102,6 +116,16 @@ outputs:
     description: "JSON-encoded metrics of the best candidate run"
   summary:
     description: "Human-readable summary (also posted as GitHub step summary)"
+  decision:
+    description: "JSON-encoded policy decision record"
+  decision-id:
+    description: "Deterministic decision ID for idempotent downstream dispatch"
+  signals:
+    description: "JSON-encoded monitoring signals"
+  evidence-status:
+    description: "Monitoring evidence status (valid or insufficient-evidence)"
+  evidence-issues:
+    description: "JSON-encoded reasons why monitoring evidence was rejected"
 
 runs:
   using: docker
@@ -139,3 +163,11 @@ runs:
     - ${{ inputs.model-name }}
     - --model-version
     - ${{ inputs.model-version }}
+    - --endpoint-name
+    - ${{ inputs.endpoint-name }}
+    - --deployment-name
+    - ${{ inputs.deployment-name }}
+    - --max-evidence-age-minutes
+    - ${{ inputs.max-evidence-age-minutes }}
+    - --min-sample-count
+    - ${{ inputs.min-sample-count }}

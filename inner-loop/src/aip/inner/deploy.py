@@ -9,6 +9,8 @@ from azure.ai.ml import (
     load_component,
     load_model,
     load_job,
+    load_batch_endpoint,
+    load_batch_deployment,
     load_online_endpoint,
     load_online_deployment,
 )
@@ -779,6 +781,105 @@ def online_deployment(
         "reference": f"azureml:{endpoint_name}/deployments/{deployment_result.name}",
         "version": deployment_result.name,
         "resource-id": deployment_result.id,
+    })
+
+
+@app.command()
+def batch_endpoint(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone")] = None,
+        experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
+        deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
+    ):
+    """Create or update an Azure ML batch endpoint from a YAML definition."""
+    print(f"[deploy batch-endpoint] Loading endpoint configuration from {filepath}")
+    endpoint = load_batch_endpoint(source=filepath)
+    if tags:
+        endpoint.tags = {**(endpoint.tags or {}), **tags}
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=int(expires_on) if expires_on else None,
+        aml_token=aml_token,
+    )
+    result = client.batch_endpoints.begin_create_or_update(endpoint).result()
+
+    print(f"[deploy batch-endpoint] Batch endpoint '{result.name}' is ready")
+    github_output({
+        "reference": f"azureml:{result.name}",
+        "version": result.name,
+        "resource-id": result.id or "",
+    })
+
+
+@app.command()
+def batch_deployment(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
+        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
+        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
+        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
+        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
+        time_zone: Annotated[Optional[str], typer.Option("--time-zone")] = None,
+        experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
+        deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
+    ):
+    """Create or update a versioned Azure ML batch deployment from YAML."""
+    print(f"[deploy batch-deployment] Loading deployment configuration from {filepath}")
+    deployment = load_batch_deployment(source=filepath)
+    if not deployment.endpoint_name:
+        raise typer.BadParameter("Batch deployment YAML must contain 'endpoint_name'")
+    if tags:
+        deployment.tags = {**(deployment.tags or {}), **tags}
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=int(expires_on) if expires_on else None,
+        aml_token=aml_token,
+    )
+    result = client.batch_deployments.begin_create_or_update(deployment).result()
+
+    print(
+        f"[deploy batch-deployment] Batch deployment '{result.name}' "
+        f"on endpoint '{result.endpoint_name}' is ready"
+    )
+    github_output({
+        "reference": f"azureml:{result.endpoint_name}/deployments/{result.name}",
+        "version": result.name,
+        "resource-id": result.id or "",
     })
 
 

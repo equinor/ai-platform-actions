@@ -53,11 +53,12 @@ Reads the latest monitoring run from MLFlow (experiment `monitoring-<model-name>
 Possible recommended actions: `retrain` | `data-refresh` | `label-improvement` | `feature-change` | `code-fix` | `no-change`
 
 **Required inputs:** `mlflow-url`, `policy-config-file`  
-**Optional inputs:** `model-name` or `experiment-name`, `token`, `expires-on`
+**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `endpoint-name`, `deployment-name`, `max-evidence-age-minutes`, `min-sample-count`, `token`, `expires-on`
 
 **Policy config file format:**
 
 ```yaml
+version: pilot-v1
 drift_threshold: 0.10
 performance_drop_threshold: 0.05
 label_quality_threshold: 0.05
@@ -76,7 +77,9 @@ actions:
 
 See [outer-loop-config.md](outer-loop-config.md#policyyaml----used-by-evaluate-policy) for the full format reference.
 
-**Outputs:** `result` (recommended action string), `summary` (Markdown table of signals)
+The selected action is the first matching rule, but every matched rule is retained in the decision record. Missing, stale, undersized, or identity-mismatched evidence returns `result: insufficient-evidence` and exits with code 2.
+
+**Outputs:** `result` (recommended action string), `decision-id` (deterministic idempotency key), `decision` (JSON record), `summary` (Markdown table of signals)
 
 ---
 
@@ -124,7 +127,7 @@ Fetches the 20 most recent runs from MLFlow for the named experiment, computes a
 
 ### `check monitoring` — Monitoring Signals
 
-Reads the latest monitoring run from MLFlow. The monitoring experiment is resolved as `monitoring-<model-name>` unless `experiment-name` is provided directly. Known signals are mapped to a traffic-light status:
+Reads the latest monitoring run from MLFlow. The monitoring experiment is resolved as `monitoring-<model-name>` unless `experiment-name` is provided directly. Known signals include:
 
 | Signal | Key |
 |--------|-----|
@@ -134,12 +137,14 @@ Reads the latest monitoring run from MLFlow. The monitoring experiment is resolv
 | Label Quality Drop | `label_quality_drop` |
 | Missing Value Rate | `missing_rate` |
 
-Status thresholds: 🔴 > 0.20 &nbsp;|&nbsp; 🟡 > 0.10 &nbsp;|&nbsp; 🟢 ≤ 0.10
+Threshold interpretation belongs to the versioned policy, not the monitoring report.
+
+Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1`, `aip.model.name`, `aip.model.version`, `aip.endpoint.name`, `aip.deployment.name`, and a timezone-aware `aip.observed_at`. Metrics must include `sample_count`.
 
 **Required inputs:** `mlflow-url`  
-**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `token`, `expires-on`
+**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `endpoint-name`, `deployment-name`, `max-evidence-age-minutes`, `min-sample-count`, `token`, `expires-on`
 
-**Outputs:** `result` (JSON-encoded signals dict), `summary` (Markdown report)
+**Outputs:** `result` and `signals` (JSON-encoded signals), `evidence-status`, `evidence-issues`, `summary`. Invalid evidence exits with code 2.
 
 ---
 
@@ -312,6 +317,11 @@ If you know the exact run IDs, `run-ids` takes precedence and `run-name` is igno
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
     mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     model-name: my-registered-model
+    model-version: "7"
+    endpoint-name: my-batch-endpoint
+    deployment-name: production-7
+    max-evidence-age-minutes: "60"
+    min-sample-count: "100"
 
 - name: Evaluate policy
   id: policy
@@ -323,6 +333,11 @@ If you know the exact run IDs, `run-ids` takes precedence and `run-name` is igno
     expires-on: ${{ steps.azLogin.outputs.expires-on }}
     mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
     model-name: my-registered-model
+    model-version: "7"
+    endpoint-name: my-batch-endpoint
+    deployment-name: production-7
+    max-evidence-age-minutes: "60"
+    min-sample-count: "100"
     policy-config-file: .azureml/policy.yaml
 
 - name: Trigger retrain if recommended

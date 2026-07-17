@@ -3,10 +3,10 @@ description: Unified action for Azure ML operations using command pattern
 
 inputs:
   verb:
-    description: "Action verb (deploy, share, waitfor, delete)"
+    description: "Action verb (deploy, share, waitfor, delete, invoke, promote, rollback)"
     required: true
   subject:
-    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment)"
+    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment, batch-endpoint, batch-deployment)"
     required: true
   token:
     description: "From azLogin action. Required unless running locally."
@@ -96,6 +96,19 @@ inputs:
   experiment-name:
     description: "Azure ML experiment name (for deploy job, deploy sweep-job). Overrides the experiment name in the YAML."
     required: false
+  input-path:
+    description: "Pinned Azure ML data asset or URI used to invoke a batch deployment"
+    required: false
+  input-type:
+    description: "Batch invocation input type (uri_file or uri_folder)"
+    required: false
+    default: "uri_folder"
+  invocation-job-name:
+    description: "Optional deterministic name for a batch invocation job"
+    required: false
+  expected-current-deployment:
+    description: "Expected batch endpoint default used for guarded promotion or rollback"
+    required: false
 
 outputs:
   resource-id:
@@ -108,6 +121,18 @@ outputs:
     description: "JSON-encoded lineage metadata for the submitted job (git SHA, branch, workflow run ID)"
   best-trial-run-id:
     description: "Run ID of the best trial in a completed sweep job"
+  invocation-job-name:
+    description: "Azure ML job created by a named batch deployment invocation"
+  status:
+    description: "Status of the submitted batch invocation job"
+  previous-deployment-name:
+    description: "Batch endpoint default before promotion"
+  replaced-deployment-name:
+    description: "Batch endpoint default replaced during rollback"
+  default-deployment-name:
+    description: "Batch endpoint default after promotion or rollback"
+  changed:
+    description: "Whether promotion or rollback changed the endpoint"
 
 runs:
   using: docker
@@ -152,3 +177,7 @@ runs:
     UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
     TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
     REGISTRY_ENV_REF: ${{ inputs.registry-env-ref }}
+    BATCH_INPUT_PATH: ${{ inputs.input-path }}
+    BATCH_INPUT_TYPE: ${{ inputs.input-type }}
+    BATCH_INVOCATION_JOB_NAME: ${{ inputs.invocation-job-name }}
+    EXPECTED_CURRENT_DEPLOYMENT: ${{ inputs.expected-current-deployment }}

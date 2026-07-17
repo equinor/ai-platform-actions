@@ -16,8 +16,54 @@ from .util import (
     github_output,
     load_safe_tags,
 )
+from .batch import set_default_deployment
 
 app = typer.Typer()
+
+
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def batch_deployment(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        endpoint_name: str,
+        previous_deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
+        expected_current_deployment: Annotated[Optional[str], typer.Option("--expected-current-deployment", envvar="EXPECTED_CURRENT_DEPLOYMENT", callback=empty_string_to_none)] = None,
+        token: Optional[str] = None,
+        expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    ):
+    """Restore the exact prior default deployment recorded before batch promotion."""
+    if not previous_deployment_name:
+        raise typer.BadParameter("--deployment-name must identify the recorded prior deployment")
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=int(expires_on) if expires_on else None,
+        aml_token=aml_token,
+    )
+    result, replaced_deployment, changed = set_default_deployment(
+        client,
+        endpoint_name=endpoint_name,
+        target_deployment_name=previous_deployment_name,
+        expected_current_deployment=expected_current_deployment,
+    )
+
+    print(
+        f"[rollback batch-deployment] Default for '{endpoint_name}': "
+        f"'{replaced_deployment}' -> '{previous_deployment_name}' (changed={changed})"
+    )
+    github_output({
+        "reference": f"azureml:{endpoint_name}/deployments/{previous_deployment_name}",
+        "version": previous_deployment_name,
+        "resource-id": getattr(result, "id", "") or "",
+        "replaced-deployment-name": replaced_deployment or "",
+        "default-deployment-name": previous_deployment_name,
+        "changed": str(changed).lower(),
+    })
 
 
 @app.command()

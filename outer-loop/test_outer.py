@@ -11,9 +11,12 @@ Run with:
     uv run pytest test_outer.py -v
 """
 
+import json
 import os
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -30,7 +33,8 @@ import pytest
 from typer.testing import CliRunner
 
 from aip.outer.compare import _compute_score
-from aip.outer.evaluate import _apply_policy, app as evaluate_app
+from aip.outer.check import app as check_app
+from aip.outer.evaluate import _apply_policy, _matching_policy_rules, app as evaluate_app
 from aip.outer.util import AzureMLBackend, MLFlowProxyClient, create_mlflow_client
 
 runner = CliRunner(mix_stderr=False)
@@ -220,6 +224,193 @@ class TestApplyPolicy:
     def test_missing_actions_default_key(self):
         cfg = {"actions": {}}  # no 'default' key inside actions
         assert _apply_policy({}, cfg) == "no-change"
+
+    def test_all_matching_rules_are_retained_in_priority_order(self):
+        matches = _matching_policy_rules(
+            {"data_drift": 0.20, "label_quality_drop": 0.10},
+            self._cfg(),
+        )
+
+        assert [match["signal"] for match in matches] == [
+            "data_drift",
+            "label_quality_drop",
+        ]
+
+
+# =============================================================================
+# evaluate policy (CLI integration via CliRunner)
+# =============================================================================
+
+class TestPolicyEvaluation:
+    """Command-level tests for monitoring evidence validation and decisions."""
+
+    POLICY_YAML = "version: pilot-v1\ndrift_threshold: 0.10\nactions:\n  on_drift: retrain\n  default: no-change\n"
+
+    @staticmethod
+    def _run_policy(monitoring_run, github_output_path=None):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(TestPolicyEvaluation.POLICY_YAML)
+            tmp_path = f.name
+        try:
+            mock_client = MagicMock()
+            mock_client.get_monitoring_run.return_value = monitoring_run
+            with (
+                patch("aip.outer.evaluate.create_mlflow_client", return_value=mock_client),
+                patch("aip.outer.evaluate.get_credential", return_value=MagicMock()),
+            ):
+                result = runner.invoke(
+                    evaluate_app,
+                    [
+                        "policy",
+                        "--mlflow-url", "https://proxy.example.com",
+                        "--policy-config-file", tmp_path,
+                        "--model-name", "fraud-model",
+                        "--model-version", "7",
+                        "--endpoint-name", "fraud-batch",
+                        "--deployment-name", "green",
+                        "--max-evidence-age-minutes", "60",
+                        "--min-sample-count", "100",
+                    ],
+                    env={"GITHUB_OUTPUT": github_output_path} if github_output_path else None,
+                )
+        finally:
+            os.unlink(tmp_path)
+        return result
+
+    def test_no_monitoring_run_fails_closed(self):
+        result = self._run_policy(None)
+
+        assert result.exit_code == 2
+        assert "insufficient-evidence" in result.stdout
+
+    def test_stale_monitoring_run_fails_closed(self):
+        observed_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        monitoring_run = {
+            "run_id": "monitor-1",
+            "metrics": {"data_drift": 0.2, "sample_count": 500},
+            "tags": {
+                "aip.monitoring.schema_version": "1",
+                "aip.model.name": "fraud-model",
+                "aip.model.version": "7",
+                "aip.endpoint.name": "fraud-batch",
+                "aip.deployment.name": "green",
+                "aip.observed_at": observed_at.isoformat(),
+            },
+        }
+
+        result = self._run_policy(monitoring_run)
+
+        assert result.exit_code == 2
+        assert "stale" in result.stdout
+
+    def test_current_matching_evidence_can_recommend_retraining(self):
+        monitoring_run = {
+            "run_id": "monitor-2",
+            "metrics": {"data_drift": 0.2, "sample_count": 500},
+            "tags": {
+                "aip.monitoring.schema_version": "1",
+                "aip.model.name": "fraud-model",
+                "aip.model.version": "7",
+                "aip.endpoint.name": "fraud-batch",
+                "aip.deployment.name": "green",
+                "aip.observed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+
+        result = self._run_policy(monitoring_run)
+
+        assert result.exit_code == 0
+        assert "Recommended action: retrain" in result.stdout
+
+    def test_decision_output_is_deterministic_and_identifies_evidence(self):
+        monitoring_run = {
+            "run_id": "monitor-deterministic",
+            "metrics": {"data_drift": 0.2, "sample_count": 500},
+            "tags": {
+                "aip.monitoring.schema_version": "1",
+                "aip.model.name": "fraud-model",
+                "aip.model.version": "7",
+                "aip.endpoint.name": "fraud-batch",
+                "aip.deployment.name": "green",
+                "aip.observed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+        output_paths = []
+        try:
+            for _ in range(2):
+                with tempfile.NamedTemporaryFile(delete=False) as output_file:
+                    output_paths.append(output_file.name)
+                result = self._run_policy(monitoring_run, output_paths[-1])
+                assert result.exit_code == 0
+
+            outputs = []
+            for output_path in output_paths:
+                outputs.append(dict(
+                    line.split("=", 1)
+                    for line in Path(output_path).read_text().splitlines()
+                    if line.startswith(("result=", "decision-id=", "decision="))
+                ))
+
+            assert outputs[0]["decision-id"] == outputs[1]["decision-id"]
+            decision = json.loads(outputs[0]["decision"])
+            assert decision["schema_version"] == "1"
+            assert decision["policy_version"] == "pilot-v1"
+            assert decision["evidence_run_id"] == "monitor-deterministic"
+            assert decision["matched_rules"][0]["signal"] == "data_drift"
+        finally:
+            for output_path in output_paths:
+                os.unlink(output_path)
+
+
+class TestMonitoringCheck:
+    """Command-level tests for fail-closed monitoring reports."""
+
+    @staticmethod
+    def _run_check(monitoring_run):
+        mock_client = MagicMock()
+        mock_client.get_monitoring_run.return_value = monitoring_run
+        with (
+            patch("aip.outer.check.create_mlflow_client", return_value=mock_client),
+            patch("aip.outer.check.get_credential", return_value=MagicMock()),
+        ):
+            return runner.invoke(
+                check_app,
+                [
+                    "monitoring",
+                    "--mlflow-url", "https://proxy.example.com",
+                    "--model-name", "fraud-model",
+                    "--model-version", "7",
+                    "--endpoint-name", "fraud-batch",
+                    "--deployment-name", "green",
+                    "--max-evidence-age-minutes", "60",
+                    "--min-sample-count", "100",
+                ],
+            )
+
+    def test_missing_monitoring_run_is_insufficient(self):
+        result = self._run_check(None)
+
+        assert result.exit_code == 2
+        assert "Evidence status: insufficient-evidence" in result.stdout
+
+    def test_matching_current_monitoring_run_is_valid(self):
+        monitoring_run = {
+            "run_id": "monitor-3",
+            "metrics": {"data_drift": 0.03, "sample_count": 500},
+            "tags": {
+                "aip.monitoring.schema_version": "1",
+                "aip.model.name": "fraud-model",
+                "aip.model.version": "7",
+                "aip.endpoint.name": "fraud-batch",
+                "aip.deployment.name": "green",
+                "aip.observed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+
+        result = self._run_check(monitoring_run)
+
+        assert result.exit_code == 0
+        assert "Evidence status: valid" in result.stdout
 
 
 # =============================================================================

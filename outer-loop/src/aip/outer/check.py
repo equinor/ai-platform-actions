@@ -6,10 +6,12 @@ Verbs:
 """
 
 import json
+from datetime import timedelta
 from typing import Annotated, Optional
 
 import typer
 
+from .evidence import validate_monitoring_evidence
 from .util import (
     create_mlflow_client,
     empty_string_to_none,
@@ -37,6 +39,10 @@ def monitoring(
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none)] = None,
+    endpoint_name: Annotated[Optional[str], typer.Option("--endpoint-name", callback=empty_string_to_none)] = None,
+    deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
+    max_evidence_age_minutes: Annotated[int, typer.Option("--max-evidence-age-minutes", min=1)] = 1440,
+    min_sample_count: Annotated[int, typer.Option("--min-sample-count", min=1)] = 1,
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
 ):
@@ -74,39 +80,51 @@ def monitoring(
         typer.echo(f"[check monitoring] Latest monitoring run: {run_id_display}")
         typer.echo(f"[check monitoring] Signals: {signals}")
 
+    evidence_issues = validate_monitoring_evidence(
+        monitoring_run,
+        model_name=model_name,
+        model_version=model_version,
+        endpoint_name=endpoint_name,
+        deployment_name=deployment_name,
+        max_age=timedelta(minutes=max_evidence_age_minutes),
+        min_sample_count=min_sample_count,
+    )
+    evidence_status = "insufficient-evidence" if evidence_issues else "valid"
+    typer.echo(f"[check monitoring] Evidence status: {evidence_status}")
+
     # Build report
     summary_lines = [
         f"## Monitoring Report",
         f"**Model:** `{model_name or monitoring_experiment}`"
         + (f"  **Version:** `{model_version}`" if model_version else ""),
         f"**Monitoring run:** `{run_id_display}`",
+        f"**Evidence status:** `{evidence_status}`",
         "",
-        "| Signal | Value | Status |",
-        "|--------|-------|--------|",
+        "| Signal | Value |",
+        "|--------|-------|",
     ]
     for key, label in KNOWN_SIGNALS.items():
         val = signals.get(key)
         if val is None:
-            summary_lines.append(f"| {label} | N/A | ⚪ No data |")
+            summary_lines.append(f"| {label} | N/A |")
         else:
-            # Simple traffic-light: >0.10 is amber/red, ≤0.10 is green
-            if val > 0.20:
-                icon = "🔴"
-            elif val > 0.10:
-                icon = "🟡"
-            else:
-                icon = "🟢"
-            summary_lines.append(f"| {label} | {val:.4f} | {icon} |")
+            summary_lines.append(f"| {label} | {val:.4f} |")
 
     # Emit any additional signals not in the known list
     for key, val in signals.items():
         if key not in KNOWN_SIGNALS:
-            summary_lines.append(f"| {key} | {val} | ⚪ |")
+            summary_lines.append(f"| {key} | {val} |")
 
     summary = "\n".join(summary_lines)
     github_step_summary(summary)
 
     github_output({
         "result": json.dumps(signals),
+        "signals": json.dumps(signals),
+        "evidence-status": evidence_status,
+        "evidence-issues": json.dumps(evidence_issues),
         "summary": summary,
     })
+
+    if evidence_issues:
+        raise typer.Exit(2)
