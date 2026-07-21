@@ -7,6 +7,7 @@ import typer
 from typer.testing import CliRunner
 
 from aip.inner import deploy
+from aip.inner.action_entrypoint import ACTION_INPUTS, action_input_environment_name, adapt_action_environment
 from aip.inner.batch import set_default_deployment
 from aip.inner import invoke, promote, rollback
 from aip.inner.main import app as inner_app
@@ -225,7 +226,7 @@ def test_invoke_named_batch_deployment_uses_pinned_input():
     assert output.call_args.args[0]["invocation-job-name"] == "validation-job-17"
 
 
-def test_action_style_promote_routes_shared_arguments_and_environment():
+def test_action_adapter_routes_promote_arguments_and_environment():
     endpoint = MagicMock()
     endpoint.defaults = {"deployment_name": "production-16"}
     endpoint.id = "/batchEndpoints/forecast-batch"
@@ -237,28 +238,26 @@ def test_action_style_promote_routes_shared_arguments_and_environment():
         patch("aip.inner.promote.get_workspace_client", return_value=client),
         patch("aip.inner.promote.github_output"),
     ):
+        action_inputs = {name: "" for name in ACTION_INPUTS}
+        action_inputs.update({
+            "verb": "promote",
+            "subject": "batch-deployment",
+            "endpoint-name": "forecast-batch",
+            "deployment-name": "candidate-17",
+            "subscription-id": "subscription",
+            "resource-group": "resource-group",
+            "workspace-name": "workspace",
+            "expected-current-deployment": "production-16",
+        })
+        action_environment = {
+            action_input_environment_name(name): value
+            for name, value in action_inputs.items()
+        }
+        invocation = adapt_action_environment(action_environment)
         result = runner.invoke(
             inner_app,
-            [
-                "promote", "batch-deployment", "forecast-batch",
-                "--subscription", "subscription",
-                "--resource-group", "resource-group",
-                "--workspace-name", "workspace",
-                "--registry-name", "",
-                "--token", "",
-                "--expires-on", "",
-                "--tags", "",
-                "--promote-stage", "",
-                "--image-build-compute", "",
-                "--aml-token", "",
-                "--traffic-allocation", "",
-                "--schedule-name", "",
-                "--cron-expression", "",
-                "--time-zone", "",
-                "--experiment-name", "",
-                "--deployment-name", "candidate-17",
-            ],
-            env={"EXPECTED_CURRENT_DEPLOYMENT": "production-16"},
+            list(invocation.argv),
+            env=dict(invocation.environment),
         )
 
     assert result.exit_code == 0, result.output

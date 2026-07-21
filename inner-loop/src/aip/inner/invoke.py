@@ -10,14 +10,14 @@ from .util import empty_string_to_none, get_workspace_client, github_output
 app = typer.Typer()
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def batch_deployment(
     subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
     resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
     workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
     endpoint_name: str,
     deployment_name: Annotated[str, typer.Option("--deployment-name")],
-    input_path: Annotated[Optional[str], typer.Option("--input-path", envvar="BATCH_INPUT_PATH", callback=empty_string_to_none)] = None,
+    input_path: Annotated[str, typer.Option("--input-path", envvar="BATCH_INPUT_PATH")],
     input_type: Annotated[str, typer.Option("--input-type", envvar="BATCH_INPUT_TYPE")] = "uri_folder",
     invocation_job_name: Annotated[Optional[str], typer.Option("--invocation-job-name", envvar="BATCH_INVOCATION_JOB_NAME", callback=empty_string_to_none)] = None,
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,

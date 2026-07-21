@@ -64,15 +64,6 @@ def data(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They ar required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy data asset to Azure ML workspace"""
     print(f"[deploy data] Deploying data asset")
@@ -122,15 +113,6 @@ def environment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy environment to Azure ML workspace"""
     print(f"[deploy environment] Deploying environment")
@@ -181,15 +163,6 @@ def component(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy component to Azure ML workspace"""
     print(f"[deploy component] Deploying component")
@@ -269,15 +242,6 @@ def model(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy model to Azure ML workspace"""
     print(f"[deploy model] Deploying model")
@@ -329,14 +293,6 @@ def job(
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
         experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
-        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Submit job to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-pipeline?view=azureml-api-2
@@ -435,14 +391,6 @@ def sweep_job(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # passthrough args for GitHub Actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Submit a hyperparameter sweep job to Azure ML workspace (US4 — Hyperparameter Sweeps).
 
@@ -506,15 +454,6 @@ def feature_set(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # passthrough args for GitHub Actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Register a feature set data asset with feature-pipeline convention tags (US7 — Feature Engineering).
 
@@ -584,14 +523,6 @@ def online_endpoint(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy online endpoint to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-endpoint-online?view=azureml-api-2
@@ -667,13 +598,6 @@ def online_deployment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy online deployment to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
@@ -796,16 +720,7 @@ def batch_endpoint(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone")] = None,
-        experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
-        deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
     ):
     """Create or update an Azure ML batch endpoint from a YAML definition."""
     print(f"[deploy batch-endpoint] Loading endpoint configuration from {filepath}")
@@ -843,16 +758,7 @@ def batch_deployment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone")] = None,
-        experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
-        deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
     ):
     """Create or update a versioned Azure ML batch deployment from YAML."""
     print(f"[deploy batch-deployment] Loading deployment configuration from {filepath}")
@@ -889,26 +795,17 @@ def schedule(
         subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
         resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
-        job_name: str,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")],
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")],
+    job_ref: str,
+    schedule_name: Annotated[str, typer.Option("--schedule-name")],
+    cron_expression: Annotated[str, typer.Option("--cron-expression")],
         time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = "UTC",
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        tags: Annotated[
-            Optional[str],
-            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ] = None,
 ):
     print(f"[deploy schedule] Deploying Schedule")
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")
-    print(f"  Job Reference: {job_name}")
+    print(f"  Job Reference: {job_ref}")
     print(f"  Schedule Name: {schedule_name}")
     print(f"  CRON Expression: {cron_expression}")
     print(f"  Time Zone: {time_zone}")
@@ -931,7 +828,7 @@ def schedule(
     )
 
     job_schedule = JobSchedule(
-        name=schedule_name, trigger=cron_trigger, create_job=job_name
+        name=schedule_name, trigger=cron_trigger, create_job=job_ref
     )
     
     print("[deploy schedule] Submitting Schedule")

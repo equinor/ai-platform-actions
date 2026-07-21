@@ -10,7 +10,7 @@ from .util import empty_string_to_none, get_workspace_client, github_output
 app = typer.Typer()
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def batch_deployment(
     subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
     resource_group: Annotated[str, typer.Option("--resource-group", "-g")],

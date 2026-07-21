@@ -14,20 +14,19 @@ from .util import (
     empty_string_to_none,
     get_workspace_client,
     github_output,
-    load_safe_tags,
 )
 from .batch import set_default_deployment
 
 app = typer.Typer()
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def batch_deployment(
         subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
         resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
         endpoint_name: str,
-        previous_deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
+        previous_deployment_name: Annotated[str, typer.Option("--deployment-name")],
         expected_current_deployment: Annotated[Optional[str], typer.Option("--expected-current-deployment", envvar="EXPECTED_CURRENT_DEPLOYMENT", callback=empty_string_to_none)] = None,
         token: Optional[str] = None,
         expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
@@ -76,18 +75,6 @@ def online_deployment(
         expires_on: Optional[int] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
         previous_deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
-        tags: Annotated[
-            Optional[str],
-            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ] = None,
-        # passthrough args for GitHub Actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone")] = None,
     ):
     """Roll back an online endpoint to its previous deployment (US10 — Rollback and Retirement).
 
