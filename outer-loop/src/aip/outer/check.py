@@ -32,9 +32,8 @@ KNOWN_SIGNALS = {
 }
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def monitoring(
-    ctx: typer.Context,
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,

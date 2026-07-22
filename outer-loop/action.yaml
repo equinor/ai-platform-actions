@@ -26,7 +26,7 @@ inputs:
       Accepts an https:// proxy URL (e.g. https://mlflow-proxy.cluster.aurora.equinor.com)
       or an azureml:// tracking URI from an AzureML workspace
       (e.g. azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>).
-    required: false
+    required: true
 
   # --- Experiment / Run targeting ---
   experiment-name:
@@ -74,15 +74,15 @@ inputs:
           on_performance_drop: retrain
     required: false
 
-  # --- Azure ML workspace (needed for SDK-backed operations) ---
+  # --- Reserved Azure ML workspace inputs ---
   subscription-id:
-    description: "Azure subscription ID"
+    description: "Reserved for future Azure ML SDK operations; currently unsupported"
     required: false
   resource-group:
-    description: "Azure resource group name"
+    description: "Reserved for future Azure ML SDK operations; currently unsupported"
     required: false
   workspace-name:
-    description: "Azure Machine Learning workspace name"
+    description: "Reserved for future Azure ML SDK operations; currently unsupported"
     required: false
 
   # --- Model targeting (for monitoring / lineage) ---
@@ -101,11 +101,9 @@ inputs:
   max-evidence-age-minutes:
     description: "Maximum accepted age of monitoring evidence"
     required: false
-    default: "1440"
   min-sample-count:
     description: "Minimum number of observations required for an autonomous decision"
     required: false
-    default: "1"
 
 outputs:
   result:
@@ -130,44 +128,26 @@ outputs:
 runs:
   using: docker
   image: Dockerfile
-  args:
-    - ${{ inputs.verb }}
-    - ${{ inputs.subject }}
-    - --token
-    - ${{ inputs.token }}
-    - --expires-on
-    - ${{ inputs.expires-on }}
-    - --mlflow-url
-    - ${{ inputs.mlflow-url }}
-    - --experiment-name
-    - ${{ inputs.experiment-name }}
-    - --run-id
-    - ${{ inputs.run-id }}
-    - --run-ids
-    - ${{ inputs.run-ids }}
-    - --run-name
-    - ${{ inputs.run-name }}
-    - --thresholds-file
-    - ${{ inputs.thresholds-file }}
-    - --ranking-criteria-file
-    - ${{ inputs.ranking-criteria-file }}
-    - --policy-config-file
-    - ${{ inputs.policy-config-file }}
-    - --subscription
-    - ${{ inputs.subscription-id }}
-    - --resource-group
-    - ${{ inputs.resource-group }}
-    - --workspace-name
-    - ${{ inputs.workspace-name }}
-    - --model-name
-    - ${{ inputs.model-name }}
-    - --model-version
-    - ${{ inputs.model-version }}
-    - --endpoint-name
-    - ${{ inputs.endpoint-name }}
-    - --deployment-name
-    - ${{ inputs.deployment-name }}
-    - --max-evidence-age-minutes
-    - ${{ inputs.max-evidence-age-minutes }}
-    - --min-sample-count
-    - ${{ inputs.min-sample-count }}
+  env:
+    AIP_OUTER_ACTION_MODE: "true"
+    INPUT_VERB: ${{ inputs.verb }}
+    INPUT_SUBJECT: ${{ inputs.subject }}
+    INPUT_TOKEN: ${{ inputs.token }}
+    INPUT_EXPIRES_ON: ${{ inputs.expires-on }}
+    INPUT_MLFLOW_URL: ${{ inputs.mlflow-url }}
+    INPUT_EXPERIMENT_NAME: ${{ inputs.experiment-name }}
+    INPUT_RUN_ID: ${{ inputs.run-id }}
+    INPUT_RUN_IDS: ${{ inputs.run-ids }}
+    INPUT_RUN_NAME: ${{ inputs.run-name }}
+    INPUT_THRESHOLDS_FILE: ${{ inputs.thresholds-file }}
+    INPUT_RANKING_CRITERIA_FILE: ${{ inputs.ranking-criteria-file }}
+    INPUT_POLICY_CONFIG_FILE: ${{ inputs.policy-config-file }}
+    INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+    INPUT_RESOURCE_GROUP: ${{ inputs.resource-group }}
+    INPUT_WORKSPACE_NAME: ${{ inputs.workspace-name }}
+    INPUT_MODEL_NAME: ${{ inputs.model-name }}
+    INPUT_MODEL_VERSION: ${{ inputs.model-version }}
+    INPUT_ENDPOINT_NAME: ${{ inputs.endpoint-name }}
+    INPUT_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+    INPUT_MAX_EVIDENCE_AGE_MINUTES: ${{ inputs.max-evidence-age-minutes }}
+    INPUT_MIN_SAMPLE_COUNT: ${{ inputs.min-sample-count }}

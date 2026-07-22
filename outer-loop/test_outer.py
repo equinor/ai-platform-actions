@@ -33,11 +33,11 @@ import pytest
 from typer.testing import CliRunner
 
 from aip.outer.compare import _compute_score
-from aip.outer.check import app as check_app
 from aip.outer.evaluate import _apply_policy, _matching_policy_rules, app as evaluate_app
+from aip.outer.main import app as outer_app
 from aip.outer.util import AzureMLBackend, MLFlowProxyClient, create_mlflow_client
 
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 
 # =============================================================================
@@ -374,8 +374,9 @@ class TestMonitoringCheck:
             patch("aip.outer.check.get_credential", return_value=MagicMock()),
         ):
             return runner.invoke(
-                check_app,
+                outer_app,
                 [
+                    "check",
                     "monitoring",
                     "--mlflow-url", "https://proxy.example.com",
                     "--model-name", "fraud-model",
@@ -754,8 +755,6 @@ class TestMLFlowProxyClientRunNameFilter:
 # compare candidates CLI — run-name option
 # =============================================================================
 
-from aip.outer.compare import app as compare_app
-
 
 class TestCompareCandidatesRunName:
     """CLI-level tests for --run-name in compare candidates."""
@@ -774,8 +773,9 @@ class TestCompareCandidatesRunName:
                 patch("aip.outer.compare.get_credential", return_value=MagicMock()),
             ):
                 result = runner.invoke(
-                    compare_app,
+                    outer_app,
                     [
+                        "compare",
                         "candidates",
                         "--mlflow-url", "https://proxy.example.com",
                         "--experiment-name", "my-exp",

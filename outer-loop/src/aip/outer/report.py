@@ -20,9 +20,8 @@ from .util import (
 app = typer.Typer()
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def experiment(
-    ctx: typer.Context,
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,

@@ -161,7 +161,7 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `mlflow-url` | MLFlow backend URL or AzureML tracking URI. Accepts `https://` proxy URLs (e.g. `https://mlflow-proxy.cluster.aurora.equinor.com`) or `azureml://` tracking URIs from an AzureML workspace. | No |
+| `mlflow-url` | MLFlow backend URL or AzureML tracking URI. Accepts `https://` proxy URLs (e.g. `https://mlflow-proxy.cluster.aurora.equinor.com`) or `azureml://` tracking URIs from an AzureML workspace. | Yes |
 
 ### Experiment / run targeting
 
@@ -180,13 +180,13 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 | `ranking-criteria-file` | Path to YAML file with ranking criteria (`compare candidates`). | No |
 | `policy-config-file` | Path to YAML file with decision policy rules (`evaluate policy`). | No |
 
-### Azure ML workspace
+### Reserved Azure ML workspace inputs
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `subscription-id` | Azure subscription ID. | No |
-| `resource-group` | Azure resource group name. | No |
-| `workspace-name` | Azure Machine Learning workspace name. | No |
+| `subscription-id` | Reserved for future Azure ML SDK operations; currently rejected if supplied. | No |
+| `resource-group` | Reserved for future Azure ML SDK operations; currently rejected if supplied. | No |
+| `workspace-name` | Reserved for future Azure ML SDK operations; currently rejected if supplied. | No |
 
 ### Model
 
@@ -355,7 +355,8 @@ The action is organized into modular Python files under `src/aip/outer/`:
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Entry point; registers sub-typers for each verb |
+| `action_entrypoint.py` | Validates GitHub Action inputs and builds a command-specific CLI invocation |
+| `main.py` | Registers sub-typers for each verb and remains the direct CLI entry point |
 | `evaluate.py` | `evaluate gate` and `evaluate policy` commands |
 | `compare.py` | `compare candidates` command |
 | `report.py` | `report experiment` command |
@@ -374,7 +375,7 @@ aip.outer.main
   └── check     →  check.py     (monitoring)
 ```
 
-The `verb` and `subject` inputs from `action.yaml` are passed directly as positional CLI arguments to the container entrypoint (`python -m aip.outer.main`).
+`action.yaml` exposes its inputs as `INPUT_*` environment variables. The container entrypoint (`python -m aip.outer.action_entrypoint`) validates the selected command, omits blank and inapplicable inputs, and then invokes the Typer application. Direct CLI users can continue to run `python -m aip.outer.main`.
 
 ### Container
 

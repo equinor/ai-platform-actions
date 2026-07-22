@@ -27,6 +27,7 @@ from aip.inner.action_entrypoint import (
 
 
 ACTION_PATH = Path(__file__).with_name("action.yaml")
+DOCKERFILE_PATH = Path(__file__).with_name("Dockerfile")
 COMMANDS = tuple(COMMAND_SPECS)
 APPLICABLE_CASES = tuple(
     (command, input_name)
@@ -478,6 +479,12 @@ def test_direct_container_dispatch_passes_argv_unchanged():
     assert invocation.argv == tuple(argv)
     assert invocation.environment == {}
     assert invocation.clear_environment == ()
+
+
+def test_docker_enters_through_action_entrypoint():
+    dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert 'ENTRYPOINT ["python", "-m", "aip.inner.action_entrypoint"]' in dockerfile
 
 
 def test_github_python_cli_without_legacy_shape_remains_direct():

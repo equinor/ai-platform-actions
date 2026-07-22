@@ -22,9 +22,8 @@ from .util import (
 app = typer.Typer()
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def candidates(
-    ctx: typer.Context,
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     ranking_criteria_file: Annotated[str, typer.Option("--ranking-criteria-file")],

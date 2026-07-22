@@ -12,4 +12,4 @@ RUN uv sync
 # Add the virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["python", "-m", "aip.outer.main"]
+ENTRYPOINT ["python", "-m", "aip.outer.action_entrypoint"]

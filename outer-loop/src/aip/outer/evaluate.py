@@ -49,9 +49,8 @@ POLICY_RULES = (
 # evaluate gate (US1)
 # ---------------------------------------------------------------------------
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def gate(
-    ctx: typer.Context,
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     thresholds_file: Annotated[str, typer.Option("--thresholds-file")],
@@ -163,9 +162,8 @@ def gate(
 # evaluate policy (US9)
 # ---------------------------------------------------------------------------
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command()
 def policy(
-    ctx: typer.Context,
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
     policy_config_file: Annotated[str, typer.Option("--policy-config-file")],
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
