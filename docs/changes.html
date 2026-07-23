@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Inner and Outer Loop Changes</title>
+  <style>
+    :root {
+      --ink: #132229;
+      --muted: #56666c;
+      --paper: #f4f6f3;
+      --surface: #ffffff;
+      --line: #cbd5d4;
+      --outer: #0b6771;
+      --outer-soft: #e3f3f3;
+      --inner: #a85b00;
+      --inner-soft: #fff2dd;
+      --danger: #b8322a;
+      --danger-soft: #fff0ee;
+      --success: #28704b;
+      --success-soft: #e9f5ed;
+      --accent: #ef3e42;
+      --code: #233239;
+      --shadow: 0 14px 34px rgba(18, 34, 41, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(rgba(19, 34, 41, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(19, 34, 41, 0.035) 1px, transparent 1px);
+      background-size: 36px 36px;
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-size: 16px;
+      line-height: 1.62;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    code,
+    pre,
+    .mono {
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+    }
+
+    code {
+      padding: 0.12rem 0.32rem;
+      color: var(--code);
+      background: #edf1f0;
+      border: 1px solid #dbe2e1;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+
+    .top-rule {
+      height: 7px;
+      background: linear-gradient(90deg, var(--accent) 0 34%, var(--outer) 34% 68%, #e1a72a 68% 100%);
+    }
+
+    .masthead {
+      color: #f7fbfa;
+      background-color: #132229;
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.025) 0,
+        rgba(255, 255, 255, 0.025) 1px,
+        transparent 1px,
+        transparent 18px
+      );
+    }
+
+    .masthead-inner,
+    .section-inner,
+    .index-inner {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .masthead-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+      gap: 56px;
+      align-items: end;
+      padding: 62px 0 50px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: #83d4d5;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-top: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-weight: 700;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin-bottom: 20px;
+      font-size: clamp(2.45rem, 6vw, 5.2rem);
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+    }
+
+    h3 {
+      margin-bottom: 10px;
+      font-size: 1.35rem;
+    }
+
+    .lede {
+      max-width: 780px;
+      margin: 0;
+      color: #d4e0df;
+      font-size: 1.13rem;
+    }
+
+    .snapshot {
+      border-left: 3px solid #e1a72a;
+      padding-left: 22px;
+    }
+
+    .snapshot-label {
+      margin: 0 0 14px;
+      color: #aabbb9;
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .snapshot dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 14px;
+      margin: 0;
+    }
+
+    .snapshot dt {
+      color: #aabbb9;
+    }
+
+    .snapshot dd {
+      margin: 0;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .index {
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .index-inner {
+      display: flex;
+      gap: 8px 24px;
+      align-items: center;
+      overflow-x: auto;
+      padding: 14px 0;
+      white-space: nowrap;
+    }
+
+    .index strong {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }
+
+    .index a {
+      border-bottom: 2px solid transparent;
+      color: var(--ink);
+      font-size: 0.92rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .index a:hover,
+    .index a:focus-visible {
+      border-color: var(--accent);
+    }
+
+    .band {
+      padding: 78px 0;
+    }
+
+    .band.white {
+      background: rgba(255, 255, 255, 0.88);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .band.dark {
+      color: #eef5f3;
+      background: #1c2b31;
+    }
+
+    .section-kicker {
+      margin: 0 0 9px;
+      color: var(--outer);
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .dark .section-kicker {
+      color: #86d6d5;
+    }
+
+    .section-intro {
+      max-width: 820px;
+      margin: 0 0 34px;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .dark .section-intro {
+      color: #bdccca;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid #506168;
+      border-bottom: 1px solid #506168;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 22px 20px;
+      border-right: 1px solid #506168;
+    }
+
+    .metric:last-child {
+      border-right: 0;
+    }
+
+    .metric-value {
+      display: block;
+      margin-bottom: 3px;
+      color: #ffffff;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .metric-label {
+      color: #bdccca;
+      font-size: 0.86rem;
+    }
+
+    .diagram-shell {
+      margin-top: 30px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+    }
+
+    .diagram-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #f8faf8;
+    }
+
+    .diagram-title {
+      margin: 0;
+      font-weight: 800;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .legend-line {
+      width: 28px;
+      border-top: 2px solid #40545b;
+    }
+
+    .legend-line.dashed {
+      border-top-style: dashed;
+      border-color: #7a5b20;
+    }
+
+    .legend-block {
+      width: 12px;
+      height: 12px;
+      background: var(--danger-soft);
+      border: 1px solid var(--danger);
+    }
+
+    .diagram-scroll {
+      overflow-x: auto;
+      padding: 12px;
+    }
+
+    .call-flow {
+      display: block;
+      width: 100%;
+      min-width: 1040px;
+      height: auto;
+    }
+
+    .call-flow .lane {
+      stroke-width: 2;
+    }
+
+    .call-flow .lane.outer {
+      fill: var(--outer-soft);
+      stroke: #9ac9ca;
+    }
+
+    .call-flow .lane.inner {
+      fill: var(--inner-soft);
+      stroke: #e5bd7e;
+    }
+
+    .call-flow .lane-title {
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-size: 27px;
+      font-weight: 700;
+      fill: var(--ink);
+    }
+
+    .call-flow .lane-subtitle {
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-size: 14px;
+      fill: var(--muted);
+    }
+
+    .call-flow .node rect,
+    .call-flow .node polygon {
+      fill: #ffffff;
+      stroke: #6f8085;
+      stroke-width: 2;
+    }
+
+    .call-flow .node.command rect {
+      fill: #163c45;
+      stroke: #163c45;
+    }
+
+    .call-flow .node.azure rect {
+      fill: #fffaf1;
+      stroke: #c9872f;
+    }
+
+    .call-flow .node.success rect {
+      fill: var(--success-soft);
+      stroke: var(--success);
+    }
+
+    .call-flow .node.fail rect {
+      fill: var(--danger-soft);
+      stroke: var(--danger);
+    }
+
+    .call-flow .node.decision polygon {
+      fill: #fff7d8;
+      stroke: #9a7117;
+    }
+
+    .call-flow .node text {
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-size: 15px;
+      fill: var(--ink);
+      text-anchor: middle;
+    }
+
+    .call-flow .node text.fn {
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .call-flow .node.command text {
+      fill: #ffffff;
+    }
+
+    .call-flow .node .small {
+      font-size: 12px;
+      font-weight: 400;
+    }
+
+    .call-flow .flow {
+      fill: none;
+      stroke: #40545b;
+      stroke-width: 2.4;
+      marker-end: url(#arrow);
+    }
+
+    .call-flow .flow.workflow {
+      stroke: #8a6721;
+      stroke-dasharray: 9 7;
+      marker-end: url(#arrow-workflow);
+    }
+
+    .call-flow .flow.rejected {
+      stroke: var(--danger);
+      marker-end: url(#arrow-danger);
+    }
+
+    .call-flow .edge-label {
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      fill: var(--muted);
+    }
+
+    .call-flow .edge-label.danger {
+      fill: var(--danger);
+    }
+
+    .call-flow .edge-label.success {
+      fill: var(--success);
+    }
+
+    .call-flow .step-number circle {
+      fill: var(--accent);
+    }
+
+    .call-flow .step-number text {
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 12px;
+      font-weight: 700;
+      fill: #ffffff;
+      text-anchor: middle;
+    }
+
+    .call-flow .boundary {
+      fill: #fffdf6;
+      stroke: #bda359;
+      stroke-width: 2;
+      stroke-dasharray: 8 6;
+    }
+
+    .call-flow .boundary-label {
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      fill: #72571f;
+      text-anchor: middle;
+    }
+
+    .flow-notes,
+    .change-grid,
+    .contract-grid {
+      display: grid;
+      gap: 22px;
+    }
+
+    .flow-notes {
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 28px;
+    }
+
+    .change-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .contract-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .note,
+    .change-panel,
+    .contract {
+      min-width: 0;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .note {
+      border-top: 4px solid var(--outer);
+    }
+
+    .note:nth-child(2) {
+      border-top-color: #d08a28;
+    }
+
+    .note:nth-child(3) {
+      border-top-color: var(--danger);
+    }
+
+    .note p,
+    .change-panel p,
+    .contract p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .change-panel.outer-panel {
+      border-top: 5px solid var(--outer);
+    }
+
+    .change-panel.inner-panel {
+      border-top: 5px solid var(--inner);
+    }
+
+    .change-panel ul,
+    .contract ul,
+    .boundary-list {
+      margin: 18px 0 0;
+      padding-left: 20px;
+    }
+
+    .change-panel li,
+    .contract li,
+    .boundary-list li {
+      margin-bottom: 9px;
+    }
+
+    .contract {
+      color: var(--ink);
+      background: #f8faf8;
+    }
+
+    .contract-number {
+      display: inline-grid;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 14px;
+      place-items: center;
+      color: #ffffff;
+      background: var(--outer);
+      border-radius: 50%;
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .contract:nth-child(2) .contract-number {
+      background: var(--inner);
+    }
+
+    .contract:nth-child(3) .contract-number {
+      background: var(--danger);
+    }
+
+    .formula {
+      margin: 18px 0 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      color: #eaf2f0;
+      background: var(--code);
+      border-left: 4px solid #83d4d5;
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 0.84rem;
+      white-space: nowrap;
+    }
+
+    .table-wrap {
+      min-width: 0;
+      overflow-x: auto;
+      margin-top: 24px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #ffffff;
+      background: #26383f;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f8faf8;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .status.new {
+      color: #185437;
+      background: var(--success-soft);
+      border: 1px solid #8dbba0;
+    }
+
+    .status.changed {
+      color: #764500;
+      background: var(--inner-soft);
+      border: 1px solid #deb273;
+    }
+
+    .verification {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 36px;
+      align-items: start;
+    }
+
+    .checks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .check {
+      min-height: 110px;
+      padding: 18px;
+      color: var(--ink);
+      background: #ffffff;
+      border-left: 4px solid var(--success);
+    }
+
+    .check strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 1.1rem;
+    }
+
+    .check span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .boundary-box {
+      padding: 24px;
+      color: #f2f6f5;
+      border: 1px solid #5b6c72;
+      background: #26383f;
+    }
+
+    .boundary-box h3 {
+      color: #ffffff;
+    }
+
+    .boundary-box p,
+    .boundary-box li {
+      color: #c8d4d2;
+    }
+
+    footer {
+      padding: 30px 20px;
+      color: #8fa09e;
+      background: #132229;
+      text-align: center;
+      font-size: 0.85rem;
+    }
+
+    @media screen and (orientation: portrait) {
+      .masthead-inner,
+      .change-grid,
+      .contract-grid,
+      .verification {
+        grid-template-columns: 1fr;
+      }
+
+      .masthead-inner {
+        gap: 34px;
+        align-items: start;
+      }
+
+      .flow-notes {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-strip {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .metric:nth-child(2) {
+        border-right: 0;
+      }
+
+      .metric:nth-child(-n + 2) {
+        border-bottom: 1px solid #506168;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="top-rule" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div>
+        <p class="eyebrow">Implementation change brief</p>
+        <h1>Inner and outer loop changes</h1>
+        <p class="lede">
+          The action set now supports fail-closed monitoring decisions and a versioned Azure ML
+          batch deployment lifecycle. Evidence is validated before policy rules can act, while
+          promotion and rollback use explicit state guards and post-write verification.
+        </p>
+      </div>
+      <aside class="snapshot" aria-label="Document scope">
+        <p class="snapshot-label">Snapshot</p>
+        <dl>
+          <dt>Folder</dt>
+          <dd>inner-outer-loops</dd>
+          <dt>Captured</dt>
+          <dd>17 July 2026</dd>
+          <dt>Release unit</dt>
+          <dd>AML batch deployment</dd>
+          <dt>Operating mode</dt>
+          <dd>Automatic, fail closed</dd>
+        </dl>
+      </aside>
+    </div>
+  </header>
+
+  <nav class="index" aria-label="Page sections">
+    <div class="index-inner">
+      <strong>On this page</strong>
+      <a href="#summary">Summary</a>
+      <a href="#call-order">Call order</a>
+      <a href="#changes">Changes</a>
+      <a href="#contracts">Safety contracts</a>
+      <a href="#files">Files</a>
+      <a href="#verification">Verification</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="band dark" id="summary">
+      <div class="section-inner">
+        <p class="section-kicker">Result</p>
+        <h2>A controlled path from evidence to release state</h2>
+        <p class="section-intro">
+          The implementation adds the missing safety and lifecycle primitives for a first
+          automatic outer-loop pilot. The outer loop can now reject unusable evidence and emit an
+          auditable decision. The inner loop can create, invoke, promote, and restore named batch
+          deployments without guessing which version should be active.
+        </p>
+        <div class="metric-strip" aria-label="Implementation summary">
+          <div class="metric">
+            <span class="metric-value">16</span>
+            <span class="metric-label">modified or new files</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">2</span>
+            <span class="metric-label">shared safety primitives</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">75</span>
+            <span class="metric-label">focused tests passing</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">2</span>
+            <span class="metric-label">Docker images built</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="call-order">
+      <div class="section-inner">
+        <p class="section-kicker">Execution model</p>
+        <h2>Function call order</h2>
+        <p class="section-intro">
+          Solid arrows are calls made inside the action process. Dashed arrows are orchestration
+          transitions made by a GitHub workflow. That distinction matters: the Python modules
+          expose the decision and release commands, but they do not directly invoke one another
+          across the outer-loop and inner-loop action boundary.
+        </p>
+
+        <div class="diagram-shell">
+          <div class="diagram-toolbar">
+            <p class="diagram-title">Automatic batch pilot: command and helper sequence</p>
+            <div class="legend" aria-label="Diagram legend">
+              <span class="legend-item"><span class="legend-line"></span>function or SDK call</span>
+              <span class="legend-item"><span class="legend-line dashed"></span>workflow transition</span>
+              <span class="legend-item"><span class="legend-block"></span>fail-closed stop</span>
+            </div>
+          </div>
+          <div class="diagram-scroll">
+            <svg class="call-flow" viewBox="0 0 1400 1980" role="img" aria-labelledby="flow-title flow-desc">
+              <title id="flow-title">Function call order for the changed inner-loop and outer-loop actions</title>
+              <desc id="flow-desc">
+                Two lanes show the outer-loop evidence and policy calls and the inner-loop Azure ML
+                batch lifecycle calls. Solid arrows identify direct calls. Dashed arrows identify
+                GitHub workflow orchestration between separate action invocations.
+              </desc>
+
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#40545b"></path>
+                </marker>
+                <marker id="arrow-workflow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a6721"></path>
+                </marker>
+                <marker id="arrow-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#b8322a"></path>
+                </marker>
+              </defs>
+
+              <rect class="lane outer" x="25" y="25" width="655" height="1910" rx="6"></rect>
+              <rect class="lane inner" x="720" y="25" width="655" height="1910" rx="6"></rect>
+
+              <text class="lane-title" x="60" y="74">Outer loop</text>
+              <text class="lane-subtitle" x="60" y="100">Production evidence and policy decision</text>
+              <text class="lane-title" x="755" y="74">Inner loop</text>
+              <text class="lane-subtitle" x="755" y="100">Versioned batch deployment lifecycle</text>
+
+              <!-- Outer-loop path -->
+              <g class="node command">
+                <rect x="105" y="125" width="495" height="76" rx="5"></rect>
+                <text class="fn" x="352" y="157">outer-loop/action.yaml</text>
+                <text class="small" x="352" y="181">verb + subject + evidence inputs</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="137" r="14"></circle><text x="118" y="141">1</text></g>
+
+              <path class="flow" d="M 352 201 L 352 238"></path>
+              <g class="node">
+                <rect x="105" y="240" width="495" height="74" rx="5"></rect>
+                <text class="fn" x="352" y="271">aip.outer.main.app</text>
+                <text class="small" x="352" y="294">Typer routes check/monitoring or evaluate/policy</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="252" r="14"></circle><text x="118" y="256">2</text></g>
+
+              <path class="flow" d="M 352 314 L 352 353"></path>
+              <g class="node command">
+                <rect x="105" y="355" width="495" height="82" rx="5"></rect>
+                <text class="fn" x="352" y="388">check.monitoring()</text>
+                <text class="small" x="352" y="414">resolve monitoring-&lt;model&gt; or explicit experiment</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="367" r="14"></circle><text x="118" y="371">3</text></g>
+
+              <path class="flow" d="M 352 437 L 352 475"></path>
+              <g class="node">
+                <rect x="105" y="477" width="495" height="110" rx="5"></rect>
+                <text class="fn" x="352" y="508">get_credential()</text>
+                <text class="fn" x="352" y="534">create_mlflow_client()</text>
+                <text class="fn" x="352" y="560">client.get_monitoring_run()</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="489" r="14"></circle><text x="118" y="493">4</text></g>
+
+              <path class="flow" d="M 352 587 L 352 625"></path>
+              <g class="node">
+                <rect x="105" y="627" width="495" height="86" rx="5"></rect>
+                <text class="fn" x="352" y="660">validate_monitoring_evidence()</text>
+                <text class="small" x="352" y="686">schema + identity + freshness + sample count</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="639" r="14"></circle><text x="118" y="643">5</text></g>
+
+              <path class="flow" d="M 352 713 L 352 748"></path>
+              <g class="node decision">
+                <polygon points="352,750 492,812 352,874 212,812"></polygon>
+                <text x="352" y="806">Evidence</text>
+                <text x="352" y="828">valid?</text>
+              </g>
+
+              <path class="flow rejected" d="M 212 812 L 170 812 L 170 900"></path>
+              <text class="edge-label danger" x="177" y="798">No</text>
+              <g class="node fail">
+                <rect x="55" y="902" width="230" height="98" rx="5"></rect>
+                <text class="fn" x="170" y="937">github_output()</text>
+                <text class="small" x="170" y="961">insufficient-evidence</text>
+                <text class="small" x="170" y="981">exit code 2</text>
+              </g>
+
+              <path class="flow" d="M 492 812 L 535 812 L 535 900"></path>
+              <text class="edge-label success" x="506" y="798">Yes</text>
+              <g class="node success">
+                <rect x="420" y="902" width="230" height="98" rx="5"></rect>
+                <text class="fn" x="535" y="937">github_output()</text>
+                <text class="small" x="535" y="961">signals + valid status</text>
+                <text class="small" x="535" y="981">exit code 0</text>
+              </g>
+
+              <path class="flow workflow" d="M 535 1000 L 535 1034 L 352 1034 L 352 1072"></path>
+              <text class="edge-label" x="390" y="1024">next action invocation</text>
+              <g class="node command">
+                <rect x="105" y="1074" width="495" height="82" rx="5"></rect>
+                <text class="fn" x="352" y="1107">evaluate.policy()</text>
+                <text class="small" x="352" y="1133">the command re-fetches and re-validates evidence</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="1086" r="14"></circle><text x="118" y="1090">6</text></g>
+
+              <path class="flow" d="M 352 1156 L 352 1192"></path>
+              <g class="node">
+                <rect x="105" y="1194" width="495" height="132" rx="5"></rect>
+                <text class="fn" x="352" y="1224">load_yaml_file()</text>
+                <text class="fn" x="352" y="1250">_validate_policy_config()</text>
+                <text class="fn" x="352" y="1276">create client -&gt; get run</text>
+                <text class="fn" x="352" y="1302">validate_monitoring_evidence()</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="1206" r="14"></circle><text x="118" y="1210">7</text></g>
+
+              <path class="flow" d="M 352 1326 L 352 1354"></path>
+              <g class="node decision">
+                <polygon points="352,1356 492,1418 352,1480 212,1418"></polygon>
+                <text x="352" y="1412">Policy evidence</text>
+                <text x="352" y="1434">valid?</text>
+              </g>
+
+              <path class="flow rejected" d="M 212 1418 L 170 1418 L 170 1516"></path>
+              <text class="edge-label danger" x="177" y="1404">No</text>
+              <g class="node fail">
+                <rect x="55" y="1518" width="230" height="104" rx="5"></rect>
+                <text class="fn" x="170" y="1550">decision record</text>
+                <text class="small" x="170" y="1574">status: insufficient-evidence</text>
+                <text class="small" x="170" y="1596">github_output() + exit 2</text>
+              </g>
+
+              <path class="flow" d="M 492 1418 L 535 1418 L 535 1516"></path>
+              <text class="edge-label success" x="506" y="1404">Yes</text>
+              <g class="node success">
+                <rect x="420" y="1518" width="230" height="104" rx="5"></rect>
+                <text class="fn" x="535" y="1550">_matching_policy_rules()</text>
+                <text class="small" x="535" y="1574">first match selects action</text>
+                <text class="small" x="535" y="1596">all matches remain in audit</text>
+              </g>
+
+              <path class="flow" d="M 535 1622 L 535 1657 L 352 1657 L 352 1690"></path>
+              <g class="node">
+                <rect x="105" y="1692" width="495" height="118" rx="5"></rect>
+                <text class="fn" x="352" y="1725">hashlib.sha256()</text>
+                <text class="small" x="352" y="1750">experiment | evidence run | policy version</text>
+                <text class="fn" x="352" y="1778">github_output(decision)</text>
+              </g>
+              <g class="step-number"><circle cx="118" cy="1704" r="14"></circle><text x="118" y="1708">8</text></g>
+
+              <rect class="boundary" x="105" y="1846" width="495" height="60" rx="5"></rect>
+              <text class="boundary-label" x="352" y="1871">Workflow dispatch boundary</text>
+              <text class="boundary-label" x="352" y="1891">no-change | retrain | data work | code work | rollback</text>
+              <path class="flow workflow" d="M 352 1810 L 352 1844"></path>
+
+              <!-- Inner-loop path -->
+              <g class="node command">
+                <rect x="800" y="125" width="495" height="76" rx="5"></rect>
+                <text class="fn" x="1047" y="157">inner-loop/action.yaml</text>
+                <text class="small" x="1047" y="181">verb + subject + Azure ML inputs</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="137" r="14"></circle><text x="813" y="141">1</text></g>
+
+              <path class="flow" d="M 1047 201 L 1047 238"></path>
+              <g class="node">
+                <rect x="800" y="240" width="495" height="74" rx="5"></rect>
+                <text class="fn" x="1047" y="271">aip.inner.main.app</text>
+                <text class="small" x="1047" y="294">Typer routes deploy/invoke/promote/rollback</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="252" r="14"></circle><text x="813" y="256">2</text></g>
+
+              <path class="flow" d="M 1047 314 L 1047 352"></path>
+              <g class="node azure">
+                <rect x="800" y="354" width="495" height="102" rx="5"></rect>
+                <text class="fn" x="1047" y="386">deploy.batch_endpoint()</text>
+                <text class="small" x="1047" y="411">load_batch_endpoint() -&gt; get_workspace_client()</text>
+                <text class="small" x="1047" y="435">batch_endpoints.begin_create_or_update().result()</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="366" r="14"></circle><text x="813" y="370">3</text></g>
+
+              <path class="flow workflow" d="M 1047 456 L 1047 490"></path>
+              <g class="node azure">
+                <rect x="800" y="492" width="495" height="110" rx="5"></rect>
+                <text class="fn" x="1047" y="524">deploy.batch_deployment()</text>
+                <text class="small" x="1047" y="549">load_batch_deployment() -&gt; require endpoint_name</text>
+                <text class="small" x="1047" y="575">batch_deployments.begin_create_or_update().result()</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="504" r="14"></circle><text x="813" y="508">4</text></g>
+
+              <path class="flow workflow" d="M 1047 602 L 1047 636"></path>
+              <g class="node command">
+                <rect x="800" y="638" width="495" height="124" rx="5"></rect>
+                <text class="fn" x="1047" y="670">invoke.batch_deployment()</text>
+                <text class="small" x="1047" y="696">validate pinned input -&gt; get_workspace_client()</text>
+                <text class="small" x="1047" y="721">Input(path, type) -&gt; batch_endpoints.invoke()</text>
+                <text class="small" x="1047" y="746">github_output(invocation job and status)</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="650" r="14"></circle><text x="813" y="654">5</text></g>
+
+              <path class="flow workflow" d="M 1047 762 L 1047 796"></path>
+              <g class="node decision">
+                <polygon points="1047,798 1187,860 1047,922 907,860"></polygon>
+                <text x="1047" y="854">Validation job</text>
+                <text x="1047" y="876">accepted?</text>
+              </g>
+
+              <path class="flow rejected" d="M 907 860 L 840 860 L 840 952"></path>
+              <text class="edge-label danger" x="860" y="846">No</text>
+              <g class="node fail">
+                <rect x="755" y="954" width="170" height="82" rx="5"></rect>
+                <text x="840" y="988">Stop release</text>
+                <text class="small" x="840" y="1012">default unchanged</text>
+              </g>
+
+              <path class="flow workflow" d="M 1187 860 L 1250 860 L 1250 952"></path>
+              <text class="edge-label success" x="1205" y="846">Yes</text>
+              <g class="node command">
+                <rect x="1072" y="954" width="278" height="82" rx="5"></rect>
+                <text class="fn" x="1211" y="987">promote.batch_deployment()</text>
+                <text class="small" x="1211" y="1012">get_workspace_client()</text>
+              </g>
+              <g class="step-number"><circle cx="1085" cy="966" r="14"></circle><text x="1085" y="970">6</text></g>
+
+              <path class="flow" d="M 1211 1036 L 1211 1070 L 1047 1070 L 1047 1104"></path>
+              <g class="node">
+                <rect x="800" y="1106" width="495" height="96" rx="5"></rect>
+                <text class="fn" x="1047" y="1139">set_default_deployment()</text>
+                <text class="small" x="1047" y="1165">shared by promotion and batch rollback</text>
+                <text class="small" x="1047" y="1187">guarded optimistic concurrency, not atomic CAS</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="1118" r="14"></circle><text x="813" y="1122">7</text></g>
+
+              <path class="flow" d="M 1047 1202 L 1047 1236"></path>
+              <g class="node">
+                <rect x="780" y="1238" width="535" height="220" rx="5"></rect>
+                <text class="fn" x="1047" y="1272">1. batch_endpoints.get()</text>
+                <text class="small" x="1047" y="1297">return unchanged when target is already default</text>
+                <text class="fn" x="1047" y="1330">2. compare expected current default</text>
+                <text class="small" x="1047" y="1355">reject absent or mismatched expectation</text>
+                <text class="fn" x="1047" y="1388">3. batch_deployments.get(target)</text>
+                <text class="small" x="1047" y="1413">prove the requested target exists before mutation</text>
+                <text class="small" x="1047" y="1438">then update endpoint.defaults</text>
+              </g>
+
+              <path class="flow" d="M 1047 1458 L 1047 1492"></path>
+              <g class="node success">
+                <rect x="800" y="1494" width="495" height="128" rx="5"></rect>
+                <text class="fn" x="1047" y="1527">begin_create_or_update().result()</text>
+                <text class="fn" x="1047" y="1553">batch_endpoints.get()</text>
+                <text class="small" x="1047" y="1578">verify persisted default equals target</text>
+                <text class="small" x="1047" y="1602">github_output(previous/default/changed)</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="1506" r="14"></circle><text x="813" y="1510">8</text></g>
+
+              <path class="flow workflow" d="M 600 1876 L 690 1876 L 690 1722 L 800 1722"></path>
+              <text class="edge-label" x="585" y="1708">if decision = rollback</text>
+              <g class="node command">
+                <rect x="800" y="1668" width="495" height="126" rx="5"></rect>
+                <text class="fn" x="1047" y="1702">rollback.batch_deployment()</text>
+                <text class="small" x="1047" y="1728">require explicitly recorded prior deployment</text>
+                <text class="fn" x="1047" y="1756">set_default_deployment()</text>
+                <text class="small" x="1047" y="1780">same guard sequence; prior deployment is target</text>
+              </g>
+              <g class="step-number"><circle cx="813" cy="1680" r="14"></circle><text x="813" y="1684">9</text></g>
+
+              <path class="flow" d="M 1047 1794 L 1047 1832"></path>
+              <g class="node success">
+                <rect x="800" y="1834" width="495" height="72" rx="5"></rect>
+                <text class="fn" x="1047" y="1864">github_output()</text>
+                <text class="small" x="1047" y="1888">replaced/default/changed</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <div class="flow-notes">
+          <article class="note">
+            <h3>Evidence is checked twice</h3>
+            <p>
+              <code>check.monitoring()</code> reports evidence quality. A later
+              <code>evaluate.policy()</code> invocation fetches and validates again so a policy
+              decision never trusts a previous step's stale in-memory state.
+            </p>
+          </article>
+          <article class="note">
+            <h3>Dispatch is deliberately external</h3>
+            <p>
+              The decision output is consumed by workflow conditions. There is no direct Python
+              call from <code>evaluate.policy()</code> into the inner-loop modules.
+            </p>
+          </article>
+          <article class="note">
+            <h3>Rollback restores recorded state</h3>
+            <p>
+              Batch rollback receives the exact previous default emitted by promotion. It does not
+              infer a target from deployment age, naming, or creation order.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band white" id="changes">
+      <div class="section-inner">
+        <p class="section-kicker">Implementation</p>
+        <h2>What changed</h2>
+        <p class="section-intro">
+          The work is split by responsibility. The outer-loop changes make autonomous decisions
+          defensible; the inner-loop changes make the resulting batch release operations explicit,
+          retryable, and observable.
+        </p>
+
+        <div class="change-grid">
+          <article class="change-panel outer-panel">
+            <h3>Outer loop: evidence and decisions</h3>
+            <p>Monitoring data is now treated as evidence with a contract, not just a metric map.</p>
+            <ul>
+              <li>Added shared <code>validate_monitoring_evidence()</code> validation.</li>
+              <li>Checks schema version, model and deployment identity, observation time, and sample count.</li>
+              <li>Returns <code>insufficient-evidence</code> and exit code 2 when autonomous action is unsafe.</li>
+              <li>Requires a non-empty policy version and validates thresholds and action names.</li>
+              <li>Keeps every breached rule in the audit record while the first match selects the action.</li>
+              <li>Emits a deterministic SHA-256 decision ID for idempotent downstream dispatch.</li>
+              <li>Exposes evidence identity, freshness, and sample constraints through the Docker action.</li>
+            </ul>
+          </article>
+
+          <article class="change-panel inner-panel">
+            <h3>Inner loop: batch release lifecycle</h3>
+            <p>Named Azure ML batch deployments are now the versioned release unit.</p>
+            <ul>
+              <li>Added YAML-backed creation for batch endpoints and batch deployments.</li>
+              <li>Added invocation of one named deployment using a pinned file, folder, or data asset.</li>
+              <li>Added promotion by changing the endpoint's default deployment.</li>
+              <li>Added rollback to an explicitly recorded prior default.</li>
+              <li>Centralized state mutation in <code>set_default_deployment()</code>.</li>
+              <li>Added idempotency, expected-current protection, target existence checks, and read-back verification.</li>
+              <li>Added action inputs, environment variables, outputs, command registration, tests, and documentation.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="contracts">
+      <div class="section-inner">
+        <p class="section-kicker">Guardrails</p>
+        <h2>Safety contracts introduced</h2>
+        <p class="section-intro">
+          Automatic operation is only acceptable when evidence, decisions, and deployment state
+          each carry enough identity to detect stale or conflicting work.
+        </p>
+
+        <div class="contract-grid">
+          <article class="contract">
+            <span class="contract-number">01</span>
+            <h3>Evidence contract</h3>
+            <p>A monitoring run is usable only when all requested identity and quality checks pass.</p>
+            <ul>
+              <li><code>aip.monitoring.schema_version=1</code></li>
+              <li>model name and version match</li>
+              <li>endpoint and deployment match</li>
+              <li><code>aip.observed_at</code> is timezone-aware and fresh</li>
+              <li><code>sample_count</code> meets the configured minimum</li>
+            </ul>
+          </article>
+
+          <article class="contract">
+            <span class="contract-number">02</span>
+            <h3>Decision contract</h3>
+            <p>The policy and evidence run together produce one reproducible audit identity.</p>
+            <ul>
+              <li>policy version is mandatory</li>
+              <li>only supported actions are accepted</li>
+              <li>first matching rule determines the recommendation</li>
+              <li>all matching rules are preserved</li>
+              <li>decision JSON includes evidence and deployment identity</li>
+            </ul>
+            <div class="formula">SHA-256(experiment | evidence_run_id | policy_version)</div>
+          </article>
+
+          <article class="contract">
+            <span class="contract-number">03</span>
+            <h3>Mutation contract</h3>
+            <p>A default change proceeds only from the state the workflow says it observed.</p>
+            <ul>
+              <li>already at target means a successful no-op</li>
+              <li>missing expected current default is rejected</li>
+              <li>unexpected current default is treated as a race</li>
+              <li>target deployment must exist</li>
+              <li>persisted state is read back and verified</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band white">
+      <div class="section-inner">
+        <p class="section-kicker">Action interface</p>
+        <h2>New inputs, outputs, and outcomes</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Interface</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Outer input</td>
+                <td><code>model-version</code>, <code>endpoint-name</code>, <code>deployment-name</code></td>
+                <td>Bind monitoring evidence to the production asset being judged.</td>
+              </tr>
+              <tr>
+                <td>Outer input</td>
+                <td><code>max-evidence-age-minutes</code>, <code>min-sample-count</code></td>
+                <td>Define minimum evidence freshness and volume for autonomous action.</td>
+              </tr>
+              <tr>
+                <td>Outer output</td>
+                <td><code>decision</code>, <code>decision-id</code></td>
+                <td>Carry the auditable policy result and its deterministic idempotency key.</td>
+              </tr>
+              <tr>
+                <td>Outer output</td>
+                <td><code>evidence-status</code>, <code>evidence-issues</code>, <code>signals</code></td>
+                <td>Separate evidence validity from metric interpretation.</td>
+              </tr>
+              <tr>
+                <td>Inner input</td>
+                <td><code>input-path</code>, <code>input-type</code>, <code>invocation-job-name</code></td>
+                <td>Invoke a specific candidate deployment on pinned validation data.</td>
+              </tr>
+              <tr>
+                <td>Inner input</td>
+                <td><code>expected-current-deployment</code></td>
+                <td>Reject a promotion or rollback if the endpoint changed since it was observed.</td>
+              </tr>
+              <tr>
+                <td>Inner output</td>
+                <td><code>previous-deployment-name</code>, <code>replaced-deployment-name</code></td>
+                <td>Record exact state for a later compensating rollback.</td>
+              </tr>
+              <tr>
+                <td>Inner output</td>
+                <td><code>default-deployment-name</code>, <code>changed</code>, <code>status</code></td>
+                <td>Make retries and downstream workflow conditions observable.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="files">
+      <div class="section-inner">
+        <p class="section-kicker">Change inventory</p>
+        <h2>Files affected</h2>
+        <p class="section-intro">
+          This inventory reflects the current scoped working-tree changes under
+          <code>inner-outer-loops/ai-platform-actions</code>.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Area</th>
+                <th>File</th>
+                <th>Responsibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="status new">New</span></td><td>Outer</td><td><code>outer-loop/src/aip/outer/evidence.py</code></td><td>Shared evidence validation.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Outer</td><td><code>outer-loop/src/aip/outer/check.py</code></td><td>Evidence status reporting and fail-closed exit.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Outer</td><td><code>outer-loop/src/aip/outer/evaluate.py</code></td><td>Versioned policies, deterministic decisions, and matched-rule audit.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Outer</td><td><code>outer-loop/action.yaml</code></td><td>Evidence inputs and decision outputs.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Outer</td><td><code>outer-loop/README.md</code>, <code>outer-loop/outer-loop-config.md</code></td><td>Contract and policy documentation.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Outer</td><td><code>outer-loop/test_outer.py</code></td><td>Evidence rejection, valid decisions, and deterministic output tests.</td></tr>
+              <tr><td><span class="status new">New</span></td><td>Inner</td><td><code>inner-loop/src/aip/inner/batch.py</code></td><td>Shared guarded default-deployment mutation.</td></tr>
+              <tr><td><span class="status new">New</span></td><td>Inner</td><td><code>inner-loop/src/aip/inner/invoke.py</code></td><td>Named batch deployment invocation.</td></tr>
+              <tr><td><span class="status new">New</span></td><td>Inner</td><td><code>inner-loop/src/aip/inner/promote.py</code></td><td>Guarded batch promotion command.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Inner</td><td><code>inner-loop/src/aip/inner/deploy.py</code></td><td>Batch endpoint and deployment creation.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Inner</td><td><code>inner-loop/src/aip/inner/rollback.py</code></td><td>Explicit prior-default batch rollback.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Inner</td><td><code>inner-loop/src/aip/inner/main.py</code>, <code>inner-loop/action.yaml</code></td><td>Command registration and action interface wiring.</td></tr>
+              <tr><td><span class="status changed">Changed</span></td><td>Inner</td><td><code>inner-loop/README.md</code></td><td>Batch release behavior and concurrency guidance.</td></tr>
+              <tr><td><span class="status new">New</span></td><td>Inner</td><td><code>inner-loop/test_batch_lifecycle.py</code></td><td>Creation, invocation, promotion, rollback, guard, and routing tests.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="band dark" id="verification">
+      <div class="section-inner">
+        <p class="section-kicker">Release checks</p>
+        <h2>What has been verified</h2>
+        <div class="verification">
+          <div class="checks">
+            <div class="check">
+              <strong>66 outer-loop tests</strong>
+              <span>Complete outer test suite passed on Python 3.12.</span>
+            </div>
+            <div class="check">
+              <strong>9 batch lifecycle tests</strong>
+              <span>Focused inner suite passed on Python 3.13.</span>
+            </div>
+            <div class="check">
+              <strong>2 Docker images</strong>
+              <span><code>aip-outer:local</code> and <code>aip-inner:local</code> built successfully.</span>
+            </div>
+            <div class="check">
+              <strong>CLI routes exercised</strong>
+              <span>Policy, monitoring, invoke, promote, and rollback help paths loaded in-container.</span>
+            </div>
+            <div class="check">
+              <strong>Scoped diff clean</strong>
+              <span><code>git diff --check</code> reported no whitespace errors.</span>
+            </div>
+            <div class="check">
+              <strong>No editor diagnostics</strong>
+              <span>VS Code reported no errors in either action folder.</span>
+            </div>
+          </div>
+
+          <aside class="boundary-box">
+            <h3>Current boundary</h3>
+            <p>
+              These changes provide the safety and lifecycle primitives, not a complete production
+              control plane. The following remain integration responsibilities:
+            </p>
+            <ul class="boundary-list">
+              <li>A workflow must map policy outputs to retraining, data, code, or rollback jobs.</li>
+              <li>A GitHub concurrency group should serialize operations per batch endpoint.</li>
+              <li>Azure ML's SDK does not expose an ETag or <code>If-Match</code> precondition here, so the guard is optimistic rather than atomic.</li>
+              <li>Real production telemetry and a live Azure workspace are still needed for an end-to-end pilot.</li>
+              <li>The broad inner utility suite retains three previously known, unrelated failures.</li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Self-contained implementation brief for the inner-outer-loops Azure ML action pilot.
+  </footer>
+</body>
+</html>

@@ -36,7 +36,7 @@ sys.modules['azure.identity'] = MagicMock()
 sys.modules['azure.ai'] = MagicMock()
 sys.modules['azure.ai.ml'] = MagicMock()
 
-from util import github_output, load_safe_tags, get_ref_properties
+from aip.inner.util import github_output, load_safe_tags, get_ref_properties
 
 
 class TestGithubOutput:
@@ -134,14 +134,14 @@ class TestLoadSafeTags:
         assert result == {'key1': 'value1', 'key2': 'value2'}
     
     def test_load_safe_tags_with_empty_string(self):
-        """Test that empty string returns empty dict"""
+        """Test that empty string returns None"""
         result = load_safe_tags("")
-        assert result == {}
+        assert result is None
     
     def test_load_safe_tags_with_none(self):
-        """Test that None returns empty dict"""
+        """Test that None remains None"""
         result = load_safe_tags(None)
-        assert result == {}
+        assert result is None
     
     def test_load_safe_tags_with_tag_without_value(self):
         """Test parsing tag without value (only key) - returns empty string not None"""
@@ -279,10 +279,11 @@ class TestGetRefProperties:
         assert result.name == 'component'
         assert result.version == '1.2.3-beta.1'
     
-    def test_get_ref_properties_invalid_pattern_raises_error(self):
-        """Test that invalid reference pattern raises ValueError"""
-        with pytest.raises(ValueError, match="does not match any supported Azure ML reference pattern"):
-            get_ref_properties("invalid-reference-format")
+    def test_get_ref_properties_unversioned_simple_name(self):
+        """Test parsing an unversioned simple asset name"""
+        result = get_ref_properties("unversioned-asset")
+        assert result.name == "unversioned-asset"
+        assert result.version is None
     
     def test_get_ref_properties_empty_string_raises_error(self):
         """Test that empty string raises ValueError"""

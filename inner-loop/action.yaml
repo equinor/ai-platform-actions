@@ -3,10 +3,10 @@ description: Unified action for Azure ML operations using command pattern
 
 inputs:
   verb:
-    description: "Action verb (deploy, share, waitfor, delete)"
+    description: "Action verb (deploy, share, waitfor, delete, invoke, promote, rollback)"
     required: true
   subject:
-    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment)"
+    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment, batch-endpoint, batch-deployment)"
     required: true
   token:
     description: "From azLogin action. Required unless running locally."
@@ -60,7 +60,7 @@ inputs:
     description: "Azure ML online endpoint name"
     required: false
   deployment-name:
-    description: "Azure ML online deployment name (for deploy online-deployment)"
+    description: "Azure ML online deployment name (for deploy online-deployment or rollback online-deployment)"
     required: false
   deployment-resource:
     description: "Azure ML online deployment resource ID (for waitfor/delete online-deployment). Format: /subscriptions/.../onlineEndpoints/<endpoint>/deployments/<deployment>"
@@ -80,7 +80,6 @@ inputs:
   timeout-minutes:
     description: "When using waitfor verb, override default timeout of 30"
     required: false
-    default: "30"
   job-ref:
     description: "Job reference (for deploy schedule)"
     required: false
@@ -93,6 +92,21 @@ inputs:
   time-zone:
     description: "Time zone to use when interpreting the CRON expression"
     required: false
+  experiment-name:
+    description: "Azure ML experiment name (for deploy job, deploy sweep-job). Overrides the experiment name in the YAML."
+    required: false
+  input-path:
+    description: "Pinned Azure ML data asset or URI used to invoke a batch deployment"
+    required: false
+  input-type:
+    description: "Batch invocation input type (uri_file or uri_folder)"
+    required: false
+  invocation-job-name:
+    description: "Optional deterministic name for a batch invocation job"
+    required: false
+  expected-current-deployment:
+    description: "Expected batch endpoint default used for guarded promotion or rollback"
+    required: false
 
 outputs:
   resource-id:
@@ -101,43 +115,60 @@ outputs:
     description: "Reference string within Azure ML"
   version:
     description: "Version of the resource"
+  lineage-metadata:
+    description: "JSON-encoded lineage metadata for the submitted job (git SHA, branch, workflow run ID)"
+  best-trial-run-id:
+    description: "Run ID of the best trial in a completed sweep job"
+  invocation-job-name:
+    description: "Azure ML job created by a named batch deployment invocation"
+  status:
+    description: "Status of the submitted batch invocation job"
+  previous-deployment-name:
+    description: "Batch endpoint default before promotion"
+  replaced-deployment-name:
+    description: "Batch endpoint default replaced during rollback"
+  default-deployment-name:
+    description: "Batch endpoint default after promotion or rollback"
+  changed:
+    description: "Whether promotion or rollback changed the endpoint"
 
 runs:
   using: docker
-  image: docker://ghcr.io/equinor/ai-platform-actions/inner-loop:latest
-  args:
-    - ${{ inputs.verb }}
-    - ${{ inputs.subject }}
-    - ${{ inputs.filepath || inputs.component-ref || inputs.data-ref || inputs.env-ref || inputs.model-ref || inputs.job-name || inputs.endpoint-name || inputs.deployment-resource }}
-    - --subscription
-    - ${{ inputs.subscription-id }}
-    - --resource-group
-    - ${{ inputs.resource-group }}
-    - --workspace-name
-    - ${{ inputs.workspace-name }}
-    - --registry-name
-    - ${{ inputs.registry-name }}
-    - --token
-    - ${{ inputs.token }}
-    - --expires-on
-    - ${{ inputs.expires-on }}
-    - --tags
-    - ${{ inputs.tags }}
-    - --promote-stage
-    - ${{ inputs.promote-stage }}
-    - --image-build-compute
-    - ${{ inputs.image-build-compute }}
-    - --aml-token
-    - ${{ inputs.aml-token }}
-    - --traffic-allocation
-    - ${{ inputs.traffic-allocation }}
-    - --schedule-name
-    - ${{ inputs.schedule-name }}
-    - --cron-expression
-    - ${{ inputs.cron-expression }}
-    - --time-zone
-    - ${{ inputs.time-zone }}
+  image: Dockerfile
   env:
-    UV_NO_INSTALL: "true"  # Add this line to prevent uv from installing dependencies at runtime
-    TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
-    REGISTRY_ENV_REF: ${{ inputs.registry-env-ref }}
+    AIP_INNER_ACTION_MODE: "true"
+    INPUT_VERB: ${{ inputs.verb }}
+    INPUT_SUBJECT: ${{ inputs.subject }}
+    INPUT_TOKEN: ${{ inputs.token }}
+    INPUT_EXPIRES_ON: ${{ inputs.expires-on }}
+    INPUT_AML_TOKEN: ${{ inputs.aml-token }}
+    INPUT_TENANT_ID: ${{ inputs.tenant-id }}
+    INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+    INPUT_RESOURCE_GROUP: ${{ inputs.resource-group }}
+    INPUT_WORKSPACE_NAME: ${{ inputs.workspace-name }}
+    INPUT_REGISTRY_NAME: ${{ inputs.registry-name }}
+    INPUT_CLIENT_ID: ${{ inputs.client-id }}
+    INPUT_FILEPATH: ${{ inputs.filepath }}
+    INPUT_COMPONENT_REF: ${{ inputs.component-ref }}
+    INPUT_REGISTRY_ENV_REF: ${{ inputs.registry-env-ref }}
+    INPUT_DATA_REF: ${{ inputs.data-ref }}
+    INPUT_ENV_REF: ${{ inputs.env-ref }}
+    INPUT_MODEL_REF: ${{ inputs.model-ref }}
+    INPUT_JOB_NAME: ${{ inputs.job-name }}
+    INPUT_ENDPOINT_NAME: ${{ inputs.endpoint-name }}
+    INPUT_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+    INPUT_DEPLOYMENT_RESOURCE: ${{ inputs.deployment-resource }}
+    INPUT_TRAFFIC_ALLOCATION: ${{ inputs.traffic-allocation }}
+    INPUT_TAGS: ${{ inputs.tags }}
+    INPUT_PROMOTE_STAGE: ${{ inputs.promote-stage }}
+    INPUT_IMAGE_BUILD_COMPUTE: ${{ inputs.image-build-compute }}
+    INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+    INPUT_JOB_REF: ${{ inputs.job-ref }}
+    INPUT_SCHEDULE_NAME: ${{ inputs.schedule-name }}
+    INPUT_CRON_EXPRESSION: ${{ inputs.cron-expression }}
+    INPUT_TIME_ZONE: ${{ inputs.time-zone }}
+    INPUT_EXPERIMENT_NAME: ${{ inputs.experiment-name }}
+    INPUT_INPUT_PATH: ${{ inputs.input-path }}
+    INPUT_INPUT_TYPE: ${{ inputs.input-type }}
+    INPUT_INVOCATION_JOB_NAME: ${{ inputs.invocation-job-name }}
+    INPUT_EXPECTED_CURRENT_DEPLOYMENT: ${{ inputs.expected-current-deployment }}

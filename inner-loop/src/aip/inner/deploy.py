@@ -9,6 +9,8 @@ from azure.ai.ml import (
     load_component,
     load_model,
     load_job,
+    load_batch_endpoint,
+    load_batch_deployment,
     load_online_endpoint,
     load_online_deployment,
 )
@@ -62,15 +64,6 @@ def data(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They ar required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy data asset to Azure ML workspace"""
     print(f"[deploy data] Deploying data asset")
@@ -120,15 +113,6 @@ def environment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy environment to Azure ML workspace"""
     print(f"[deploy environment] Deploying environment")
@@ -179,15 +163,6 @@ def component(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy component to Azure ML workspace"""
     print(f"[deploy component] Deploying component")
@@ -267,15 +242,6 @@ def model(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 4 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy model to Azure ML workspace"""
     print(f"[deploy model] Deploying model")
@@ -326,14 +292,7 @@ def job(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
-        # The following 3 arguments are not used. They are required to satisfy gihthub actions interface
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
+        experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     ):
     """Submit job to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-pipeline?view=azureml-api-2
@@ -341,11 +300,14 @@ def job(
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-sweep?view=azureml-api-2
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-parallel?view=azureml-api-2
     """
+    import json
+    import os
+
     print(f"[deploy job] Submitting job")
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")
     print(f"  Filepath: {filepath}")
-    
+
     print("[deploy job] Creating workspace client")
     client = get_workspace_client(
         subscription_id=subscription_id,
@@ -357,26 +319,195 @@ def job(
     )
 
     print("[deploy job] Loading job configuration from file")
-    #with open(filepath, "r") as file:
-    #    job_config = yaml.safe_load(file)
     job_config = load_job(source=filepath)
     if tags:
         if job_config.tags:
             job_config.tags.update(tags)
         else:
             job_config.tags = tags
-    
+
+    # US3 — Experiment tracking: override experiment name when supplied
+    if experiment_name:
+        job_config.experiment_name = experiment_name
+        print(f"  Experiment: {experiment_name}")
+
+    # US5 — Reproducibility: auto-tag with CI provenance from environment
+    lineage_tags: dict[str, str] = {}
+    git_sha = os.environ.get("GITHUB_SHA", "")
+    git_ref = os.environ.get("GITHUB_REF_NAME", "")
+    workflow_run_id = os.environ.get("GITHUB_RUN_ID", "")
+    workflow_name = os.environ.get("GITHUB_WORKFLOW", "")
+    if git_sha:
+        lineage_tags["mlflow.source.git.commit"] = git_sha
+    if git_ref:
+        lineage_tags["mlflow.source.git.branch"] = git_ref
+    if workflow_run_id:
+        lineage_tags["github.run_id"] = workflow_run_id
+    if workflow_name:
+        lineage_tags["github.workflow"] = workflow_name
+    if lineage_tags:
+        if job_config.tags:
+            job_config.tags.update(lineage_tags)
+        else:
+            job_config.tags = lineage_tags
+
     print("[deploy job] Submitting job to workspace")
     job_result = client.jobs.create_or_update(job_config)
-    
+
     print(f"[deploy job] ✅ Job submitted successfully")
     print(f"  Name: {job_result.name}")
     print(f"  Status: {job_result.status}")
     print(f"  Resource ID: {job_result.id}")
+
+    lineage_metadata = {
+        "job_name": job_result.name,
+        "experiment_name": getattr(job_result, "experiment_name", experiment_name or ""),
+        "git_sha": git_sha,
+        "git_branch": git_ref,
+        "github_run_id": workflow_run_id,
+        "github_workflow": workflow_name,
+        "compute": str(getattr(job_config, "compute", "")),
+    }
+
     github_output({
-        "reference":f"azureml:{job_result.name}",
-        "version":job_result.name,
-        "resource-id":job_result.id
+        "reference": f"azureml:{job_result.name}",
+        "version": job_result.name,
+        "resource-id": job_result.id,
+        "lineage-metadata": json.dumps(lineage_metadata),
+    })
+
+
+@app.command()
+def sweep_job(
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ]=None,
+    ):
+    """Submit a hyperparameter sweep job to Azure ML workspace (US4 — Hyperparameter Sweeps).
+
+    Accepts an AzureML SweepJob YAML file. After submission, use 'waitfor sweep-job'
+    to wait for completion and retrieve the best trial run ID.
+
+    Reference: https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-sweep?view=azureml-api-2
+    """
+    print(f"[deploy sweep-job] Submitting sweep job")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Filepath: {filepath}")
+
+    print("[deploy sweep-job] Creating workspace client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
+        aml_token=aml_token
+    )
+
+    print("[deploy sweep-job] Loading sweep job configuration from file")
+    job_config = load_job(source=filepath)
+
+    if tags:
+        if job_config.tags:
+            job_config.tags.update(tags)
+        else:
+            job_config.tags = tags
+
+    if experiment_name:
+        job_config.experiment_name = experiment_name
+        print(f"  Experiment: {experiment_name}")
+
+    print("[deploy sweep-job] Submitting sweep job to workspace")
+    job_result = client.jobs.create_or_update(job_config)
+
+    print(f"[deploy sweep-job] ✅ Sweep job submitted successfully")
+    print(f"  Name: {job_result.name}")
+    print(f"  Status: {job_result.status}")
+    print(f"  Resource ID: {job_result.id}")
+
+    github_output({
+        "reference": f"azureml:{job_result.name}",
+        "version": job_result.name,
+        "resource-id": job_result.id,
+    })
+
+
+@app.command()
+def feature_set(
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ]=None,
+    ):
+    """Register a feature set data asset with feature-pipeline convention tags (US7 — Feature Engineering).
+
+    Deploys a data asset (from the provided YAML) and enforces the feature-set naming
+    and tagging convention: names must start with 'feature-pipeline-' and the asset
+    receives a 'type=feature-pipeline' tag automatically.
+
+    The YAML file follows the standard AzureML data asset format.
+    """
+    print(f"[deploy feature-set] Deploying feature set data asset")
+    print(f"  Workspace: {workspace_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Filepath: {filepath}")
+
+    print("[deploy feature-set] Creating workspace client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+
+    print("[deploy feature-set] Loading data asset configuration from file")
+    data_asset = load_data(source=filepath)
+
+    # Enforce feature-set naming convention
+    if not data_asset.name.startswith("feature-pipeline-"):
+        raise typer.BadParameter(
+            f"Feature set data assets must follow the naming convention 'feature-pipeline-<name>', "
+            f"got '{data_asset.name}'"
+        )
+
+    # Enforce feature-pipeline tag
+    convention_tags = {"type": "feature-pipeline"}
+    if tags:
+        convention_tags.update(tags)
+    if data_asset.tags:
+        data_asset.tags.update(convention_tags)
+    else:
+        data_asset.tags = convention_tags
+
+    print("[deploy feature-set] Creating or updating feature set data asset")
+    result = client.data.create_or_update(data_asset)
+
+    print(f"[deploy feature-set] ✅ Feature set deployed successfully")
+    print(f"  Name: {result.name}")
+    print(f"  Version: {result.version}")
+    print(f"  Resource ID: {result.id}")
+
+    github_output({
+        "reference": f"azureml:{result.name}:{result.version}",
+        "version": result.version,
+        "resource-id": result.id,
     })
 
 
@@ -392,14 +523,6 @@ def online_endpoint(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy online endpoint to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-endpoint-online?view=azureml-api-2
@@ -475,13 +598,6 @@ def online_deployment(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")] = None,
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")] = None,
-        time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = None,
     ):
     """Deploy online deployment to Azure ML workspace.
     https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-managed-online?view=azureml-api-2
@@ -592,32 +708,104 @@ def online_deployment(
     })
 
 
+@app.command()
+def batch_endpoint(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    ):
+    """Create or update an Azure ML batch endpoint from a YAML definition."""
+    print(f"[deploy batch-endpoint] Loading endpoint configuration from {filepath}")
+    endpoint = load_batch_endpoint(source=filepath)
+    if tags:
+        endpoint.tags = {**(endpoint.tags or {}), **tags}
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=int(expires_on) if expires_on else None,
+        aml_token=aml_token,
+    )
+    result = client.batch_endpoints.begin_create_or_update(endpoint).result()
+
+    print(f"[deploy batch-endpoint] Batch endpoint '{result.name}' is ready")
+    github_output({
+        "reference": f"azureml:{result.name}",
+        "version": result.name,
+        "resource-id": result.id or "",
+    })
+
+
+@app.command()
+def batch_deployment(
+        subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+        workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ] = None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+    ):
+    """Create or update a versioned Azure ML batch deployment from YAML."""
+    print(f"[deploy batch-deployment] Loading deployment configuration from {filepath}")
+    deployment = load_batch_deployment(source=filepath)
+    if not deployment.endpoint_name:
+        raise typer.BadParameter("Batch deployment YAML must contain 'endpoint_name'")
+    if tags:
+        deployment.tags = {**(deployment.tags or {}), **tags}
+
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=int(expires_on) if expires_on else None,
+        aml_token=aml_token,
+    )
+    result = client.batch_deployments.begin_create_or_update(deployment).result()
+
+    print(
+        f"[deploy batch-deployment] Batch deployment '{result.name}' "
+        f"on endpoint '{result.endpoint_name}' is ready"
+    )
+    github_output({
+        "reference": f"azureml:{result.endpoint_name}/deployments/{result.name}",
+        "version": result.name,
+        "resource-id": result.id or "",
+    })
+
+
 
 @app.command()
 def schedule(
         subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
         resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
         workspace_name: Annotated[str, typer.Option("--workspace-name", "-w")],
-        job_name: str,
-        schedule_name: Annotated[Optional[str], typer.Option("--schedule-name")],
-        cron_expression: Annotated[Optional[str], typer.Option("--cron-expression")],
+    job_ref: str,
+    schedule_name: Annotated[str, typer.Option("--schedule-name")],
+    cron_expression: Annotated[str, typer.Option("--cron-expression")],
         time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = "UTC",
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
-        registry_name: Annotated[Optional[str], typer.Option("--registry-name", callback=empty_string_to_none)] = None,
-        promote_stage: Annotated[Optional[str], typer.Option("--promote-stage", callback=empty_string_to_none)] = None,
-        image_build_compute: Annotated[Optional[str], typer.Option("--image-build-compute", callback=empty_string_to_none)] = None,
-        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
-        traffic_allocation: Annotated[Optional[str], typer.Option("--traffic-allocation", callback=empty_string_to_none)] = None,
-        tags: Annotated[
-            Optional[str],
-            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
-        ] = None,
 ):
     print(f"[deploy schedule] Deploying Schedule")
     print(f"  Workspace: {workspace_name}")
     print(f"  Resource Group: {resource_group}")
-    print(f"  Job Reference: {job_name}")
+    print(f"  Job Reference: {job_ref}")
     print(f"  Schedule Name: {schedule_name}")
     print(f"  CRON Expression: {cron_expression}")
     print(f"  Time Zone: {time_zone}")
@@ -640,7 +828,7 @@ def schedule(
     )
 
     job_schedule = JobSchedule(
-        name=schedule_name, trigger=cron_trigger, create_job=job_name
+        name=schedule_name, trigger=cron_trigger, create_job=job_ref
     )
     
     print("[deploy schedule] Submitting Schedule")

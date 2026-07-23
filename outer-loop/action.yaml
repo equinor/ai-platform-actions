@@ -1,0 +1,153 @@
+name: Outer Loop
+description: |
+  Unified action for ML experiment analytics and evaluation: evaluate gates, compare
+  candidates, report on experiments, check monitoring signals, and apply decision policies.
+
+inputs:
+  verb:
+    description: "Action verb (evaluate, compare, report, check)"
+    required: true
+  subject:
+    description: "Target subject (gate, candidates, experiment, monitoring, policy)"
+    required: true
+
+  # --- Authentication ---
+  token:
+    description: "Access token from azLogin action. Required unless running locally."
+    required: false
+  expires-on:
+    description: "Token expiry epoch seconds from azLogin action."
+    required: false
+
+  # --- MLFlow backend ---
+  mlflow-url:
+    description: |
+      MLFlow backend URL or AzureML tracking URI.
+      Accepts an https:// proxy URL (e.g. https://mlflow-proxy.cluster.aurora.equinor.com)
+      or an azureml:// tracking URI from an AzureML workspace
+      (e.g. azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>).
+    required: true
+
+  # --- Experiment / Run targeting ---
+  experiment-name:
+    description: "Azure ML / MLFlow experiment name"
+    required: false
+  run-id:
+    description: "Single MLFlow run ID"
+    required: false
+  run-ids:
+    description: "Comma-separated list of MLFlow run IDs for multi-run operations"
+    required: false
+  run-name:
+    description: |
+      Filter compare candidates to runs with this exact display name (mlflow.runName tag).
+      Ignored when run-ids is also supplied.
+    required: false
+
+  # --- Config files ---
+  thresholds-file:
+    description: |
+      Path to YAML file containing metric pass/fail thresholds for evaluate gate.
+      Example:
+        accuracy: {min: 0.85}
+        f1_score: {min: 0.80}
+        loss: {max: 0.15}
+    required: false
+  ranking-criteria-file:
+    description: |
+      Path to YAML file containing ranking criteria for compare candidates.
+      Example:
+        primary: accuracy
+        direction: maximize
+        weights:
+          accuracy: 0.7
+          f1_score: 0.3
+    required: false
+  policy-config-file:
+    description: |
+      Path to YAML file containing decision policy rules for evaluate policy.
+      Example:
+        drift_threshold: 0.1
+        performance_threshold: 0.05
+        actions:
+          on_drift: retrain
+          on_performance_drop: retrain
+    required: false
+
+  # --- Reserved Azure ML workspace inputs ---
+  subscription-id:
+    description: "Reserved for future Azure ML SDK operations; currently unsupported"
+    required: false
+  resource-group:
+    description: "Reserved for future Azure ML SDK operations; currently unsupported"
+    required: false
+  workspace-name:
+    description: "Reserved for future Azure ML SDK operations; currently unsupported"
+    required: false
+
+  # --- Model targeting (for monitoring / lineage) ---
+  model-name:
+    description: "Azure ML registered model name"
+    required: false
+  model-version:
+    description: "Azure ML registered model version"
+    required: false
+  endpoint-name:
+    description: "Azure ML endpoint associated with monitoring evidence"
+    required: false
+  deployment-name:
+    description: "Azure ML deployment associated with monitoring evidence"
+    required: false
+  max-evidence-age-minutes:
+    description: "Maximum accepted age of monitoring evidence"
+    required: false
+  min-sample-count:
+    description: "Minimum number of observations required for an autonomous decision"
+    required: false
+
+outputs:
+  result:
+    description: "Pass/fail result for gate evaluation, or action recommendation for policy"
+  best-run-id:
+    description: "Run ID of the best candidate (compare candidates)"
+  best-run-metrics:
+    description: "JSON-encoded metrics of the best candidate run"
+  summary:
+    description: "Human-readable summary (also posted as GitHub step summary)"
+  decision:
+    description: "JSON-encoded policy decision record"
+  decision-id:
+    description: "Deterministic decision ID for idempotent downstream dispatch"
+  signals:
+    description: "JSON-encoded monitoring signals"
+  evidence-status:
+    description: "Monitoring evidence status (valid or insufficient-evidence)"
+  evidence-issues:
+    description: "JSON-encoded reasons why monitoring evidence was rejected"
+
+runs:
+  using: docker
+  image: Dockerfile
+  env:
+    AIP_OUTER_ACTION_MODE: "true"
+    INPUT_VERB: ${{ inputs.verb }}
+    INPUT_SUBJECT: ${{ inputs.subject }}
+    INPUT_TOKEN: ${{ inputs.token }}
+    INPUT_EXPIRES_ON: ${{ inputs.expires-on }}
+    INPUT_MLFLOW_URL: ${{ inputs.mlflow-url }}
+    INPUT_EXPERIMENT_NAME: ${{ inputs.experiment-name }}
+    INPUT_RUN_ID: ${{ inputs.run-id }}
+    INPUT_RUN_IDS: ${{ inputs.run-ids }}
+    INPUT_RUN_NAME: ${{ inputs.run-name }}
+    INPUT_THRESHOLDS_FILE: ${{ inputs.thresholds-file }}
+    INPUT_RANKING_CRITERIA_FILE: ${{ inputs.ranking-criteria-file }}
+    INPUT_POLICY_CONFIG_FILE: ${{ inputs.policy-config-file }}
+    INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+    INPUT_RESOURCE_GROUP: ${{ inputs.resource-group }}
+    INPUT_WORKSPACE_NAME: ${{ inputs.workspace-name }}
+    INPUT_MODEL_NAME: ${{ inputs.model-name }}
+    INPUT_MODEL_VERSION: ${{ inputs.model-version }}
+    INPUT_ENDPOINT_NAME: ${{ inputs.endpoint-name }}
+    INPUT_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
+    INPUT_MAX_EVIDENCE_AGE_MINUTES: ${{ inputs.max-evidence-age-minutes }}
+    INPUT_MIN_SAMPLE_COUNT: ${{ inputs.min-sample-count }}

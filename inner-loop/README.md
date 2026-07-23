@@ -18,6 +18,15 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 - ✅ **deploy job**: Submit Azure ML jobs to workspace
 - ✅ **deploy online-endpoint**: Deploy managed online endpoints
 - ✅ **deploy online-deployment**: Deploy managed online deployments with traffic allocation
+- ✅ **deploy batch-endpoint**: Create or update an Azure ML batch endpoint
+- ✅ **deploy batch-deployment**: Create or update a versioned batch deployment
+
+### Batch Release Operations
+- ✅ **invoke batch-deployment**: Invoke one named deployment on a pinned data asset or URI
+- ✅ **promote batch-deployment**: Change the endpoint default with expected-current and post-update checks
+- ✅ **rollback batch-deployment**: Restore an explicitly recorded prior default deployment
+
+Batch promotion and rollback are idempotent. A retry that already reached its target is a no-op; a different unexpected current default fails before mutation, and the result is read back after update. The SDK does not expose an ETag precondition, so orchestrating workflows must also use a GitHub concurrency group per endpoint.
 
 ### Share Operations
 - ✅ **share data**: Share data assets from workspace to registry
@@ -49,6 +58,9 @@ The action is organized into modular Python files:
 - **share.py**: All share operations with registry support and stage promotion
 - **waitfor.py**: All waitfor operations for polling asset provisioning states
 - **delete.py**: Delete operations for online endpoints and deployments
+- **batch.py**: Shared idempotent batch default-switch operation
+- **invoke.py**: Named batch deployment validation invocations
+- **promote.py**: Guarded and verified batch deployment promotion
 - **getasset.py**: Helper functions for retrieving and filtering Azure ML assets
 - **util.py**: Utility functions for authentication, tagging, and GitHub output
 - **action.yaml**: GitHub Action composite definition

@@ -1,15 +1,15 @@
-FROM astral/uv:python3.13-bookworm-slim
+FROM astral/uv:python3.12-bookworm-slim
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 
 # Copy project files
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml ./
 COPY src/ ./src/
 
 # Install dependencies and build the package
-RUN uv sync --locked
+RUN uv sync
 
 # Add the virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-ENTRYPOINT ["python", "-m", "aip.inner.action_entrypoint"]
+ENTRYPOINT ["python", "-m", "aip.outer.action_entrypoint"]
