@@ -7,9 +7,18 @@ dependencies = [
     "azure-ai-ml>=1.30.0",
     "azure-core>=1.37.0",
     "azure-identity>=1.25.1",
+    "cryptography>=49.0.0",
+    "Pygments>=2.20.0",
+    "PyJWT>=2.13.0",
     "pyyaml>=6.0.3",
-    "requests>=2.31.0",
+    "requests>=2.33.0",
     "typer>=0.20.0",
+]
+
+[tool.uv]
+constraint-dependencies = [
+    "urllib3>=2.7.0",
+    "idna>=3.18",
 ]
 
 [build-system]

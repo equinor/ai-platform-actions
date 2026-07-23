@@ -1,0 +1,116 @@
+name: Inner Loop Env
+
+on:
+  pull_request:
+    branches: [mybranch]
+    paths:
+      - 'assets/environments/myenv/**'
+
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  get-token-job:
+    name: Get Token
+    environment: dev
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.get-token.outputs.token }}
+      aml-token: ${{ steps.get-token.outputs.aml-token }}
+      expires-on: ${{ steps.get-token.outputs.expires-on }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          tenant-id: ${{ vars.TENANT_ID }}
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+          auth-type: SERVICE_PRINCIPAL
+
+      - name: Get Access Token
+        id: get-token
+        shell: bash
+        env:
+          TOKEN_PW: ${{ secrets.TOKEN_PW }}
+        run: |
+          TOKEN=$(az account get-access-token --query accessToken --output tsv)
+          AML_TOKEN=$(az account get-access-token --resource https://ml.azure.com --query accessToken --output tsv)
+          EXPIRES_ON=$(az account get-access-token --query expires_on --output tsv)
+          echo "::add-mask::$TOKEN"
+          echo "::add-mask::$AML_TOKEN"
+          # Encrypt the token with AES-256-CBC using the TOKEN_PW secret.
+          # The ciphertext is safe to print in cleartext in the logs.
+          ENCRYPTED_TOKEN=$(echo -n "$TOKEN" | openssl enc -aes-256-cbc -pbkdf2 -salt -pass pass:"$TOKEN_PW" -base64 -A)
+          ENCRYPTED_AML_TOKEN=$(echo -n "$AML_TOKEN" | openssl enc -aes-256-cbc -pbkdf2 -salt -pass pass:"$TOKEN_PW" -base64 -A)
+          echo "token=$ENCRYPTED_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "aml-token=$ENCRYPTED_AML_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "expires-on=$EXPIRES_ON" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy Assets
+    needs: [get-token-job]
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Decrypt Token
+        id: decrypt-token
+        shell: bash
+        env:
+          ENCRYPTED_TOKEN: ${{ needs.get-token-job.outputs.token }}
+          ENCRYPTED_AML_TOKEN: ${{ needs.get-token-job.outputs.aml-token }}
+          TOKEN_PW: ${{ secrets.TOKEN_PW }}
+        run: |
+          TOKEN=$(echo "$ENCRYPTED_TOKEN" | openssl enc -aes-256-cbc -pbkdf2 -d -salt -pass pass:"$TOKEN_PW" -base64 -A)
+          AML_TOKEN=$(echo "$ENCRYPTED_AML_TOKEN" | openssl enc -aes-256-cbc -pbkdf2 -d -salt -pass pass:"$TOKEN_PW" -base64 -A)
+          echo "::add-mask::$TOKEN"
+          echo "::add-mask::$AML_TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "aml-token=$AML_TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Environment
+        id: deploy-env
+        uses: equinor/ai-platform-actions/inner-loop@main
+        with:
+          token: ${{ steps.decrypt-token.outputs.token }}
+          expires-on: ${{ needs.get-token-job.outputs.expires-on }}
+          verb: deploy
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          filepath: ./assets/environments/myenv/environment.yaml
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+
+      - name: Waitfor Environment
+        id: wait-for-env
+        uses: equinor/ai-platform-actions/inner-loop@main
+        with:
+          token: ${{ steps.decrypt-token.outputs.token }}
+          expires-on: ${{ needs.get-token-job.outputs.expires-on }}
+          verb: waitfor
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          env-ref: ${{ steps.deploy-env.outputs.reference }}
+          tags: "stage=dev,commit-id=${{ github.sha }}"
+
+      - name: Share Environment
+        id: share-env
+        uses: equinor/ai-platform-actions/inner-loop@main
+        with:
+          token: ${{ steps.decrypt-token.outputs.token }}
+          expires-on: ${{ needs.get-token-job.outputs.expires-on }}
+          verb: share
+          subject: environment
+          subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.RESOURCE_GROUP }}
+          workspace-name: ${{ vars.AML_WORKSPACE }}
+          registry-name: ${{ vars.REGISTRY }}
+          env-ref: ${{ steps.deploy-env.outputs.reference }}
+          tags: "stage=dev,commit-id=${{ github.sha }}"

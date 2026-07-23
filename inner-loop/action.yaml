@@ -104,7 +104,7 @@ outputs:
 
 runs:
   using: docker
-  image: Dockerfile
+  image: docker://ghcr.io/equinor/ai-platform-actions/inner-loop:latest
   args:
     - ${{ inputs.verb }}
     - ${{ inputs.subject }}
