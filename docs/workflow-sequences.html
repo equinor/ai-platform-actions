@@ -1,0 +1,1044 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Machine Learning Workflow Sequences</title>
+  <style>
+    :root {
+      --ink: #17262d;
+      --muted: #5c6b70;
+      --paper: #f3f5f1;
+      --surface: #ffffff;
+      --line: #cbd4d2;
+      --inner: #176b4d;
+      --inner-soft: #e5f3eb;
+      --outer: #176c86;
+      --outer-soft: #e5f2f7;
+      --platform: #36464d;
+      --platform-soft: #edf1f1;
+      --decision: #9a6717;
+      --decision-soft: #fff4d6;
+      --danger: #b33630;
+      --danger-soft: #fff0ed;
+      --accent: #eb3f43;
+      --purple: #69518a;
+      --purple-soft: #f1ebf7;
+      --shadow: 0 12px 28px rgba(23, 38, 45, 0.08);
+      --content: 1320px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-width: 760px;
+      margin: 0;
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(rgba(23, 38, 45, 0.032) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(23, 38, 45, 0.032) 1px, transparent 1px);
+      background-size: 32px 32px;
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-size: 16px;
+      line-height: 1.58;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    code,
+    .mono {
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+    }
+
+    code {
+      padding: 0.12rem 0.32rem;
+      color: #23343b;
+      background: #edf1f0;
+      border: 1px solid #d8e0de;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+
+    .top-rule {
+      height: 7px;
+      background: linear-gradient(90deg, var(--accent) 0 24%, var(--inner) 24% 50%, var(--outer) 50% 76%, #dfa22c 76% 100%);
+    }
+
+    .masthead {
+      color: #f7fbfa;
+      background-color: #15262d;
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.026) 0,
+        rgba(255, 255, 255, 0.026) 1px,
+        transparent 1px,
+        transparent 18px
+      );
+    }
+
+    .masthead-inner,
+    .nav-inner,
+    .section-inner {
+      width: min(var(--content), calc(100% - 48px));
+      margin: 0 auto;
+    }
+
+    .masthead-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+      gap: 68px;
+      align-items: end;
+      padding: 64px 0 52px;
+    }
+
+    .eyebrow,
+    .section-kicker,
+    .case-number,
+    .meta-label {
+      margin: 0;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      margin-bottom: 12px;
+      color: #8dd6d0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-top: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin-bottom: 20px;
+      font-size: clamp(3rem, 6vw, 5.6rem);
+    }
+
+    h2 {
+      margin-bottom: 12px;
+      font-size: clamp(2rem, 3.3vw, 3.35rem);
+    }
+
+    h3 {
+      margin-bottom: 9px;
+      font-size: 1.32rem;
+    }
+
+    .lede {
+      max-width: 850px;
+      margin: 0;
+      color: #d1dddb;
+      font-size: 1.12rem;
+    }
+
+    .scope {
+      padding: 0 0 2px 24px;
+      border-left: 3px solid #dfa22c;
+    }
+
+    .scope .meta-label {
+      margin-bottom: 12px;
+      color: #a9bbb8;
+    }
+
+    .scope p {
+      margin: 0 0 10px;
+      color: #d9e3e1;
+    }
+
+    .scope strong {
+      color: #ffffff;
+    }
+
+    .jump-nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .nav-inner {
+      display: flex;
+      gap: 10px 18px;
+      align-items: center;
+      overflow-x: auto;
+      padding: 13px 0;
+      white-space: nowrap;
+    }
+
+    .jump-nav strong {
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+    }
+
+    .jump-nav a {
+      padding-bottom: 2px;
+      border-bottom: 2px solid transparent;
+      font-size: 0.86rem;
+      font-weight: 750;
+      text-decoration: none;
+    }
+
+    .jump-nav a:hover,
+    .jump-nav a:focus-visible {
+      border-color: var(--accent);
+    }
+
+    .intro-band,
+    .case,
+    .coverage {
+      padding: 70px 0;
+    }
+
+    .intro-band {
+      color: #edf4f2;
+      background: #21343b;
+    }
+
+    .section-kicker {
+      margin-bottom: 8px;
+      color: var(--outer);
+    }
+
+    .intro-band .section-kicker {
+      color: #8dd6d0;
+    }
+
+    .intro-band h2 {
+      max-width: 900px;
+    }
+
+    .intro-band > .section-inner > p:not(.section-kicker) {
+      max-width: 900px;
+      margin: 0;
+      color: #becdca;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 1px;
+      margin-top: 32px;
+      background: #526269;
+      border: 1px solid #526269;
+    }
+
+    .legend-item {
+      min-width: 0;
+      padding: 16px 18px;
+      color: var(--ink);
+      background: #ffffff;
+    }
+
+    .legend-item strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 0.92rem;
+    }
+
+    .legend-item span {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      margin-right: 7px;
+      border-radius: 2px;
+      vertical-align: -1px;
+    }
+
+    .swatch.platform { background: var(--platform); }
+    .swatch.inner { background: var(--inner); }
+    .swatch.outer { background: var(--outer); }
+    .swatch.decision { background: var(--decision); }
+    .swatch.danger { background: var(--danger); }
+
+    .case {
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.84);
+    }
+
+    .case.alt {
+      background: rgba(238, 242, 238, 0.92);
+    }
+
+    .case-heading {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) minmax(270px, 0.42fr);
+      gap: 28px;
+      align-items: start;
+      margin-bottom: 26px;
+    }
+
+    .case-number {
+      display: grid;
+      width: 62px;
+      height: 62px;
+      place-items: center;
+      color: #ffffff;
+      background: var(--platform);
+      border-radius: 50%;
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 1rem;
+    }
+
+    .case-heading p {
+      max-width: 800px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .outcome {
+      padding-left: 18px;
+      border-left: 3px solid var(--inner);
+    }
+
+    .outcome .meta-label {
+      margin-bottom: 5px;
+      color: var(--inner);
+    }
+
+    .outcome p {
+      color: var(--ink);
+      font-size: 0.92rem;
+    }
+
+    .sequence-frame {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      box-shadow: var(--shadow);
+    }
+
+    .sequence-bar {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #f8faf8;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .sequence-bar strong {
+      color: var(--ink);
+    }
+
+    .svg-scroll {
+      overflow-x: auto;
+      padding: 14px;
+    }
+
+    .sequence {
+      display: block;
+      width: 100%;
+      min-width: 1000px;
+      height: auto;
+    }
+
+    .sequence .guide {
+      fill: none;
+      stroke: #d4dcda;
+      stroke-width: 2;
+    }
+
+    .sequence .flow {
+      fill: none;
+      stroke: #52646b;
+      stroke-width: 2.4;
+    }
+
+    .sequence .flow.dashed {
+      stroke: #88631e;
+      stroke-dasharray: 8 6;
+    }
+
+    .sequence .flow.fail {
+      stroke: var(--danger);
+    }
+
+    .sequence .node rect,
+    .sequence .node polygon {
+      stroke-width: 2;
+    }
+
+    .sequence .node.platform rect {
+      fill: var(--platform-soft);
+      stroke: #829096;
+    }
+
+    .sequence .node.inner rect {
+      fill: var(--inner-soft);
+      stroke: var(--inner);
+    }
+
+    .sequence .node.outer rect {
+      fill: var(--outer-soft);
+      stroke: var(--outer);
+    }
+
+    .sequence .node.decision polygon {
+      fill: var(--decision-soft);
+      stroke: var(--decision);
+    }
+
+    .sequence .node.danger rect {
+      fill: var(--danger-soft);
+      stroke: var(--danger);
+    }
+
+    .sequence .node.artifact rect {
+      fill: var(--purple-soft);
+      stroke: var(--purple);
+    }
+
+    .sequence text {
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      fill: var(--ink);
+      text-anchor: middle;
+    }
+
+    .sequence .action {
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .sequence .command {
+      font-size: 10.5px;
+      font-weight: 650;
+    }
+
+    .sequence .detail {
+      font-size: 10.5px;
+      fill: var(--muted);
+    }
+
+    .sequence .branch-label {
+      font-size: 11px;
+      font-weight: 750;
+      fill: var(--decision);
+    }
+
+    .sequence .branch-label.fail {
+      fill: var(--danger);
+    }
+
+    .sequence .step circle {
+      fill: var(--accent);
+    }
+
+    .sequence .step text {
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 10px;
+      font-weight: 700;
+      fill: #ffffff;
+    }
+
+    .case-notes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .case-note {
+      min-width: 0;
+      padding: 0 0 0 16px;
+      border-left: 2px solid var(--line);
+    }
+
+    .case-note strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.88rem;
+    }
+
+    .case-note span {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .coverage {
+      color: #edf4f2;
+      background: #21343b;
+    }
+
+    .coverage .section-kicker {
+      color: #8dd6d0;
+    }
+
+    .coverage > .section-inner > p:not(.section-kicker) {
+      max-width: 900px;
+      margin: 0;
+      color: #becdca;
+    }
+
+    .coverage-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-top: 30px;
+    }
+
+    .coverage-group {
+      min-width: 0;
+      padding: 24px;
+      color: var(--ink);
+      background: #ffffff;
+      border-top: 5px solid var(--inner);
+    }
+
+    .coverage-group.outer-group {
+      border-top-color: var(--outer);
+    }
+
+    .command-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .command-chip {
+      padding: 6px 9px;
+      color: #23343b;
+      background: #edf1f0;
+      border: 1px solid #d4dcda;
+      border-radius: 3px;
+      font-family: "Cascadia Code", "Lucida Console", monospace;
+      font-size: 0.78rem;
+    }
+
+    .caveat {
+      margin-top: 28px;
+      padding: 20px 22px;
+      color: #e0e9e7;
+      border: 1px solid #5b6d73;
+      background: #293d44;
+    }
+
+    .caveat strong {
+      color: #ffffff;
+    }
+
+    footer {
+      padding: 28px 24px;
+      color: #92a4a1;
+      background: #15262d;
+      text-align: center;
+      font-size: 0.84rem;
+    }
+
+    @media screen and (orientation: portrait) {
+      .masthead-inner,
+      .case-heading,
+      .coverage-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .masthead-inner {
+        gap: 34px;
+        align-items: start;
+      }
+
+      .case-heading {
+        gap: 16px;
+      }
+
+      .case-notes {
+        grid-template-columns: 1fr;
+      }
+
+      .legend {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="top-rule" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div>
+        <p class="eyebrow">Developer workflow atlas</p>
+        <h1>Ten machine learning workflow sequences</h1>
+        <p class="lede">
+          Illustrative end-to-end paths through the Azure ML inner-loop and outer-loop actions.
+          Each sequence stays at workflow-step level so developers can see which action, verb,
+          and subject combinations are available without getting buried in input details.
+        </p>
+      </div>
+      <aside class="scope" aria-label="Atlas scope">
+        <p class="meta-label">How to read this</p>
+        <p><strong>Left to right, then down.</strong> Numbered nodes show execution order.</p>
+        <p><strong>Branches are illustrative.</strong> GitHub workflow conditions connect separate action invocations.</p>
+        <p><strong>Desktop only.</strong> Designed for landscape or portrait computer screens.</p>
+      </aside>
+    </div>
+  </header>
+
+  <nav class="jump-nav" aria-label="Use case navigation">
+    <div class="nav-inner">
+      <strong>Jump to</strong>
+      <a href="#case-01">01 Baseline</a>
+      <a href="#case-02">02 Sweep</a>
+      <a href="#case-03">03 Registry</a>
+      <a href="#case-04">04 Online</a>
+      <a href="#case-05">05 Batch</a>
+      <a href="#case-06">06 Policy</a>
+      <a href="#case-07">07 Retraining</a>
+      <a href="#case-08">08 Schedule</a>
+      <a href="#case-09">09 Review</a>
+      <a href="#case-10">10 Retirement</a>
+      <a href="#coverage">Coverage</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="intro-band">
+      <div class="section-inner">
+        <p class="section-kicker">Sequence grammar</p>
+        <h2>One node is one workflow step</h2>
+        <p>
+          Platform steps show only their action name. Inner-loop and outer-loop nodes add the
+          command as <code>verb / subject</code>. Labels below a node name the important hand-off,
+          such as a resource ID, run ID, prior default, or decision result.
+        </p>
+        <div class="legend" aria-label="Workflow node legend">
+          <div class="legend-item"><strong><span class="swatch platform"></span>Platform</strong><span>checkout, login, token, approval</span></div>
+          <div class="legend-item"><strong><span class="swatch inner"></span>Inner loop</strong><span>create, wait, share, release, delete</span></div>
+          <div class="legend-item"><strong><span class="swatch outer"></span>Outer loop</strong><span>evaluate, compare, report, monitor</span></div>
+          <div class="legend-item"><strong><span class="swatch decision"></span>Decision</strong><span>workflow condition or human gate</span></div>
+          <div class="legend-item"><strong><span class="swatch danger"></span>Compensation</strong><span>rollback or destructive cleanup</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="case" id="case-01">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">01</span>
+          <div>
+            <h2>Train and register a governed baseline</h2>
+            <p>Build every workspace asset explicitly, run training, enforce a metric gate, and register the resulting model only after the run passes.</p>
+          </div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A reproducible model version backed by provisioned data, environment, component, and run evidence.</p></aside>
+        </div>
+
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Workspace-first training path</strong><span>14 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 300" role="img" aria-labelledby="wf01-title wf01-desc">
+              <title id="wf01-title">Train and register a governed baseline</title>
+              <desc id="wf01-desc">Checkout, authenticate, deploy and wait for data, environment and component, submit and wait for training, evaluate the gate, then deploy and wait for the model.</desc>
+              <defs><marker id="arrow-01" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <path class="guide" d="M50 88 H1230 M1230 88 V218 H50"></path>
+              <g class="node platform"><rect x="20" y="45" width="150" height="86" rx="5"></rect><text class="action" x="95" y="84">checkout</text><text class="detail" x="95" y="106">repository source</text></g>
+              <g class="node platform"><rect x="200" y="45" width="150" height="86" rx="5"></rect><text class="action" x="275" y="84">login</text><text class="detail" x="275" y="106">Azure federation</text></g>
+              <g class="node platform"><rect x="380" y="45" width="150" height="86" rx="5"></rect><text class="action" x="455" y="84">get-token</text><text class="detail" x="455" y="106">ARM + AML scopes</text></g>
+              <g class="node inner"><rect x="560" y="45" width="150" height="86" rx="5"></rect><text class="action" x="635" y="77">inner-loop</text><text class="command" x="635" y="100">deploy / data</text><text class="detail" x="635" y="119">data reference</text></g>
+              <g class="node inner"><rect x="740" y="45" width="150" height="86" rx="5"></rect><text class="action" x="815" y="77">inner-loop</text><text class="command" x="815" y="100">waitfor / data</text><text class="detail" x="815" y="119">ready version</text></g>
+              <g class="node inner"><rect x="920" y="45" width="150" height="86" rx="5"></rect><text class="action" x="995" y="77">inner-loop</text><text class="command" x="995" y="100">deploy / environment</text><text class="detail" x="995" y="119">environment ID</text></g>
+              <g class="node inner"><rect x="1100" y="45" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="77">inner-loop</text><text class="command" x="1175" y="100">waitfor / environment</text><text class="detail" x="1175" y="119">image ready</text></g>
+              <g class="node inner"><rect x="1100" y="175" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="207">inner-loop</text><text class="command" x="1175" y="230">deploy / component</text><text class="detail" x="1175" y="249">component version</text></g>
+              <g class="node inner"><rect x="920" y="175" width="150" height="86" rx="5"></rect><text class="action" x="995" y="207">inner-loop</text><text class="command" x="995" y="230">waitfor / component</text><text class="detail" x="995" y="249">provisioned</text></g>
+              <g class="node inner"><rect x="740" y="175" width="150" height="86" rx="5"></rect><text class="action" x="815" y="207">inner-loop</text><text class="command" x="815" y="230">deploy / job</text><text class="detail" x="815" y="249">training job name</text></g>
+              <g class="node inner"><rect x="560" y="175" width="150" height="86" rx="5"></rect><text class="action" x="635" y="207">inner-loop</text><text class="command" x="635" y="230">waitfor / job</text><text class="detail" x="635" y="249">completed run</text></g>
+              <g class="node outer"><rect x="380" y="175" width="150" height="86" rx="5"></rect><text class="action" x="455" y="207">outer-loop</text><text class="command" x="455" y="230">evaluate / gate</text><text class="detail" x="455" y="249">pass or fail</text></g>
+              <g class="node inner"><rect x="200" y="175" width="150" height="86" rx="5"></rect><text class="action" x="275" y="207">inner-loop</text><text class="command" x="275" y="230">deploy / model</text><text class="detail" x="275" y="249">model version</text></g>
+              <g class="node inner"><rect x="20" y="175" width="150" height="86" rx="5"></rect><text class="action" x="95" y="207">inner-loop</text><text class="command" x="95" y="230">waitfor / model</text><text class="detail" x="95" y="249">registered</text></g>
+              <g class="step"><circle cx="32" cy="57" r="12"></circle><text x="32" y="61">1</text><circle cx="212" cy="57" r="12"></circle><text x="212" y="61">2</text><circle cx="392" cy="57" r="12"></circle><text x="392" y="61">3</text><circle cx="572" cy="57" r="12"></circle><text x="572" y="61">4</text><circle cx="752" cy="57" r="12"></circle><text x="752" y="61">5</text><circle cx="932" cy="57" r="12"></circle><text x="932" y="61">6</text><circle cx="1112" cy="57" r="12"></circle><text x="1112" y="61">7</text><circle cx="1112" cy="187" r="12"></circle><text x="1112" y="191">8</text><circle cx="932" cy="187" r="12"></circle><text x="932" y="191">9</text><circle cx="752" cy="187" r="12"></circle><text x="752" y="191">10</text><circle cx="572" cy="187" r="12"></circle><text x="572" y="191">11</text><circle cx="392" cy="187" r="12"></circle><text x="392" y="191">12</text><circle cx="212" cy="187" r="12"></circle><text x="212" y="191">13</text><circle cx="32" cy="187" r="12"></circle><text x="32" y="191">14</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-01)"><path d="M170 88 H198"></path><path d="M350 88 H378"></path><path d="M530 88 H558"></path><path d="M710 88 H738"></path><path d="M890 88 H918"></path><path d="M1070 88 H1098"></path><path d="M1175 131 V173"></path><path d="M1100 218 H1072"></path><path d="M920 218 H892"></path><path d="M740 218 H712"></path><path d="M560 218 H532"></path><path d="M380 218 H352"></path><path d="M200 218 H172"></path></g>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Blocking rule</strong><span>Only run <code>deploy / model</code> when the gate output is <code>pass</code>.</span></div><div class="case-note"><strong>Lineage</strong><span>The training job records source and workflow metadata for the model candidate.</span></div><div class="case-note"><strong>Use when</strong><span>A project creates all assets in one workspace and values explicit readiness checks.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case alt" id="case-02">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">02</span>
+          <div><h2>Sweep, compare, and publish the best model</h2><p>Run hyperparameter optimization, retrieve the best trial, compare candidate runs, enforce quality, then register and share the winner.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A registry model selected from measured candidates rather than from a fixed training run.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Hyperparameter optimization path</strong><span>12 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 300" role="img" aria-labelledby="wf02-title wf02-desc">
+              <title id="wf02-title">Sweep, compare, and publish the best model</title>
+              <desc id="wf02-desc">Checkout and authenticate, deploy and wait for a sweep job, compare candidates, evaluate the winning run, deploy and wait for its model, share it to a registry, and publish a summary.</desc>
+              <defs><marker id="arrow-02" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <path class="guide" d="M50 88 H1230 M1230 88 V218 H410"></path>
+              <g class="node platform"><rect x="20" y="45" width="150" height="86" rx="5"></rect><text class="action" x="95" y="84">checkout</text><text class="detail" x="95" y="106">training source</text></g>
+              <g class="node platform"><rect x="200" y="45" width="150" height="86" rx="5"></rect><text class="action" x="275" y="84">login</text><text class="detail" x="275" y="106">Azure federation</text></g>
+              <g class="node platform"><rect x="380" y="45" width="150" height="86" rx="5"></rect><text class="action" x="455" y="84">get-token</text><text class="detail" x="455" y="106">ARM + AML scopes</text></g>
+              <g class="node inner"><rect x="560" y="45" width="150" height="86" rx="5"></rect><text class="action" x="635" y="77">inner-loop</text><text class="command" x="635" y="100">deploy / sweep-job</text><text class="detail" x="635" y="119">sweep job name</text></g>
+              <g class="node inner"><rect x="740" y="45" width="150" height="86" rx="5"></rect><text class="action" x="815" y="77">inner-loop</text><text class="command" x="815" y="100">waitfor / sweep-job</text><text class="detail" x="815" y="119">best trial run ID</text></g>
+              <g class="node outer"><rect x="920" y="45" width="150" height="86" rx="5"></rect><text class="action" x="995" y="77">outer-loop</text><text class="command" x="995" y="100">compare / candidates</text><text class="detail" x="995" y="119">best run ID</text></g>
+              <g class="node outer"><rect x="1100" y="45" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="77">outer-loop</text><text class="command" x="1175" y="100">evaluate / gate</text><text class="detail" x="1175" y="119">quality pass</text></g>
+              <g class="node inner"><rect x="1100" y="175" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="207">inner-loop</text><text class="command" x="1175" y="230">deploy / model</text><text class="detail" x="1175" y="249">winning artifact</text></g>
+              <g class="node inner"><rect x="920" y="175" width="150" height="86" rx="5"></rect><text class="action" x="995" y="207">inner-loop</text><text class="command" x="995" y="230">waitfor / model</text><text class="detail" x="995" y="249">registered version</text></g>
+              <g class="node inner"><rect x="740" y="175" width="150" height="86" rx="5"></rect><text class="action" x="815" y="207">inner-loop</text><text class="command" x="815" y="230">share / model</text><text class="detail" x="815" y="249">registry reference</text></g>
+              <g class="node outer"><rect x="560" y="175" width="150" height="86" rx="5"></rect><text class="action" x="635" y="207">outer-loop</text><text class="command" x="635" y="230">report / experiment</text><text class="detail" x="635" y="249">step summary</text></g>
+              <g class="node artifact"><rect x="380" y="175" width="150" height="86" rx="5"></rect><text class="action" x="455" y="207">publish-summary</text><text class="detail" x="455" y="232">release evidence</text></g>
+              <g class="step"><circle cx="32" cy="57" r="12"></circle><text x="32" y="61">1</text><circle cx="212" cy="57" r="12"></circle><text x="212" y="61">2</text><circle cx="392" cy="57" r="12"></circle><text x="392" y="61">3</text><circle cx="572" cy="57" r="12"></circle><text x="572" y="61">4</text><circle cx="752" cy="57" r="12"></circle><text x="752" y="61">5</text><circle cx="932" cy="57" r="12"></circle><text x="932" y="61">6</text><circle cx="1112" cy="57" r="12"></circle><text x="1112" y="61">7</text><circle cx="1112" cy="187" r="12"></circle><text x="1112" y="191">8</text><circle cx="932" cy="187" r="12"></circle><text x="932" y="191">9</text><circle cx="752" cy="187" r="12"></circle><text x="752" y="191">10</text><circle cx="572" cy="187" r="12"></circle><text x="572" y="191">11</text><circle cx="392" cy="187" r="12"></circle><text x="392" y="191">12</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-02)"><path d="M170 88 H198"></path><path d="M350 88 H378"></path><path d="M530 88 H558"></path><path d="M710 88 H738"></path><path d="M890 88 H918"></path><path d="M1070 88 H1098"></path><path d="M1175 131 V173"></path><path d="M1100 218 H1072"></path><path d="M920 218 H892"></path><path d="M740 218 H712"></path><path d="M560 218 H532"></path></g>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Candidate hand-off</strong><span><code>best-trial-run-id</code> and <code>best-run-id</code> make selection explicit.</span></div><div class="case-note"><strong>Registry hand-off</strong><span><code>share / model</code> can promote the asset to a configured registry stage.</span></div><div class="case-note"><strong>Use when</strong><span>Training explores multiple parameter combinations and one version must be published centrally.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case" id="case-03">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">03</span>
+          <div><h2>Build a reusable registry stack</h2><p>Provision related assets in a workspace, wait for materialization, then share data, environment, component, and model versions into a central Azure ML registry.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A reusable, versioned foundation that other model repositories can consume without rebuilding every dependency.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Workspace-to-registry path</strong><span>14 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 300" role="img" aria-labelledby="wf03-title wf03-desc">
+              <title id="wf03-title">Build a reusable registry stack</title>
+              <desc id="wf03-desc">Authenticate, deploy and wait for data, share data, deploy and wait for an environment, share it, deploy and wait for a component, share it, deploy a model and share the model.</desc>
+              <defs><marker id="arrow-03" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <path class="guide" d="M50 88 H1230 M1230 88 V218 H50"></path>
+              <g class="node platform"><rect x="20" y="45" width="150" height="86" rx="5"></rect><text class="action" x="95" y="84">checkout</text><text class="detail" x="95" y="106">asset YAML</text></g>
+              <g class="node platform"><rect x="200" y="45" width="150" height="86" rx="5"></rect><text class="action" x="275" y="84">login</text><text class="detail" x="275" y="106">Azure federation</text></g>
+              <g class="node platform"><rect x="380" y="45" width="150" height="86" rx="5"></rect><text class="action" x="455" y="84">get-token</text><text class="detail" x="455" y="106">ARM scope</text></g>
+              <g class="node inner"><rect x="560" y="45" width="150" height="86" rx="5"></rect><text class="action" x="635" y="77">inner-loop</text><text class="command" x="635" y="100">deploy / data</text><text class="detail" x="635" y="119">workspace version</text></g>
+              <g class="node inner"><rect x="740" y="45" width="150" height="86" rx="5"></rect><text class="action" x="815" y="77">inner-loop</text><text class="command" x="815" y="100">waitfor / data</text><text class="detail" x="815" y="119">ready</text></g>
+              <g class="node inner"><rect x="920" y="45" width="150" height="86" rx="5"></rect><text class="action" x="995" y="77">inner-loop</text><text class="command" x="995" y="100">share / data</text><text class="detail" x="995" y="119">registry data ref</text></g>
+              <g class="node inner"><rect x="1100" y="45" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="77">inner-loop</text><text class="command" x="1175" y="100">deploy / environment</text><text class="detail" x="1175" y="119">workspace image</text></g>
+              <g class="node inner"><rect x="1100" y="175" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="207">inner-loop</text><text class="command" x="1175" y="230">waitfor / environment</text><text class="detail" x="1175" y="249">image ready</text></g>
+              <g class="node inner"><rect x="920" y="175" width="150" height="86" rx="5"></rect><text class="action" x="995" y="207">inner-loop</text><text class="command" x="995" y="230">share / environment</text><text class="detail" x="995" y="249">registry env ref</text></g>
+              <g class="node inner"><rect x="740" y="175" width="150" height="86" rx="5"></rect><text class="action" x="815" y="207">inner-loop</text><text class="command" x="815" y="230">deploy / component</text><text class="detail" x="815" y="249">workspace version</text></g>
+              <g class="node inner"><rect x="560" y="175" width="150" height="86" rx="5"></rect><text class="action" x="635" y="207">inner-loop</text><text class="command" x="635" y="230">waitfor / component</text><text class="detail" x="635" y="249">ready</text></g>
+              <g class="node inner"><rect x="380" y="175" width="150" height="86" rx="5"></rect><text class="action" x="455" y="207">inner-loop</text><text class="command" x="455" y="230">share / component</text><text class="detail" x="455" y="249">registry component</text></g>
+              <g class="node inner"><rect x="200" y="175" width="150" height="86" rx="5"></rect><text class="action" x="275" y="207">inner-loop</text><text class="command" x="275" y="230">deploy / model</text><text class="detail" x="275" y="249">workspace model</text></g>
+              <g class="node inner"><rect x="20" y="175" width="150" height="86" rx="5"></rect><text class="action" x="95" y="207">inner-loop</text><text class="command" x="95" y="230">share / model</text><text class="detail" x="95" y="249">registry model</text></g>
+              <g class="step"><circle cx="32" cy="57" r="12"></circle><text x="32" y="61">1</text><circle cx="212" cy="57" r="12"></circle><text x="212" y="61">2</text><circle cx="392" cy="57" r="12"></circle><text x="392" y="61">3</text><circle cx="572" cy="57" r="12"></circle><text x="572" y="61">4</text><circle cx="752" cy="57" r="12"></circle><text x="752" y="61">5</text><circle cx="932" cy="57" r="12"></circle><text x="932" y="61">6</text><circle cx="1112" cy="57" r="12"></circle><text x="1112" y="61">7</text><circle cx="1112" cy="187" r="12"></circle><text x="1112" y="191">8</text><circle cx="932" cy="187" r="12"></circle><text x="932" y="191">9</text><circle cx="752" cy="187" r="12"></circle><text x="752" y="191">10</text><circle cx="572" cy="187" r="12"></circle><text x="572" y="191">11</text><circle cx="392" cy="187" r="12"></circle><text x="392" y="191">12</text><circle cx="212" cy="187" r="12"></circle><text x="212" y="191">13</text><circle cx="32" cy="187" r="12"></circle><text x="32" y="191">14</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-03)"><path d="M170 88 H198"></path><path d="M350 88 H378"></path><path d="M530 88 H558"></path><path d="M710 88 H738"></path><path d="M890 88 H918"></path><path d="M1070 88 H1098"></path><path d="M1175 131 V173"></path><path d="M1100 218 H1072"></path><path d="M920 218 H892"></path><path d="M740 218 H712"></path><path d="M560 218 H532"></path><path d="M380 218 H352"></path><path d="M200 218 H172"></path></g>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Dependency hand-off</strong><span>Use the shared environment reference when sharing a component that depends on it.</span></div><div class="case-note"><strong>Version discipline</strong><span>Every shared resource remains an explicit version rather than an implicit latest asset.</span></div><div class="case-note"><strong>Use when</strong><span>A platform team publishes reusable assets for multiple model teams.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case alt" id="case-04">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">04</span>
+          <div><h2>Blue-green online release with compensation</h2><p>Create an online endpoint, deploy a baseline, add a candidate with limited traffic, and either continue observation or restore the previous deployment.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A controlled online rollout with an explicit failure path rather than an improvised traffic change.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Online serving path with conditional rollback</strong><span>13 steps plus branch</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 360" role="img" aria-labelledby="wf04-title wf04-desc">
+              <title id="wf04-title">Blue-green online release with compensation</title>
+              <desc id="wf04-desc">Authenticate, create and wait for an online endpoint, deploy and wait for a baseline and candidate deployment, run a health check, then either observe the candidate or roll back the online deployment.</desc>
+              <defs><marker id="arrow-04" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker><marker id="arrow-04-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#b33630"></path></marker></defs>
+              <g class="node platform"><rect x="20" y="35" width="150" height="82" rx="5"></rect><text class="action" x="95" y="72">checkout</text><text class="detail" x="95" y="95">endpoint YAML</text></g>
+              <g class="node platform"><rect x="200" y="35" width="150" height="82" rx="5"></rect><text class="action" x="275" y="72">login</text><text class="detail" x="275" y="95">Azure federation</text></g>
+              <g class="node platform"><rect x="380" y="35" width="150" height="82" rx="5"></rect><text class="action" x="455" y="72">get-token</text><text class="detail" x="455" y="95">ARM + AML scopes</text></g>
+              <g class="node inner"><rect x="560" y="35" width="150" height="82" rx="5"></rect><text class="action" x="635" y="66">inner-loop</text><text class="command" x="635" y="89">deploy / online-endpoint</text><text class="detail" x="635" y="108">endpoint ID</text></g>
+              <g class="node inner"><rect x="740" y="35" width="150" height="82" rx="5"></rect><text class="action" x="815" y="66">inner-loop</text><text class="command" x="815" y="89">waitfor / online-endpoint</text><text class="detail" x="815" y="108">ready</text></g>
+              <g class="node inner"><rect x="920" y="35" width="150" height="82" rx="5"></rect><text class="action" x="995" y="66">inner-loop</text><text class="command" x="995" y="89">deploy / online-deployment</text><text class="detail" x="995" y="108">baseline traffic</text></g>
+              <g class="node inner"><rect x="1100" y="35" width="150" height="82" rx="5"></rect><text class="action" x="1175" y="66">inner-loop</text><text class="command" x="1175" y="89">waitfor / online-deployment</text><text class="detail" x="1175" y="108">baseline ready</text></g>
+              <g class="node inner"><rect x="1100" y="155" width="150" height="82" rx="5"></rect><text class="action" x="1175" y="186">inner-loop</text><text class="command" x="1175" y="209">deploy / online-deployment</text><text class="detail" x="1175" y="228">candidate traffic</text></g>
+              <g class="node inner"><rect x="920" y="155" width="150" height="82" rx="5"></rect><text class="action" x="995" y="186">inner-loop</text><text class="command" x="995" y="209">waitfor / online-deployment</text><text class="detail" x="995" y="228">candidate ready</text></g>
+              <g class="node platform"><rect x="740" y="155" width="150" height="82" rx="5"></rect><text class="action" x="815" y="191">smoke-test</text><text class="detail" x="815" y="214">latency + response</text></g>
+              <g class="node decision"><polygon points="635,145 710,196 635,247 560,196"></polygon><text class="action" x="635" y="190">healthy?</text><text class="detail" x="635" y="212">workflow condition</text></g>
+              <g class="node artifact"><rect x="380" y="155" width="150" height="82" rx="5"></rect><text class="action" x="455" y="191">observe-canary</text><text class="detail" x="455" y="214">continue rollout</text></g>
+              <g class="node danger"><rect x="560" y="275" width="150" height="70" rx="5"></rect><text class="action" x="635" y="303">inner-loop</text><text class="command" x="635" y="326">rollback / online-deployment</text></g>
+              <g class="step"><circle cx="32" cy="47" r="12"></circle><text x="32" y="51">1</text><circle cx="212" cy="47" r="12"></circle><text x="212" y="51">2</text><circle cx="392" cy="47" r="12"></circle><text x="392" y="51">3</text><circle cx="572" cy="47" r="12"></circle><text x="572" y="51">4</text><circle cx="752" cy="47" r="12"></circle><text x="752" y="51">5</text><circle cx="932" cy="47" r="12"></circle><text x="932" y="51">6</text><circle cx="1112" cy="47" r="12"></circle><text x="1112" y="51">7</text><circle cx="1112" cy="167" r="12"></circle><text x="1112" y="171">8</text><circle cx="932" cy="167" r="12"></circle><text x="932" y="171">9</text><circle cx="752" cy="167" r="12"></circle><text x="752" y="171">10</text><circle cx="572" cy="158" r="12"></circle><text x="572" y="162">11</text><circle cx="392" cy="167" r="12"></circle><text x="392" y="171">12</text><circle cx="572" cy="287" r="12"></circle><text x="572" y="291">13</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-04)"><path d="M170 76 H198"></path><path d="M350 76 H378"></path><path d="M530 76 H558"></path><path d="M710 76 H738"></path><path d="M890 76 H918"></path><path d="M1070 76 H1098"></path><path d="M1175 117 V153"></path><path d="M1100 196 H1072"></path><path d="M920 196 H892"></path><path d="M740 196 H712"></path><path d="M560 196 H532"></path></g>
+              <path d="M635 247 V273" fill="none" stroke="#b33630" stroke-width="2.4" marker-end="url(#arrow-04-fail)"></path><text class="branch-label" x="545" y="182">pass</text><text class="branch-label fail" x="660" y="265">fail</text>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Traffic control</strong><span><code>deploy / online-deployment</code> accepts a traffic allocation for the candidate.</span></div><div class="case-note"><strong>Rollback target</strong><span>Pass the previous deployment explicitly when deterministic recovery matters.</span></div><div class="case-note"><strong>Use when</strong><span>An HTTP inference service needs staged exposure and a fast compensating action.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case" id="case-05">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">05</span>
+          <div><h2>Validate and promote a batch model</h2><p>Create a batch endpoint and versioned candidate deployment, invoke it on pinned validation data, gate the resulting evidence, and switch the endpoint default.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A named batch deployment promoted with a recorded previous default and an expected-current guard.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Versioned batch release path</strong><span>13 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 300" role="img" aria-labelledby="wf05-title wf05-desc">
+              <title id="wf05-title">Validate and promote a batch model</title>
+              <desc id="wf05-desc">Checkout and authenticate, deploy a batch endpoint and deployment, invoke the candidate, wait for the invocation, evaluate a quality gate, promote the deployment, record the previous default, report the experiment, and publish release evidence.</desc>
+              <defs><marker id="arrow-05" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <path class="guide" d="M50 88 H1230 M1230 88 V218 H230"></path>
+              <g class="node platform"><rect x="20" y="45" width="150" height="86" rx="5"></rect><text class="action" x="95" y="84">checkout</text><text class="detail" x="95" y="106">release YAML</text></g>
+              <g class="node platform"><rect x="200" y="45" width="150" height="86" rx="5"></rect><text class="action" x="275" y="84">login</text><text class="detail" x="275" y="106">Azure federation</text></g>
+              <g class="node platform"><rect x="380" y="45" width="150" height="86" rx="5"></rect><text class="action" x="455" y="84">get-token</text><text class="detail" x="455" y="106">ARM + AML scopes</text></g>
+              <g class="node inner"><rect x="560" y="45" width="150" height="86" rx="5"></rect><text class="action" x="635" y="77">inner-loop</text><text class="command" x="635" y="100">deploy / batch-endpoint</text><text class="detail" x="635" y="119">endpoint reference</text></g>
+              <g class="node inner"><rect x="740" y="45" width="150" height="86" rx="5"></rect><text class="action" x="815" y="77">inner-loop</text><text class="command" x="815" y="100">deploy / batch-deployment</text><text class="detail" x="815" y="119">candidate name</text></g>
+              <g class="node inner"><rect x="920" y="45" width="150" height="86" rx="5"></rect><text class="action" x="995" y="77">inner-loop</text><text class="command" x="995" y="100">invoke / batch-deployment</text><text class="detail" x="995" y="119">invocation job name</text></g>
+              <g class="node inner"><rect x="1100" y="45" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="77">inner-loop</text><text class="command" x="1175" y="100">waitfor / job</text><text class="detail" x="1175" y="119">validation complete</text></g>
+              <g class="node outer"><rect x="1100" y="175" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="207">outer-loop</text><text class="command" x="1175" y="230">evaluate / gate</text><text class="detail" x="1175" y="249">pass or fail</text></g>
+              <g class="node decision"><polygon points="995,167 1065,218 995,269 925,218"></polygon><text class="action" x="995" y="212">passed?</text><text class="detail" x="995" y="234">workflow condition</text></g>
+              <g class="node inner"><rect x="740" y="175" width="150" height="86" rx="5"></rect><text class="action" x="815" y="207">inner-loop</text><text class="command" x="815" y="230">promote / batch-deployment</text><text class="detail" x="815" y="249">new default</text></g>
+              <g class="node artifact"><rect x="560" y="175" width="150" height="86" rx="5"></rect><text class="action" x="635" y="207">record-state</text><text class="detail" x="635" y="230">previous default</text></g>
+              <g class="node outer"><rect x="380" y="175" width="150" height="86" rx="5"></rect><text class="action" x="455" y="207">outer-loop</text><text class="command" x="455" y="230">report / experiment</text><text class="detail" x="455" y="249">release summary</text></g>
+              <g class="node artifact"><rect x="200" y="175" width="150" height="86" rx="5"></rect><text class="action" x="275" y="207">publish-evidence</text><text class="detail" x="275" y="232">decision + state</text></g>
+              <g class="step"><circle cx="32" cy="57" r="12"></circle><text x="32" y="61">1</text><circle cx="212" cy="57" r="12"></circle><text x="212" y="61">2</text><circle cx="392" cy="57" r="12"></circle><text x="392" y="61">3</text><circle cx="572" cy="57" r="12"></circle><text x="572" y="61">4</text><circle cx="752" cy="57" r="12"></circle><text x="752" y="61">5</text><circle cx="932" cy="57" r="12"></circle><text x="932" y="61">6</text><circle cx="1112" cy="57" r="12"></circle><text x="1112" y="61">7</text><circle cx="1112" cy="187" r="12"></circle><text x="1112" y="191">8</text><circle cx="937" cy="180" r="12"></circle><text x="937" y="184">9</text><circle cx="752" cy="187" r="12"></circle><text x="752" y="191">10</text><circle cx="572" cy="187" r="12"></circle><text x="572" y="191">11</text><circle cx="392" cy="187" r="12"></circle><text x="392" y="191">12</text><circle cx="212" cy="187" r="12"></circle><text x="212" y="191">13</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-05)"><path d="M170 88 H198"></path><path d="M350 88 H378"></path><path d="M530 88 H558"></path><path d="M710 88 H738"></path><path d="M890 88 H918"></path><path d="M1070 88 H1098"></path><path d="M1175 131 V173"></path><path d="M1100 218 H1067"></path><path d="M923 218 H892"></path><path d="M740 218 H712"></path><path d="M560 218 H532"></path><path d="M380 218 H352"></path></g>
+              <text class="branch-label" x="903" y="205">pass</text>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Pinned validation</strong><span><code>invoke / batch-deployment</code> names the deployment and input path explicitly.</span></div><div class="case-note"><strong>Concurrency guard</strong><span>Promotion receives the default the workflow expects to replace.</span></div><div class="case-note"><strong>Rollback evidence</strong><span>Persist <code>previous-deployment-name</code> for a deterministic future rollback.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case alt" id="case-06">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">06</span>
+          <div><h2>Monitor production and dispatch policy action</h2><p>Read the latest production evidence, validate it, evaluate a versioned policy, and route the result to no-change, rollback, retraining, or another remediation workflow.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>An auditable automatic decision that fails closed when monitoring evidence is missing, stale, undersized, or mismatched.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Production control path</strong><span>8 steps plus policy branches</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 360" role="img" aria-labelledby="wf06-title wf06-desc">
+              <title id="wf06-title">Monitor production and dispatch policy action</title>
+              <desc id="wf06-desc">A schedule trigger authenticates, checks monitoring evidence, evaluates policy, then branches to a no-change summary, a batch rollback, a retraining dispatch, or a remediation dispatch.</desc>
+              <defs><marker id="arrow-06" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker><marker id="arrow-06-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#b33630"></path></marker></defs>
+              <g class="node platform"><rect x="25" y="45" width="150" height="82" rx="5"></rect><text class="action" x="100" y="82">schedule-trigger</text><text class="detail" x="100" y="105">monitoring cadence</text></g>
+              <g class="node platform"><rect x="210" y="45" width="150" height="82" rx="5"></rect><text class="action" x="285" y="82">login</text><text class="detail" x="285" y="105">Azure federation</text></g>
+              <g class="node platform"><rect x="395" y="45" width="150" height="82" rx="5"></rect><text class="action" x="470" y="82">get-token</text><text class="detail" x="470" y="105">MLflow access</text></g>
+              <g class="node outer"><rect x="580" y="45" width="150" height="82" rx="5"></rect><text class="action" x="655" y="76">outer-loop</text><text class="command" x="655" y="99">check / monitoring</text><text class="detail" x="655" y="118">evidence status</text></g>
+              <g class="node outer"><rect x="765" y="45" width="150" height="82" rx="5"></rect><text class="action" x="840" y="76">outer-loop</text><text class="command" x="840" y="99">evaluate / policy</text><text class="detail" x="840" y="118">decision + ID</text></g>
+              <g class="node decision"><polygon points="1040,28 1140,86 1040,144 940,86"></polygon><text class="action" x="1040" y="80">result?</text><text class="detail" x="1040" y="103">workflow dispatch</text></g>
+              <g class="node artifact"><rect x="965" y="190" width="150" height="78" rx="5"></rect><text class="action" x="1040" y="224">workflow-summary</text><text class="detail" x="1040" y="247">no-change</text></g>
+              <g class="node danger"><rect x="740" y="275" width="190" height="72" rx="5"></rect><text class="action" x="835" y="303">inner-loop</text><text class="command" x="835" y="326">rollback / batch-deployment</text></g>
+              <g class="node artifact"><rect x="965" y="275" width="150" height="72" rx="5"></rect><text class="action" x="1040" y="299"><tspan x="1040" y="299">repository-</tspan><tspan x="1040" y="314">dispatch</tspan></text><text class="detail" x="1040" y="337">retraining workflow</text></g>
+              <g class="node artifact"><rect x="1150" y="275" width="110" height="72" rx="5"></rect><text class="action" x="1205" y="301">dispatch</text><text class="detail" x="1205" y="323">data/code work</text></g>
+              <g class="node danger"><rect x="540" y="190" width="170" height="78" rx="5"></rect><text class="action" x="625" y="220">stop</text><text class="command" x="625" y="242">insufficient-evidence</text><text class="detail" x="625" y="260">exit code 2</text></g>
+              <g class="step"><circle cx="37" cy="57" r="12"></circle><text x="37" y="61">1</text><circle cx="222" cy="57" r="12"></circle><text x="222" y="61">2</text><circle cx="407" cy="57" r="12"></circle><text x="407" y="61">3</text><circle cx="592" cy="57" r="12"></circle><text x="592" y="61">4</text><circle cx="777" cy="57" r="12"></circle><text x="777" y="61">5</text><circle cx="963" cy="47" r="12"></circle><text x="963" y="51">6</text><circle cx="977" cy="202" r="12"></circle><text x="977" y="206">7</text><circle cx="752" cy="287" r="12"></circle><text x="752" y="291">8a</text><circle cx="977" cy="287" r="12"></circle><text x="977" y="291">8b</text><circle cx="1162" cy="287" r="12"></circle><text x="1162" y="291">8c</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-06)"><path d="M175 86 H208"></path><path d="M360 86 H393"></path><path d="M545 86 H578"></path><path d="M730 86 H763"></path><path d="M915 86 H938"></path><path d="M1040 144 V188"></path><path d="M1000 137 C920 190 855 220 835 273"></path><path d="M1090 130 C1140 165 1140 235 1040 273"></path><path d="M1120 112 C1195 150 1205 220 1205 273"></path></g>
+              <path d="M655 127 V188" fill="none" stroke="#b33630" stroke-width="2.4" marker-end="url(#arrow-06-fail)"></path>
+              <text class="branch-label fail" x="690" y="162">invalid evidence</text><text class="branch-label" x="1085" y="174">no-change</text><text class="branch-label fail" x="878" y="210">rollback</text><text class="branch-label" x="1150" y="220">retrain</text><text class="branch-label" x="1195" y="210">refresh / fix</text>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Fail closed</strong><span>Invalid evidence stops before policy dispatch and returns exit code 2.</span></div><div class="case-note"><strong>Idempotency</strong><span><code>decision-id</code> can deduplicate downstream workflow dispatch.</span></div><div class="case-note"><strong>Use when</strong><span>A production model is monitored continuously and policy controls remediation.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case" id="case-07">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">07</span>
+          <div><h2>Scheduled retraining and batch replacement</h2><p>Train on a cadence, evaluate and compare candidates, register the winner, create a new batch deployment, validate it, and promote it as the endpoint default.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A recurring model refresh that joins training evidence to a guarded batch release.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Recurring train-to-release path</strong><span>14 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 300" role="img" aria-labelledby="wf07-title wf07-desc">
+              <title id="wf07-title">Scheduled retraining and batch replacement</title>
+              <desc id="wf07-desc">A schedule checks out and authenticates, deploys and waits for training, evaluates and compares runs, deploys and waits for the winning model, deploys and invokes a batch deployment, waits for validation, and promotes it.</desc>
+              <defs><marker id="arrow-07" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <path class="guide" d="M50 88 H1230 M1230 88 V218 H50"></path>
+              <g class="node platform"><rect x="20" y="45" width="150" height="86" rx="5"></rect><text class="action" x="95" y="84">schedule-trigger</text><text class="detail" x="95" y="106">retraining cadence</text></g>
+              <g class="node platform"><rect x="200" y="45" width="150" height="86" rx="5"></rect><text class="action" x="275" y="84">checkout</text><text class="detail" x="275" y="106">current source</text></g>
+              <g class="node platform"><rect x="380" y="45" width="150" height="86" rx="5"></rect><text class="action" x="455" y="84">login + token</text><text class="detail" x="455" y="106">Azure access</text></g>
+              <g class="node inner"><rect x="560" y="45" width="150" height="86" rx="5"></rect><text class="action" x="635" y="77">inner-loop</text><text class="command" x="635" y="100">deploy / job</text><text class="detail" x="635" y="119">training job</text></g>
+              <g class="node inner"><rect x="740" y="45" width="150" height="86" rx="5"></rect><text class="action" x="815" y="77">inner-loop</text><text class="command" x="815" y="100">waitfor / job</text><text class="detail" x="815" y="119">completed run</text></g>
+              <g class="node outer"><rect x="920" y="45" width="150" height="86" rx="5"></rect><text class="action" x="995" y="77">outer-loop</text><text class="command" x="995" y="100">evaluate / gate</text><text class="detail" x="995" y="119">minimum quality</text></g>
+              <g class="node outer"><rect x="1100" y="45" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="77">outer-loop</text><text class="command" x="1175" y="100">compare / candidates</text><text class="detail" x="1175" y="119">best run</text></g>
+              <g class="node inner"><rect x="1100" y="175" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="207">inner-loop</text><text class="command" x="1175" y="230">deploy / model</text><text class="detail" x="1175" y="249">winner</text></g>
+              <g class="node inner"><rect x="920" y="175" width="150" height="86" rx="5"></rect><text class="action" x="995" y="207">inner-loop</text><text class="command" x="995" y="230">waitfor / model</text><text class="detail" x="995" y="249">registered</text></g>
+              <g class="node inner"><rect x="740" y="175" width="150" height="86" rx="5"></rect><text class="action" x="815" y="207">inner-loop</text><text class="command" x="815" y="230">deploy / batch-deployment</text><text class="detail" x="815" y="249">candidate version</text></g>
+              <g class="node inner"><rect x="560" y="175" width="150" height="86" rx="5"></rect><text class="action" x="635" y="207">inner-loop</text><text class="command" x="635" y="230">invoke / batch-deployment</text><text class="detail" x="635" y="249">validation job</text></g>
+              <g class="node inner"><rect x="380" y="175" width="150" height="86" rx="5"></rect><text class="action" x="455" y="207">inner-loop</text><text class="command" x="455" y="230">waitfor / job</text><text class="detail" x="455" y="249">validation done</text></g>
+              <g class="node outer"><rect x="200" y="175" width="150" height="86" rx="5"></rect><text class="action" x="275" y="207">outer-loop</text><text class="command" x="275" y="230">evaluate / gate</text><text class="detail" x="275" y="249">release gate</text></g>
+              <g class="node inner"><rect x="20" y="175" width="150" height="86" rx="5"></rect><text class="action" x="95" y="207">inner-loop</text><text class="command" x="95" y="230">promote / batch-deployment</text><text class="detail" x="95" y="249">new default</text></g>
+              <g class="step"><circle cx="32" cy="57" r="12"></circle><text x="32" y="61">1</text><circle cx="212" cy="57" r="12"></circle><text x="212" y="61">2</text><circle cx="392" cy="57" r="12"></circle><text x="392" y="61">3</text><circle cx="572" cy="57" r="12"></circle><text x="572" y="61">4</text><circle cx="752" cy="57" r="12"></circle><text x="752" y="61">5</text><circle cx="932" cy="57" r="12"></circle><text x="932" y="61">6</text><circle cx="1112" cy="57" r="12"></circle><text x="1112" y="61">7</text><circle cx="1112" cy="187" r="12"></circle><text x="1112" y="191">8</text><circle cx="932" cy="187" r="12"></circle><text x="932" y="191">9</text><circle cx="752" cy="187" r="12"></circle><text x="752" y="191">10</text><circle cx="572" cy="187" r="12"></circle><text x="572" y="191">11</text><circle cx="392" cy="187" r="12"></circle><text x="392" y="191">12</text><circle cx="212" cy="187" r="12"></circle><text x="212" y="191">13</text><circle cx="32" cy="187" r="12"></circle><text x="32" y="191">14</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-07)"><path d="M170 88 H198"></path><path d="M350 88 H378"></path><path d="M530 88 H558"></path><path d="M710 88 H738"></path><path d="M890 88 H918"></path><path d="M1070 88 H1098"></path><path d="M1175 131 V173"></path><path d="M1100 218 H1072"></path><path d="M920 218 H892"></path><path d="M740 218 H712"></path><path d="M560 218 H532"></path><path d="M380 218 H352"></path><path d="M200 218 H172"></path></g>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Two gates</strong><span>One gate protects model quality; the second protects release behavior on pinned data.</span></div><div class="case-note"><strong>Endpoint serialization</strong><span>Use a GitHub concurrency group keyed by batch endpoint during promotion.</span></div><div class="case-note"><strong>Use when</strong><span>A batch model must refresh regularly without automatically replacing production on training success alone.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case alt" id="case-08">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">08</span>
+          <div><h2>Provision a recurring scoring or feature job</h2><p>Build the runtime and component, execute one proving run, evaluate its output, then register an Azure ML schedule for recurring execution.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A scheduled workload whose environment, component, and first execution were verified before automation begins.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>One-time proof before recurring execution</strong><span>12 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 300" role="img" aria-labelledby="wf08-title wf08-desc">
+              <title id="wf08-title">Provision a recurring scoring or feature job</title>
+              <desc id="wf08-desc">Checkout and authenticate, deploy and wait for environment and component, deploy and wait for one job, evaluate its metrics, deploy a schedule, report the experiment, and notify the owner.</desc>
+              <defs><marker id="arrow-08" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <path class="guide" d="M50 88 H1230 M1230 88 V218 H410"></path>
+              <g class="node platform"><rect x="20" y="45" width="150" height="86" rx="5"></rect><text class="action" x="95" y="84">checkout</text><text class="detail" x="95" y="106">job definitions</text></g>
+              <g class="node platform"><rect x="200" y="45" width="150" height="86" rx="5"></rect><text class="action" x="275" y="84">login</text><text class="detail" x="275" y="106">Azure federation</text></g>
+              <g class="node platform"><rect x="380" y="45" width="150" height="86" rx="5"></rect><text class="action" x="455" y="84">get-token</text><text class="detail" x="455" y="106">ARM + AML scopes</text></g>
+              <g class="node inner"><rect x="560" y="45" width="150" height="86" rx="5"></rect><text class="action" x="635" y="77">inner-loop</text><text class="command" x="635" y="100">deploy / environment</text><text class="detail" x="635" y="119">runtime image</text></g>
+              <g class="node inner"><rect x="740" y="45" width="150" height="86" rx="5"></rect><text class="action" x="815" y="77">inner-loop</text><text class="command" x="815" y="100">waitfor / environment</text><text class="detail" x="815" y="119">image ready</text></g>
+              <g class="node inner"><rect x="920" y="45" width="150" height="86" rx="5"></rect><text class="action" x="995" y="77">inner-loop</text><text class="command" x="995" y="100">deploy / component</text><text class="detail" x="995" y="119">scoring component</text></g>
+              <g class="node inner"><rect x="1100" y="45" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="77">inner-loop</text><text class="command" x="1175" y="100">waitfor / component</text><text class="detail" x="1175" y="119">ready</text></g>
+              <g class="node inner"><rect x="1100" y="175" width="150" height="86" rx="5"></rect><text class="action" x="1175" y="207">inner-loop</text><text class="command" x="1175" y="230">deploy / job</text><text class="detail" x="1175" y="249">proving run</text></g>
+              <g class="node inner"><rect x="920" y="175" width="150" height="86" rx="5"></rect><text class="action" x="995" y="207">inner-loop</text><text class="command" x="995" y="230">waitfor / job</text><text class="detail" x="995" y="249">completed</text></g>
+              <g class="node outer"><rect x="740" y="175" width="150" height="86" rx="5"></rect><text class="action" x="815" y="207">outer-loop</text><text class="command" x="815" y="230">evaluate / gate</text><text class="detail" x="815" y="249">output quality</text></g>
+              <g class="node inner"><rect x="560" y="175" width="150" height="86" rx="5"></rect><text class="action" x="635" y="207">inner-loop</text><text class="command" x="635" y="230">deploy / schedule</text><text class="detail" x="635" y="249">cron + time zone</text></g>
+              <g class="node outer"><rect x="380" y="175" width="150" height="86" rx="5"></rect><text class="action" x="455" y="207">outer-loop</text><text class="command" x="455" y="230">report / experiment</text><text class="detail" x="455" y="249">baseline report</text></g>
+              <g class="step"><circle cx="32" cy="57" r="12"></circle><text x="32" y="61">1</text><circle cx="212" cy="57" r="12"></circle><text x="212" y="61">2</text><circle cx="392" cy="57" r="12"></circle><text x="392" y="61">3</text><circle cx="572" cy="57" r="12"></circle><text x="572" y="61">4</text><circle cx="752" cy="57" r="12"></circle><text x="752" y="61">5</text><circle cx="932" cy="57" r="12"></circle><text x="932" y="61">6</text><circle cx="1112" cy="57" r="12"></circle><text x="1112" y="61">7</text><circle cx="1112" cy="187" r="12"></circle><text x="1112" y="191">8</text><circle cx="932" cy="187" r="12"></circle><text x="932" y="191">9</text><circle cx="752" cy="187" r="12"></circle><text x="752" y="191">10</text><circle cx="572" cy="187" r="12"></circle><text x="572" y="191">11</text><circle cx="392" cy="187" r="12"></circle><text x="392" y="191">12</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-08)"><path d="M170 88 H198"></path><path d="M350 88 H378"></path><path d="M530 88 H558"></path><path d="M710 88 H738"></path><path d="M890 88 H918"></path><path d="M1070 88 H1098"></path><path d="M1175 131 V173"></path><path d="M1100 218 H1072"></path><path d="M920 218 H892"></path><path d="M740 218 H712"></path><path d="M560 218 H532"></path></g>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Prove first</strong><span>The schedule is created only after one manually submitted job reaches success.</span></div><div class="case-note"><strong>Time semantics</strong><span><code>deploy / schedule</code> receives the cron expression and time zone explicitly.</span></div><div class="case-note"><strong>Use when</strong><span>Scoring, feature generation, data refresh, or evaluation must recur on a fixed cadence.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case" id="case-09">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">09</span>
+          <div><h2>Review experiments and approve registry promotion</h2><p>Generate an experiment report, rank candidate runs, enforce the evaluation gate, then place a human approval before sharing the selected model.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>A lightweight governance path where evidence is automated but the final registry promotion remains accountable to a reviewer.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Evidence-assisted human promotion</strong><span>10 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 235" role="img" aria-labelledby="wf09-title wf09-desc">
+              <title id="wf09-title">Review experiments and approve registry promotion</title>
+              <desc id="wf09-desc">A manual workflow checks out and authenticates, reports an experiment, compares candidates, evaluates the selected run, requests approval, shares the model to a registry, and publishes release notes.</desc>
+              <defs><marker id="arrow-09" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker></defs>
+              <g class="node platform"><rect x="15" y="72" width="110" height="86" rx="5"></rect><text class="action" x="70" y="108">workflow-</text><text class="action" x="70" y="128">dispatch</text><text class="detail" x="70" y="148">review request</text></g>
+              <g class="node platform"><rect x="145" y="72" width="110" height="86" rx="5"></rect><text class="action" x="200" y="110">checkout</text><text class="detail" x="200" y="134">configs</text></g>
+              <g class="node platform"><rect x="275" y="72" width="110" height="86" rx="5"></rect><text class="action" x="330" y="110">login</text><text class="detail" x="330" y="134">Azure</text></g>
+              <g class="node platform"><rect x="405" y="72" width="110" height="86" rx="5"></rect><text class="action" x="460" y="110">get-token</text><text class="detail" x="460" y="134">MLflow</text></g>
+              <g class="node outer"><rect x="535" y="72" width="130" height="86" rx="5"></rect><text class="action" x="600" y="104">outer-loop</text><text class="command" x="600" y="127">report / experiment</text><text class="detail" x="600" y="147">trend summary</text></g>
+              <g class="node outer"><rect x="685" y="72" width="130" height="86" rx="5"></rect><text class="action" x="750" y="104">outer-loop</text><text class="command" x="750" y="127">compare / candidates</text><text class="detail" x="750" y="147">best run</text></g>
+              <g class="node outer"><rect x="835" y="72" width="130" height="86" rx="5"></rect><text class="action" x="900" y="104">outer-loop</text><text class="command" x="900" y="127">evaluate / gate</text><text class="detail" x="900" y="147">pass</text></g>
+              <g class="node decision"><polygon points="1030,62 1095,115 1030,168 965,115"></polygon><text class="action" x="1030" y="109">approval</text><text class="detail" x="1030" y="132">environment gate</text></g>
+              <g class="node inner"><rect x="1110" y="72" width="150" height="86" rx="5"></rect><text class="action" x="1185" y="104">inner-loop</text><text class="command" x="1185" y="127">share / model</text><text class="detail" x="1185" y="147">registry stage</text></g>
+              <g class="node artifact"><rect x="1095" y="185" width="180" height="42" rx="5"></rect><text class="action" x="1185" y="211">publish-release-notes</text></g>
+              <g class="step"><circle cx="27" cy="84" r="12"></circle><text x="27" y="88">1</text><circle cx="157" cy="84" r="12"></circle><text x="157" y="88">2</text><circle cx="287" cy="84" r="12"></circle><text x="287" y="88">3</text><circle cx="417" cy="84" r="12"></circle><text x="417" y="88">4</text><circle cx="547" cy="84" r="12"></circle><text x="547" y="88">5</text><circle cx="697" cy="84" r="12"></circle><text x="697" y="88">6</text><circle cx="847" cy="84" r="12"></circle><text x="847" y="88">7</text><circle cx="980" cy="82" r="12"></circle><text x="980" y="86">8</text><circle cx="1122" cy="84" r="12"></circle><text x="1122" y="88">9</text><circle cx="1107" cy="197" r="12"></circle><text x="1107" y="201">10</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-09)"><path d="M125 115 H143"></path><path d="M255 115 H273"></path><path d="M385 115 H403"></path><path d="M515 115 H533"></path><path d="M665 115 H683"></path><path d="M815 115 H833"></path><path d="M965 115 H967"></path><path d="M1095 115 H1108"></path><path d="M1185 158 V183"></path></g>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Evidence bundle</strong><span>The report, ranking, gate summary, and selected run are available to the reviewer.</span></div><div class="case-note"><strong>Human boundary</strong><span>Use a protected GitHub environment or equivalent approval mechanism before sharing.</span></div><div class="case-note"><strong>Use when</strong><span>Risk, regulation, or organizational policy requires a named approver for promotion.</span></div></div>
+      </div>
+    </section>
+
+    <section class="case alt" id="case-10">
+      <div class="section-inner">
+        <div class="case-heading">
+          <span class="case-number">10</span>
+          <div><h2>Retire an online solution with evidence</h2><p>Collect final experiment and monitoring evidence, require a change approval, remove the deployment before its endpoint, then archive the retirement record.</p></div>
+          <aside class="outcome"><p class="meta-label">Outcome</p><p>An online service is decommissioned in dependency order with evidence retained for audit and support.</p></aside>
+        </div>
+        <div class="sequence-frame">
+          <div class="sequence-bar"><strong>Evidence-first retirement path</strong><span>11 workflow steps</span></div>
+          <div class="svg-scroll">
+            <svg class="sequence" viewBox="0 0 1280 235" role="img" aria-labelledby="wf10-title wf10-desc">
+              <title id="wf10-title">Retire an online solution with evidence</title>
+              <desc id="wf10-desc">A manual workflow authenticates, reports the final experiment, checks monitoring, requests a change approval, deletes the online deployment and endpoint, revokes external access, archives evidence, and publishes a summary.</desc>
+              <defs><marker id="arrow-10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#52646b"></path></marker><marker id="arrow-10-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#b33630"></path></marker></defs>
+              <g class="node platform"><rect x="10" y="70" width="105" height="86" rx="5"></rect><text class="action" x="62" y="107">workflow-</text><text class="action" x="62" y="127">dispatch</text><text class="detail" x="62" y="147">retire request</text></g>
+              <g class="node platform"><rect x="130" y="70" width="105" height="86" rx="5"></rect><text class="action" x="182" y="108">checkout</text><text class="detail" x="182" y="134">inventory</text></g>
+              <g class="node platform"><rect x="250" y="70" width="105" height="86" rx="5"></rect><text class="action" x="302" y="108">login</text><text class="detail" x="302" y="134">Azure</text></g>
+              <g class="node platform"><rect x="370" y="70" width="105" height="86" rx="5"></rect><text class="action" x="422" y="108">get-token</text><text class="detail" x="422" y="134">MLflow</text></g>
+              <g class="node outer"><rect x="490" y="70" width="130" height="86" rx="5"></rect><text class="action" x="555" y="102">outer-loop</text><text class="command" x="555" y="125">report / experiment</text><text class="detail" x="555" y="145">final report</text></g>
+              <g class="node outer"><rect x="635" y="70" width="130" height="86" rx="5"></rect><text class="action" x="700" y="102">outer-loop</text><text class="command" x="700" y="125">check / monitoring</text><text class="detail" x="700" y="145">final signals</text></g>
+              <g class="node decision"><polygon points="830,60 895,113 830,166 765,113"></polygon><text class="action" x="830" y="107">change-approval</text><text class="detail" x="830" y="130">retirement gate</text></g>
+              <g class="node danger"><rect x="910" y="70" width="145" height="86" rx="5"></rect><text class="action" x="982" y="102">inner-loop</text><text class="command" x="982" y="125">delete / online-deployment</text><text class="detail" x="982" y="145">remove serving unit</text></g>
+              <g class="node danger"><rect x="1070" y="70" width="145" height="86" rx="5"></rect><text class="action" x="1142" y="102">inner-loop</text><text class="command" x="1142" y="125">delete / online-endpoint</text><text class="detail" x="1142" y="145">remove endpoint</text></g>
+              <g class="node platform"><rect x="1070" y="180" width="145" height="44" rx="5"></rect><text class="action" x="1142" y="207">revoke-access</text></g>
+              <g class="node artifact"><rect x="860" y="180" width="180" height="44" rx="5"></rect><text class="action" x="950" y="207">archive-evidence</text></g>
+              <g class="step"><circle cx="22" cy="82" r="12"></circle><text x="22" y="86">1</text><circle cx="142" cy="82" r="12"></circle><text x="142" y="86">2</text><circle cx="262" cy="82" r="12"></circle><text x="262" y="86">3</text><circle cx="382" cy="82" r="12"></circle><text x="382" y="86">4</text><circle cx="502" cy="82" r="12"></circle><text x="502" y="86">5</text><circle cx="647" cy="82" r="12"></circle><text x="647" y="86">6</text><circle cx="780" cy="80" r="12"></circle><text x="780" y="84">7</text><circle cx="922" cy="82" r="12"></circle><text x="922" y="86">8</text><circle cx="1082" cy="82" r="12"></circle><text x="1082" y="86">9</text><circle cx="1082" cy="192" r="12"></circle><text x="1082" y="196">10</text><circle cx="872" cy="192" r="12"></circle><text x="872" y="196">11</text></g>
+              <g fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-10)"><path d="M115 113 H128"></path><path d="M235 113 H248"></path><path d="M355 113 H368"></path><path d="M475 113 H488"></path><path d="M620 113 H633"></path><path d="M765 113 H767"></path><path d="M895 113 H908"></path></g>
+              <path d="M1055 113 H1068" fill="none" stroke="#b33630" stroke-width="2.4" marker-end="url(#arrow-10-fail)"></path><path d="M1142 156 V178" fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-10)"></path><path d="M1070 202 H1042" fill="none" stroke="#52646b" stroke-width="2.4" marker-end="url(#arrow-10)"></path>
+            </svg>
+          </div>
+        </div>
+        <div class="case-notes"><div class="case-note"><strong>Dependency order</strong><span>Remove the online deployment before deleting the endpoint that contains it.</span></div><div class="case-note"><strong>Evidence retention</strong><span>Archive final experiment, monitoring, approval, and deletion outputs together.</span></div><div class="case-note"><strong>Use when</strong><span>A model endpoint reaches end of life, migrates, or is replaced by another service.</span></div></div>
+      </div>
+    </section>
+
+    <section class="coverage" id="coverage">
+      <div class="section-inner">
+        <p class="section-kicker">Command coverage</p>
+        <h2>What these examples expose</h2>
+        <p>The scenarios intentionally repeat important controls while spanning every current action verb and nearly every major subject. This is an option map, not a requirement that every workflow use every step.</p>
+        <div class="coverage-grid">
+          <article class="coverage-group">
+            <h3>Inner-loop combinations shown</h3>
+            <div class="command-list">
+              <span class="command-chip">deploy / data</span><span class="command-chip">deploy / environment</span><span class="command-chip">deploy / component</span><span class="command-chip">deploy / model</span><span class="command-chip">deploy / job</span><span class="command-chip">deploy / sweep-job</span><span class="command-chip">deploy / schedule</span><span class="command-chip">deploy / online-endpoint</span><span class="command-chip">deploy / online-deployment</span><span class="command-chip">deploy / batch-endpoint</span><span class="command-chip">deploy / batch-deployment</span><span class="command-chip">waitfor / data</span><span class="command-chip">waitfor / environment</span><span class="command-chip">waitfor / component</span><span class="command-chip">waitfor / model</span><span class="command-chip">waitfor / job</span><span class="command-chip">waitfor / sweep-job</span><span class="command-chip">waitfor / online-endpoint</span><span class="command-chip">waitfor / online-deployment</span><span class="command-chip">share / data</span><span class="command-chip">share / environment</span><span class="command-chip">share / component</span><span class="command-chip">share / model</span><span class="command-chip">invoke / batch-deployment</span><span class="command-chip">promote / batch-deployment</span><span class="command-chip">rollback / batch-deployment</span><span class="command-chip">rollback / online-deployment</span><span class="command-chip">delete / online-deployment</span><span class="command-chip">delete / online-endpoint</span>
+            </div>
+          </article>
+          <article class="coverage-group outer-group">
+            <h3>Outer-loop combinations shown</h3>
+            <div class="command-list">
+              <span class="command-chip">evaluate / gate</span><span class="command-chip">evaluate / policy</span><span class="command-chip">compare / candidates</span><span class="command-chip">report / experiment</span><span class="command-chip">check / monitoring</span>
+            </div>
+            <h3 style="margin-top: 28px;">Common platform steps shown</h3>
+            <div class="command-list">
+              <span class="command-chip">checkout</span><span class="command-chip">login</span><span class="command-chip">get-token</span><span class="command-chip">schedule-trigger</span><span class="command-chip">workflow-dispatch</span><span class="command-chip">approval</span><span class="command-chip">smoke-test</span><span class="command-chip">repository-dispatch</span><span class="command-chip">publish-summary</span>
+            </div>
+          </article>
+        </div>
+        <div class="caveat"><strong>Illustrative, not copy-paste YAML.</strong> Real workflows still need concrete action versions, Azure resource identifiers, token outputs, config file paths, GitHub permissions, environment protection, concurrency groups, and failure handling appropriate to the model's risk.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Self-contained workflow atlas for the inner-outer-loops Azure ML actions.</footer>
+</body>
+</html>
