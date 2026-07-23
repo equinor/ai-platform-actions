@@ -37,7 +37,7 @@ from aip.outer.evaluate import _apply_policy, _matching_policy_rules, app as eva
 from aip.outer.main import app as outer_app
 from aip.outer.util import AzureMLBackend, MLFlowProxyClient, create_mlflow_client
 
-runner = CliRunner()
+runner = CliRunner(mix_stderr=False)
 
 
 # =============================================================================
