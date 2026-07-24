@@ -87,9 +87,32 @@ def data(
             data_asset.tags.update(tags)
         else:
             data_asset.tags = tags
+
+    # Due to data assets occasionally using non-integer versions, derive the next
+    # integer version from existing workspace entries to keep updates deterministic.
+    list_data_ws = getdata(
+        client=client,
+        name=data_asset.name,
+    )
+
+    latest_ws_version = 0
+    if list_data_ws:
+        for data_entry in list_data_ws:
+            try:
+                lrv = int(data_entry.version)
+                if lrv > latest_ws_version:
+                    latest_ws_version = lrv
+            except:
+                pass  # Ignore non-int versions
+    latest_ws_version = str(latest_ws_version + 1)
+
+    data_asset.version = latest_ws_version
     
     print("[deploy data] Creating or updating data asset")
-    data_result = client.data.create_or_update(data_asset)
+    data_result = client.data.create_or_update(
+        data=data_asset,
+        version=latest_ws_version,
+    )
 
     print(f"[deploy data] ✅ Data asset deployed successfully")
     print(f"  Name: {data_result.name}")
