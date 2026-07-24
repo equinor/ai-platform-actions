@@ -101,7 +101,7 @@ def load_safe_tags(tags: None|str) -> dict[str, str]:
         res :dict[str,str] = dict()
         tl = re.split(r",\s*",tags)
         for t in tl:
-            kv = re.split(r"\s*=\s*",t,1)
+            kv = re.split(r"\s*=\s*",t,maxsplit=1)
             if type(kv)==str:
                 key=kv
                 val=None

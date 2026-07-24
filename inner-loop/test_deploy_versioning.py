@@ -46,8 +46,8 @@ def test_deploy_data_uses_next_integer_version_from_workspace_assets():
     assert data_asset.version == "8"
     client.data.create_or_update.assert_called_once_with(
         data=data_asset,
-        version="8",
     )
+    assert "version" not in client.data.create_or_update.call_args.kwargs
 
 
 def test_deploy_data_ignores_non_integer_versions_when_bumping():
@@ -83,8 +83,8 @@ def test_deploy_data_ignores_non_integer_versions_when_bumping():
     assert data_asset.version == "3"
     client.data.create_or_update.assert_called_once_with(
         data=data_asset,
-        version="3",
     )
+    assert "version" not in client.data.create_or_update.call_args.kwargs
 
 
 def test_deploy_data_starts_at_one_when_no_prior_assets_exist():
@@ -115,5 +115,5 @@ def test_deploy_data_starts_at_one_when_no_prior_assets_exist():
     assert data_asset.version == "1"
     client.data.create_or_update.assert_called_once_with(
         data=data_asset,
-        version="1",
     )
+    assert "version" not in client.data.create_or_update.call_args.kwargs

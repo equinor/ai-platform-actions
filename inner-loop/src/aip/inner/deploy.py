@@ -112,7 +112,6 @@ def data(
     print("[deploy data] Creating or updating data asset")
     data_result = client.data.create_or_update(
         data=data_asset,
-        version=latest_ws_version,
     )
 
     print(f"[deploy data] ✅ Data asset deployed successfully")
