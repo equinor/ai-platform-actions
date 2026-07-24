@@ -227,7 +227,7 @@ COMMAND_SPECS = {
     ("waitfor", "job"): _spec(
         "job-name",
         positional_aliases=("job-ref",),
-        option_inputs=_WAIT_OPTIONS,
+        option_inputs=_WAIT_OPTIONS + ("aml-token",),
         environment_inputs=_WAIT_ENV,
     ),
     ("waitfor", "online-endpoint"): _spec(

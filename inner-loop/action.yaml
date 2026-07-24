@@ -15,7 +15,7 @@ inputs:
     description: "From azLogin action. Required unless running locally."
     required: false
   aml-token:
-    description: "Access token with Azure ML scope (https://ml.azure.com/.default). Required for job operations."
+    description: "Access token with Azure ML scope (https://ml.azure.com/.default) for deploy job, deploy sweep-job, and waitfor job. Optional when DefaultAzureCredential is available locally."
     required: false
   tenant-id:
     description: "Azure tenant ID"
