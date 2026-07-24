@@ -88,8 +88,9 @@ def data(
         else:
             data_asset.tags = tags
 
-    # Due to data assets occasionally using non-integer versions, derive the next
-    # integer version from existing workspace entries to keep updates deterministic.
+    # Due to data assets occasionally using non-integer versions,
+    # derive the next integer version from existing workspace entries 
+    # to keep updates deterministic.
     list_data_ws = getdata(
         client=client,
         name=data_asset.name,

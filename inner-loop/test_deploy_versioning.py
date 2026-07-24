@@ -89,7 +89,7 @@ def test_deploy_data_ignores_non_integer_versions_when_bumping():
 
 def test_deploy_data_starts_at_one_when_no_prior_assets_exist():
     data_asset = MagicMock(name="data_asset")
-    data_asset.name = "training-data"
+    data_asset.name = "training-data" 
     data_asset.tags = None
 
     client = MagicMock(name="client")
