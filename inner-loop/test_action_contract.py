@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -28,6 +29,10 @@ from aip.inner.action_entrypoint import (
 
 ACTION_PATH = Path(__file__).with_name("action.yaml")
 DOCKERFILE_PATH = Path(__file__).with_name("Dockerfile")
+SOURCE_BUILD_IMAGE = "Dockerfile"
+RELEASE_IMAGE_PATTERN = re.compile(
+    r"^docker://ghcr\.io/equinor/ai-platform-actions/inner-loop@sha256:[0-9a-f]{64}$"
+)
 COMMANDS = tuple(COMMAND_SPECS)
 APPLICABLE_CASES = tuple(
     (command, input_name)
@@ -289,7 +294,8 @@ def test_action_yaml_inputs_are_fully_classified_and_exposed():
     assert declared_inputs == ACTION_INPUTS
     assert declared_inputs == classified_inputs
     assert action["runs"]["using"] == "docker"
-    assert action["runs"]["image"] == "Dockerfile"
+    image = action["runs"]["image"]
+    assert image == SOURCE_BUILD_IMAGE or RELEASE_IMAGE_PATTERN.match(image), image
     assert "args" not in action["runs"]
     assert action["runs"]["env"][ACTION_MODE_ENV] == "true"
 

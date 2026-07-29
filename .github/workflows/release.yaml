@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag, for example v1.1.2"
+        required: true
+        type: string
+      source-ref:
+        description: "Branch or commit to release from"
+        required: true
+        default: main
+        type: string
+      update-major-tag:
+        description: "Move the major tag (for example v1) to this release"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE_NAMESPACE: ghcr.io/equinor/ai-platform-actions
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize release
+        env:
+          VERSION: ${{ inputs.version }}
+          SOURCE_REF: ${{ inputs.source-ref }}
+        run: |
+          echo "Version        : $VERSION"
+          echo "Source ref     : $SOURCE_REF"
+          echo "Release branch : release/$VERSION"
+          echo "Images         : $IMAGE_NAMESPACE/inner-loop, $IMAGE_NAMESPACE/outer-loop"
+          echo "Order          : build images, pin action.yaml to digests, tag the pinned commit"
+
+      - name: Validate release inputs
+        id: version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "❌ Version must look like v1.1.2 or v1.1.2-rc1, got '$VERSION'"
+            exit 1
+          fi
+
+          MAJOR="${VERSION%%.*}"
+          if [[ "$VERSION" == *-* ]]; then PRERELEASE=true; else PRERELEASE=false; fi
+
+          {
+            echo "major=$MAJOR"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+          for ACTION in inner-loop outer-loop; do
+            {
+              echo "${ACTION}-tags<<TAGS"
+              echo "$IMAGE_NAMESPACE/$ACTION:$VERSION"
+              if [[ "$PRERELEASE" == "false" ]]; then
+                echo "$IMAGE_NAMESPACE/$ACTION:$MAJOR"
+                echo "$IMAGE_NAMESPACE/$ACTION:latest"
+              fi
+              echo "TAGS"
+            } >> "$GITHUB_OUTPUT"
+          done
+
+          echo "✅ Version accepted (major $MAJOR, prerelease $PRERELEASE)"
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source-ref }}
+          fetch-depth: 0
+
+      - name: Verify release refs are free
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "❌ Tag $VERSION already exists and release tags are immutable"
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "refs/heads/release/$VERSION" >/dev/null 2>&1; then
+            echo "❌ Branch release/$VERSION already exists"
+            exit 1
+          fi
+          echo "✅ Tag $VERSION and branch release/$VERSION are available"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push inner-loop image
+        id: inner-loop-image
+        uses: docker/build-push-action@v6
+        with:
+          context: inner-loop
+          push: true
+          tags: ${{ steps.version.outputs.inner-loop-tags }}
+
+      - name: Build and push outer-loop image
+        id: outer-loop-image
+        uses: docker/build-push-action@v6
+        with:
+          context: outer-loop
+          push: true
+          tags: ${{ steps.version.outputs.outer-loop-tags }}
+
+      - name: Pin action definitions to released digests
+        env:
+          INNER_DIGEST: ${{ steps.inner-loop-image.outputs.digest }}
+          OUTER_DIGEST: ${{ steps.outer-loop-image.outputs.digest }}
+        run: |
+          python .github/scripts/pin_action_image.py \
+            inner-loop/action.yaml "$IMAGE_NAMESPACE/inner-loop@$INNER_DIGEST"
+          python .github/scripts/pin_action_image.py \
+            outer-loop/action.yaml "$IMAGE_NAMESPACE/outer-loop@$OUTER_DIGEST"
+
+      - name: Create release branch and tag
+        id: release-commit
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "release/$VERSION"
+          git add inner-loop/action.yaml outer-loop/action.yaml
+          git commit --message "Release $VERSION: pin action images to released digests"
+          git tag --annotate "$VERSION" --message "Release $VERSION"
+          git push origin "release/$VERSION"
+          git push origin "refs/tags/$VERSION"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "✅ Tag $VERSION created on release/$VERSION"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          RELEASE_ARGS=(--title "$VERSION" --target "release/$VERSION" --generate-notes)
+          if [[ "$PRERELEASE" == "true" ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+          gh release create "$VERSION" "${RELEASE_ARGS[@]}"
+          echo "✅ Release $VERSION published"
+
+      - name: Move major tag
+        if: ${{ inputs.update-major-tag && steps.version.outputs.prerelease == 'false' }}
+        env:
+          VERSION: ${{ inputs.version }}
+          MAJOR: ${{ steps.version.outputs.major }}
+        run: |
+          git tag --force --annotate "$MAJOR" --message "Release $VERSION"
+          git push --force origin "refs/tags/$MAJOR"
+          echo "✅ $MAJOR now points at $VERSION"
+
+      - name: Report release
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT_SHA: ${{ steps.release-commit.outputs.sha }}
+          INNER_DIGEST: ${{ steps.inner-loop-image.outputs.digest }}
+          OUTER_DIGEST: ${{ steps.outer-loop-image.outputs.digest }}
+        run: |
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          {
+            echo "### ✅ Released $VERSION"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Release | [$VERSION]($REPO_URL/releases/tag/$VERSION) |"
+            echo "| Release commit | [\`${COMMIT_SHA:0:12}\`]($REPO_URL/commit/$COMMIT_SHA) |"
+            echo "| Release branch | [release/$VERSION]($REPO_URL/tree/release/$VERSION) |"
+            echo "| inner-loop image | \`$IMAGE_NAMESPACE/inner-loop@$INNER_DIGEST\` |"
+            echo "| outer-loop image | \`$IMAGE_NAMESPACE/outer-loop@$OUTER_DIGEST\` |"
+            echo ""
+            echo "Consumers of \`equinor/ai-platform-actions/inner-loop@$VERSION\` now pull a pinned image instead of building the Dockerfile."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import unittest
@@ -27,6 +28,10 @@ from aip.outer.action_entrypoint import (
 ROOT = Path(__file__).parent
 ACTION_PATH = ROOT / "action.yaml"
 DOCKERFILE_PATH = ROOT / "Dockerfile"
+SOURCE_BUILD_IMAGE = "Dockerfile"
+RELEASE_IMAGE_PATTERN = re.compile(
+    r"^docker://ghcr\.io/equinor/ai-platform-actions/outer-loop@sha256:[0-9a-f]{64}$"
+)
 ACTION_ENVIRONMENT_KEYS = {
     ACTION_MODE_ENV,
     *(action_input_environment_name(name) for name in ACTION_INPUTS),
@@ -182,7 +187,11 @@ class TestOuterActionContract(unittest.TestCase):
         self.assertEqual(declared_inputs, ACTION_INPUTS)
         self.assertEqual(declared_inputs, classified_inputs)
         self.assertEqual(action["runs"]["using"], "docker")
-        self.assertEqual(action["runs"]["image"], "Dockerfile")
+        image = action["runs"]["image"]
+        self.assertTrue(
+            image == SOURCE_BUILD_IMAGE or RELEASE_IMAGE_PATTERN.match(image),
+            f"unexpected runs.image: {image}",
+        )
         self.assertNotIn("args", action["runs"])
         self.assertEqual(action["runs"]["env"][ACTION_MODE_ENV], "true")
         self.assertEqual(set(action["runs"]["env"]), ACTION_ENVIRONMENT_KEYS)
