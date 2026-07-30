@@ -51,13 +51,17 @@ def main(argv: list[str]) -> int:
         print(f"❌ Action definition not found: {action_path}")
         return 1
 
+    with action_path.open(encoding="utf-8", newline="") as handle:
+        text = handle.read()
+
     try:
-        pinned = pin(action_path.read_text(encoding="utf-8", newline=""), reference)
+        pinned = pin(text, reference)
     except ValueError as error:
         print(f"❌ {action_path}: {error}")
         return 1
 
-    action_path.write_text(pinned, encoding="utf-8", newline="")
+    with action_path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(pinned)
     print(f"✅ {action_path} pinned to docker://{reference}")
     return 0
 
