@@ -21,6 +21,16 @@ dev = [
     "pytest>=8.0.0",
 ]
 
+[tool.pytest.ini_options]
+# Warnings are errors so first-party regressions cannot hide. The ignores below
+# are azure-ai-ml's schema definitions tripping marshmallow 3.x deprecations at
+# import time; remove them once azure-ai-ml is marshmallow 4 ready.
+filterwarnings = [
+    "error",
+    "ignore::marshmallow.warnings.RemovedInMarshmallow4Warning",
+    "ignore::marshmallow.warnings.ChangedInMarshmallow4Warning",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
