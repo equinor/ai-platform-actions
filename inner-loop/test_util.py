@@ -21,22 +21,27 @@ Total: 31 tests, all passing and documenting current behavior including bugs.
 """
 
 import os
-import sys
 import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock
 from collections import namedtuple
 
-# Mock Azure modules to avoid import errors
-sys.modules['azure'] = MagicMock()
-sys.modules['azure.core'] = MagicMock()
-sys.modules['azure.core.credentials'] = MagicMock()
-sys.modules['azure.identity'] = MagicMock()
-sys.modules['azure.ai'] = MagicMock()
-sys.modules['azure.ai.ml'] = MagicMock()
+from aip.inner.util import AML_SCOPE, Credential, github_output, load_safe_tags, get_ref_properties
 
-from aip.inner.util import github_output, load_safe_tags, get_ref_properties
+
+class TestCredential:
+    """Test suite for Azure SDK credential scope routing"""
+
+    def test_get_token_selects_aml_token_only_for_aml_scope(self):
+        with patch(
+            "aip.inner.util.AccessToken",
+            side_effect=lambda token, expires_on: MagicMock(token=token, expires_on=expires_on),
+        ):
+            credential = Credential("arm-token", 1234567890, "aml-token")
+
+        assert credential.get_token(AML_SCOPE).token == "aml-token"
+        assert credential.get_token("https://management.azure.com/.default").token == "arm-token"
 
 
 class TestGithubOutput:

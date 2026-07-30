@@ -12,6 +12,7 @@ from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.identity import DefaultAzureCredential
 
 from .util import (
+    empty_string_to_none,
     get_workspace_client,
     load_safe_tags,
     get_ref_properties,
@@ -689,6 +690,7 @@ def job(
     job_name: str,
     token: Optional[str] = None,
     expires_on: Optional[int] = None,
+    aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     tags: Annotated[
         Optional[str],
         typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -702,6 +704,7 @@ def job(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
+        aml_token=aml_token,
     )
 
     # Create token manager for automatic token refresh during long waits

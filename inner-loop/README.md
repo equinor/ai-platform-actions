@@ -185,7 +185,7 @@ The action supports two authentication methods:
     filepath: ./jobs/my-job.yaml
 ```
 
-**Note:** The `aml-token` input is required for job operations. This token has the Azure ML scope (`https://ml.azure.com/.default`) and is provided by the Azure login action.
+**Note:** When token-based authentication is used, `deploy job`, `deploy sweep-job`, and `waitfor job` accept an `aml-token` with the `https://ml.azure.com/.default` scope. It is optional when `DefaultAzureCredential` is available locally.
 
 ### Deploy Online Endpoint
 
@@ -285,6 +285,22 @@ instance_count: 1
     tags: "stage=build"
 ```
 
+### Wait for Job Completion
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: waitfor
+    subject: job
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
+    aml-token: ${{ steps.azure-login.outputs.aml-token }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    job-name: my-training-job
+```
+
 The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the specified asset exists and reports a success status. If the asset reports a failure state or the timeout expires, the action stops with a failure, allowing pipelines to halt early when provisioned artifacts break.
 
 ### Share to Registry with Stage Promotion
@@ -333,7 +349,7 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 | `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, or `online-deployment` |
 | `token` | No* | Access token from Azure login action (*required for GitHub Actions) |
 | `expires-on` | No* | Token expiration timestamp from Azure login action (*required for GitHub Actions) |
-| `aml-token` | No* | Access token with Azure ML scope (*required for job operations) |
+| `aml-token` | No | Access token with Azure ML scope for `deploy job`, `deploy sweep-job`, and `waitfor job`; optional when `DefaultAzureCredential` is available locally |
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |
