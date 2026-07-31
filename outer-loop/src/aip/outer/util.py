@@ -298,7 +298,8 @@ class AzureMLBackend:
         """
         info = run.get("info", {})
         data = run.get("data", {})
-        metrics = {m["key"]: m["value"] for m in data.get("metrics", [])}
+        # AzureML's MLflow proxy omits "value" for NaN metrics, since JSON has no NaN.
+        metrics = {m["key"]: m["value"] for m in data.get("metrics", []) if "value" in m}
         tags = {t["key"]: t["value"] for t in data.get("tags", [])}
         return {
             "run_id": info.get("run_id", ""),
@@ -339,7 +340,8 @@ class AzureMLBackend:
         """Return the final metric values for a single run."""
         data = self._get("/api/2.0/mlflow/runs/get", params={"run_id": run_id})
         run_data = data.get("run", {}).get("data", {})
-        return {m["key"]: m["value"] for m in run_data.get("metrics", [])}
+        # AzureML's MLflow proxy omits "value" for NaN metrics, since JSON has no NaN.
+        return {m["key"]: m["value"] for m in run_data.get("metrics", []) if "value" in m}
 
     def compare_runs(
         self,
