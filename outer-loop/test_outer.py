@@ -608,6 +608,49 @@ class TestAzureMLBackend:
 
         assert metrics == {"f1": 0.85, "loss": 0.12}
 
+    def test_get_run_metrics_skips_nan_metrics_without_value(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"run": {"info": {}, "data": {
+                "metrics": [
+                    {"key": "cv_accuracy", "value": 1.0},
+                    {"key": "cv_accuracy_std", "timestamp": "1785399783655"},
+                ],
+                "tags": [],
+            }}},
+        )
+
+        metrics = backend.get_run_metrics("r1")
+
+        assert metrics == {"cv_accuracy": 1.0}
+
+    def test_normalize_run_skips_nan_metrics_without_value(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"experiment": {"experiment_id": "exp1"}},
+            raise_for_status=lambda: None,
+        )
+        backend._session.post.return_value = MagicMock(
+            status_code=200,
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [{
+                "info": {"run_id": "r1", "status": "FINISHED"},
+                "data": {
+                    "metrics": [
+                        {"key": "cv_f1_weighted", "value": 1.0},
+                        {"key": "cv_f1_weighted_std", "timestamp": "1785399783655"},
+                    ],
+                    "tags": [],
+                },
+            }]},
+        )
+
+        runs = backend.get_experiment_runs("my-exp")
+
+        assert runs[0]["metrics"] == {"cv_f1_weighted": 1.0}
+
     def test_compare_runs_with_explicit_run_ids(self):
         backend = self._make_backend()
         responses = {
