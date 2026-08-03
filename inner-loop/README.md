@@ -61,6 +61,7 @@ The action is organized into modular Python files:
 - **batch.py**: Shared idempotent batch default-switch operation
 - **invoke.py**: Named batch deployment validation invocations
 - **promote.py**: Guarded and verified batch deployment promotion
+- **arm.py**: Azure Resource Manager REST access to asset containers and versions
 - **getasset.py**: Helper functions for retrieving and filtering Azure ML assets
 - **util.py**: Utility functions for authentication, tagging, and GitHub output
 - **action.yaml**: GitHub Action composite definition
@@ -70,6 +71,7 @@ Each module uses typer's `@app.command()` decorator for clean, self-documenting 
 ### Key Features
 
 - **Automatic Version Management**: Components automatically increment to next integer version
+- **Archived Container Recovery**: Every versioned asset is two resources in Azure, a container and its versions. An archived container hides all its versions, including active ones, and the SDK cannot reach that flag. Asset lookups read both layers over the [ARM REST API](https://learn.microsoft.com/rest/api/azureml/) instead, so deploy restores an archived workspace container automatically and reports an archived registry container without touching it.
 - **Command Normalization**: Multiline component commands are automatically cleaned (backslashes and line breaks removed)
 - **Tag Merging**: Tags from YAML configs and command-line inputs are intelligently merged
 - **Stage Promotion**: Share operations support promoting assets to specific stages (e.g., "Production")
@@ -149,7 +151,8 @@ The action supports two authentication methods:
 ```
 
 **Component Features:**
-- Automatically finds and increments to next integer version
+- Automatically finds and increments to next integer version, counting archived versions so an existing version is never overwritten
+- Restores the component container if it has been archived, which would otherwise hide every version
 - Cleans multiline commands (removes `\` and line breaks)
 - Merges tags from YAML and command line
 

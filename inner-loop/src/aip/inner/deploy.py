@@ -42,12 +42,8 @@ from .util import (
 )
 import yaml
 from pathlib import Path
-from .getasset import (
-    getcomponent,
-    getdata,
-    getenvironment,
-    getmodel
-)
+from .arm import AssetClient
+from .getasset import next_int_version
 import re
 
 app = typer.Typer()
@@ -91,23 +87,19 @@ def data(
     # Due to data assets occasionally using non-integer versions,
     # derive the next integer version from existing workspace entries 
     # to keep updates deterministic.
-    list_data_ws = getdata(
-        client=client,
-        name=data_asset.name,
+    asset_client = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
     )
-
-    latest_ws_version = 0
-    if list_data_ws:
-        for data_entry in list_data_ws:
-            try:
-                lrv = int(data_entry.version)
-                if lrv > latest_ws_version:
-                    latest_ws_version = lrv
-            except:
-                pass  # Ignore non-int versions
-    latest_ws_version = str(latest_ws_version + 1)
-
-    data_asset.version = latest_ws_version
+    data_asset.version = next_int_version(
+        client=asset_client,
+        kind="data",
+        name=data_asset.name,
+        subject="deploy data",
+    )
     
     print("[deploy data] Creating or updating data asset")
     data_result = client.data.create_or_update(
@@ -219,21 +211,19 @@ def component(
 
     # Due to components being deployed has a "non-standard" version by default,
     # we need to get any existing ones, and update the version ourselves
-    list_comp_ws = getcomponent(
-        client=client,
-        name=component.name
+    asset_client = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on,
     )
-
-    latest_ws_version=0
-    if list_comp_ws:
-        for c in list_comp_ws:
-            try:
-                lrv = int(c.version)
-                if lrv>latest_ws_version:
-                    latest_ws_version=lrv
-            except:
-                pass # Ignore non-int versions
-    latest_ws_version=str(latest_ws_version+1)
+    latest_ws_version = next_int_version(
+        client=asset_client,
+        kind="component",
+        name=component.name,
+        subject="deploy component",
+    )
 
     env_in_component = component.environment
 

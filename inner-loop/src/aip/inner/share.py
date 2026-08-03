@@ -15,11 +15,13 @@ from .util import (
     get_ref_properties,
     github_output
 )
+from .arm import AssetClient
 from .getasset import (
     getcomponent, 
     getenvironment,
     getmodel,
-    getdata
+    getdata,
+    parse_int_version
 )
 import tempfile
 from azure.ai.ml import load_component
@@ -65,8 +67,15 @@ def data(
     )
 
     print("[share data] Retrieving data asset from workspace")
+    ws_assets = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
     list_data_ws = getdata(
-        client=ws_client,
+        client=ws_assets,
         name=data_name,
         tags=tags
     )
@@ -82,8 +91,14 @@ def data(
         token=token,
         expires_on=expires_on
     )
+    reg_assets = AssetClient.for_registry(
+        registry_name=registry_name,
+        subscription_id=subscription_id,
+        token=token,
+        expires_on=expires_on
+    )
     list_data_reg = getdata(
-        client=reg_client,
+        client=reg_assets,
         name=data_name,
         #tags=tags,
         req_int_version=True
@@ -92,8 +107,8 @@ def data(
     latest_reg_version=0
     if list_data_reg:
         for d in list_data_reg:
-            lrv = int(d.version)
-            if lrv>latest_reg_version:
+            lrv = parse_int_version(d.version)
+            if lrv and lrv>latest_reg_version:
                 latest_reg_version=lrv
     latest_reg_version=str(latest_reg_version+1)
     
@@ -118,7 +133,7 @@ def data(
         reg_client.data.create_or_update(reg_data)
     
     data_result=getdata(
-        client=reg_client,
+        client=reg_assets,
         name=data_name,
         version=latest_reg_version
     )
@@ -126,7 +141,7 @@ def data(
     if len(data_result) < 1:
         sleep(5)
         data_result=getdata(
-            client=reg_client,
+            client=reg_assets,
             name=data_name,
             version=latest_reg_version
         )
@@ -177,8 +192,15 @@ def environment(
     )
 
     print("[share environment] Retrieving environment from workspace")
+    ws_assets = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
     list_env_ws = getenvironment(
-        client=ws_client,
+        client=ws_assets,
         name=env_name,
         version=env_version,
         tags=tags
@@ -195,21 +217,24 @@ def environment(
         token=token,
         expires_on=expires_on
     )
+    reg_assets = AssetClient.for_registry(
+        registry_name=registry_name,
+        subscription_id=subscription_id,
+        token=token,
+        expires_on=expires_on
+    )
     list_env_reg = getenvironment(
-        client=reg_client,
+        client=reg_assets,
         name=env_name,
         #tags=tags, # tags may be unique, so DON'T filter with them
         req_int_version=True
     )
     # find latest registry version to use
-    try:
-        latest_reg_version=int(ws_env.version) # Can cause error if set=0 like the other asset types.
-    except:
-        latest_reg_version=0 # In the case that ws_version is None or a string not interpretable as an int
+    latest_reg_version = parse_int_version(ws_env.version) or 0
     if list_env_reg:
         for e in list_env_reg:
-            lrv = int(e.version)
-            if lrv>latest_reg_version:
+            lrv = parse_int_version(e.version)
+            if lrv and lrv>latest_reg_version:
                 latest_reg_version=lrv
         latest_reg_version=latest_reg_version+1 # only if name exists
     print("[share environment] Sharing environment to registry")
@@ -233,7 +258,7 @@ def environment(
         reg_client.environments.create_or_update(reg_env)
 
     environment_result = getenvironment(
-        client=reg_client,
+        client=reg_assets,
         name=env_name,
         version=latest_reg_version
     )
@@ -241,7 +266,7 @@ def environment(
     if len(environment_result) < 1:
         sleep(5)
         environment_result = getenvironment(
-            client=reg_client,
+            client=reg_assets,
             name=env_name,
             version=latest_reg_version
         )
@@ -294,7 +319,14 @@ def model(
         token=token,
         expires_on=expires_on
     )
-    list_m_ws = getmodel(ws_client,name=model_name,tags=tags)
+    ws_assets = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_m_ws = getmodel(ws_assets,name=model_name,tags=tags)
     if len(list_m_ws)<1:
         raise ValueError("There is no such model in the workspace")
     if len(list_m_ws)>1:
@@ -307,8 +339,14 @@ def model(
         token=token,
         expires_on=expires_on
     )
+    reg_assets = AssetClient.for_registry(
+        registry_name=registry_name,
+        subscription_id=subscription_id,
+        token=token,
+        expires_on=expires_on
+    )
     list_m_reg = getmodel(
-        client=reg_client,
+        client=reg_assets,
         name=model_name,
         #tags=tags,
         req_int_version=True
@@ -318,8 +356,8 @@ def model(
     latest_reg_version=0
     if list_m_reg:
         for m in list_m_reg:
-            lrv = int(m.version)
-            if lrv>latest_reg_version:
+            lrv = parse_int_version(m.version)
+            if lrv and lrv>latest_reg_version:
                 latest_reg_version=lrv
     latest_reg_version=str(latest_reg_version+1)
 
@@ -344,7 +382,7 @@ def model(
         reg_client.models.create_or_update(reg_model)
 
     model_result = getmodel(
-        client=reg_client,
+        client=reg_assets,
         name=model_name,
         version=latest_reg_version
     )
@@ -352,7 +390,7 @@ def model(
     if len(model_result) < 1:
         sleep(5)
         model_result = getmodel(
-            client=reg_client,
+            client=reg_assets,
             name=model_name,
             version=latest_reg_version
         )
@@ -409,7 +447,14 @@ def component(
         expires_on=expires_on
     )
 
-    list_comp_ws = getcomponent(client=ws_client, name=component_name, version=component_version)
+    ws_assets = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=workspace_name,
+        token=token,
+        expires_on=expires_on
+    )
+    list_comp_ws = getcomponent(client=ws_assets, name=component_name, version=component_version)
     if len(list_comp_ws)<1:
         raise ValueError("There is no such component in the workspace")
     if len(list_comp_ws)>1:
@@ -419,6 +464,12 @@ def component(
     print("[share component] Creating registry client")
     reg_client = get_registry_client(
         registry_name=registry_name,
+        token=token,
+        expires_on=expires_on
+    )
+    reg_assets = AssetClient.for_registry(
+        registry_name=registry_name,
+        subscription_id=subscription_id,
         token=token,
         expires_on=expires_on
     )
@@ -439,23 +490,18 @@ def component(
         component.environment = registry_env_ref
 
         list_comp_reg = getcomponent(
-            client=reg_client,
+            client=reg_assets,
             name=component_name,
             req_int_version=True
         )
 
         # Determine target version number in registry right before sharing
         # to minimize chance of it becoming outdated
-        try:
-            latest_reg_version = int(list_comp_reg[0].version)
-        except:
-            latest_reg_version = 0
-        
-        if list_comp_reg:
-            for c in list_comp_reg:
-                lrv = int(c.version)
-                if lrv>latest_reg_version:
-                    latest_reg_version=lrv
+        latest_reg_version = 0
+        for c in list_comp_reg:
+            lrv = parse_int_version(c.version)
+            if lrv and lrv>latest_reg_version:
+                latest_reg_version=lrv
         latest_reg_version=str(latest_reg_version+1)
 
         reg_comp = reg_client.components.create_or_update(
@@ -464,7 +510,7 @@ def component(
         )
     
     component_result = getcomponent(
-        client=reg_client,
+        client=reg_assets,
         name=component_name,
         version=latest_reg_version
     )
@@ -472,7 +518,7 @@ def component(
     if len(component_result) < 1:
         sleep(5)
         component_result = getcomponent(
-            client=reg_client,
+            client=reg_assets,
             name=component_name,
             version=latest_reg_version
         )
