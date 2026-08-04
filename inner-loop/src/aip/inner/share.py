@@ -108,7 +108,7 @@ def data(
     if list_data_reg:
         for d in list_data_reg:
             lrv = parse_int_version(d.version)
-            if lrv and lrv>latest_reg_version:
+            if lrv is not None and lrv>latest_reg_version:
                 latest_reg_version=lrv
     latest_reg_version=str(latest_reg_version+1)
     
@@ -230,11 +230,13 @@ def environment(
         req_int_version=True
     )
     # find latest registry version to use
-    latest_reg_version = parse_int_version(ws_env.version) or 0
+    latest_reg_version = parse_int_version(ws_env.version)
+    if latest_reg_version is None:
+        latest_reg_version = 0
     if list_env_reg:
         for e in list_env_reg:
             lrv = parse_int_version(e.version)
-            if lrv and lrv>latest_reg_version:
+            if lrv is not None and lrv>latest_reg_version:
                 latest_reg_version=lrv
         latest_reg_version=latest_reg_version+1 # only if name exists
     print("[share environment] Sharing environment to registry")
@@ -357,7 +359,7 @@ def model(
     if list_m_reg:
         for m in list_m_reg:
             lrv = parse_int_version(m.version)
-            if lrv and lrv>latest_reg_version:
+            if lrv is not None and lrv>latest_reg_version:
                 latest_reg_version=lrv
     latest_reg_version=str(latest_reg_version+1)
 
@@ -500,7 +502,7 @@ def component(
         latest_reg_version = 0
         for c in list_comp_reg:
             lrv = parse_int_version(c.version)
-            if lrv and lrv>latest_reg_version:
+            if lrv is not None and lrv>latest_reg_version:
                 latest_reg_version=lrv
         latest_reg_version=str(latest_reg_version+1)
 
