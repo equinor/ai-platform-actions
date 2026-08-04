@@ -584,6 +584,7 @@ class TestAzureMLBackend:
             "run_id": "r1",
             "status": "FINISHED",
             "run_name": "train",
+            "parent_run_id": "",
             "metrics": {"accuracy": 0.9},
             "tags": {},
         }]
@@ -736,7 +737,8 @@ class TestAzureMLBackend:
             {
                 "run_id": "evaluate-1",
                 "run_name": "evaluate_test",
-                "tags": {"mlflow.parentRunId": "pipeline-1"},
+                "parent_run_id": "pipeline-1",
+                "tags": {},
             },
             {
                 "run_id": "train-1",
@@ -746,7 +748,8 @@ class TestAzureMLBackend:
             {
                 "run_id": "evaluate-other-pipeline",
                 "run_name": "evaluate_test",
-                "tags": {"mlflow.parentRunId": "pipeline-2"},
+                "parent_run_id": "pipeline-2",
+                "tags": {},
             },
         ]
         backend.get_experiment_runs = MagicMock(side_effect=[parent_runs, all_runs])
@@ -762,6 +765,19 @@ class TestAzureMLBackend:
             (('my-exp',), {"max_results": 100, "run_name": "daily-pipeline"}),
             (('my-exp',), {"max_results": 100}),
         ]
+
+    def test_normalize_run_preserves_azureml_parent_run_id(self):
+        normalized = AzureMLBackend._normalize_run({
+            "info": {
+                "run_id": "evaluate-1",
+                "status": "FINISHED",
+                "run_name": "evaluate_test",
+                "parent_run_id": "pipeline-1",
+            },
+            "data": {"metrics": [], "tags": []},
+        })
+
+        assert normalized["parent_run_id"] == "pipeline-1"
 
     def test_get_monitoring_run_returns_none_when_no_runs(self):
         backend = self._make_backend()
