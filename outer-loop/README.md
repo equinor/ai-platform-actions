@@ -88,7 +88,7 @@ The selected action is the first matching rule, but every matched rule is retain
 Queries MLFlow for all runs in the experiment (or a scoped subset), scores each run using a weighted combination of metrics defined in `ranking-criteria-file`, and outputs the best run ID together with a ranked comparison table posted as a GitHub step summary.
 
 **Required inputs:** `mlflow-url`, `experiment-name`, `ranking-criteria-file`  
-**Optional inputs:** `run-ids`, `run-name`, `token`, `expires-on`
+**Optional inputs:** `run-ids`, `run-name`, `child-run-name`, `token`, `expires-on`
 
 Scoping options (mutually exclusive — `run-ids` wins if both are supplied, with a warning):
 
@@ -97,6 +97,7 @@ Scoping options (mutually exclusive — `run-ids` wins if both are supplied, wit
 | *(neither)* | Compares all runs in the experiment (up to 100). |
 | `run-ids` | Compares only the specified comma-separated run IDs. |
 | `run-name` | Compares only runs whose MLflow display name (`mlflow.runName` tag) exactly matches the given value. Useful when multiple training jobs reuse the same experiment name but have distinct display names and you don't know the individual run IDs. |
+| `run-name` + `child-run-name` | Compares only child runs with the given MLflow/Studio display name under matching parent pipeline runs. |
 
 **Ranking criteria file format:**
 
@@ -171,6 +172,7 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 | `run-id` | Single MLFlow run ID. | No |
 | `run-ids` | Comma-separated list of MLFlow run IDs for multi-run operations. | No |
 | `run-name` | Filter `compare candidates` to runs with this exact display name (`mlflow.runName` tag). Ignored when `run-ids` is also supplied. | No |
+| `child-run-name` | Filter `compare candidates` to child runs with this exact MLflow/Studio display name under parents selected by `run-name`. Ignored when `run-ids` is also supplied. | No |
 
 ### Config files
 
@@ -289,6 +291,26 @@ or `mlflow.start_run(run_name="baseline-v2")`), use `run-name` to scope the comp
 ```
 
 If you know the exact run IDs, `run-ids` takes precedence and `run-name` is ignored (with a warning).
+
+### Compare a named pipeline component across parent jobs
+
+To compare only one component of repeated AzureML pipeline jobs, use the stable parent
+pipeline name with the stable component display name. The action resolves the parent runs,
+then selects only child runs linked through MLflow's `mlflow.parentRunId` tag.
+
+```yaml
+- name: Compare evaluation components
+  id: compare
+  uses: equinor/ai-platform-actions/outer-loop@main
+  with:
+    verb: compare
+    subject: candidates
+    mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
+    experiment-name: temporal-equipment-health
+    run-name: temporal-equipment-health
+    child-run-name: evaluate_test
+    ranking-criteria-file: .azureml/ranking.yaml
+```
 
 ### Report on an experiment
 

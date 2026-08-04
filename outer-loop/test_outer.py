@@ -573,14 +573,20 @@ class TestAzureMLBackend:
             status_code=200,
             raise_for_status=lambda: None,
             json=lambda: {"runs": [{
-                "info": {"run_id": "r1", "status": "FINISHED"},
+                "info": {"run_id": "r1", "status": "FINISHED", "run_name": "train"},
                 "data": {"metrics": [{"key": "accuracy", "value": 0.9}], "tags": []},
             }]},
         )
 
         runs = backend.get_experiment_runs("my-exp", max_results=10)
 
-        assert runs == [{"run_id": "r1", "status": "FINISHED", "metrics": {"accuracy": 0.9}, "tags": {}}]
+        assert runs == [{
+            "run_id": "r1",
+            "status": "FINISHED",
+            "run_name": "train",
+            "metrics": {"accuracy": 0.9},
+            "tags": {},
+        }]
 
     def test_get_experiment_runs_returns_empty_on_404(self):
         backend = self._make_backend()
@@ -722,6 +728,41 @@ class TestAzureMLBackend:
         assert post_body.get("filter") == "tags.`mlflow.runName` = 'my-run'"
         assert result[0]["run_id"] == "r2"
 
+    def test_compare_runs_with_parent_and_child_names_selects_only_named_children(self):
+        backend = self._make_backend()
+        parent_runs = [{"run_id": "pipeline-1", "run_name": "daily-pipeline", "tags": {}}]
+        all_runs = [
+            *parent_runs,
+            {
+                "run_id": "evaluate-1",
+                "run_name": "evaluate_test",
+                "tags": {"mlflow.parentRunId": "pipeline-1"},
+            },
+            {
+                "run_id": "train-1",
+                "run_name": "train",
+                "tags": {"mlflow.parentRunId": "pipeline-1"},
+            },
+            {
+                "run_id": "evaluate-other-pipeline",
+                "run_name": "evaluate_test",
+                "tags": {"mlflow.parentRunId": "pipeline-2"},
+            },
+        ]
+        backend.get_experiment_runs = MagicMock(side_effect=[parent_runs, all_runs])
+
+        result = backend.compare_runs(
+            "my-exp",
+            run_name="daily-pipeline",
+            child_run_name="evaluate_test",
+        )
+
+        assert [run["run_id"] for run in result] == ["evaluate-1"]
+        assert backend.get_experiment_runs.call_args_list == [
+            (('my-exp',), {"max_results": 100, "run_name": "daily-pipeline"}),
+            (('my-exp',), {"max_results": 100}),
+        ]
+
     def test_get_monitoring_run_returns_none_when_no_runs(self):
         backend = self._make_backend()
         not_found = MagicMock(status_code=404)
@@ -833,7 +874,34 @@ class TestCompareCandidatesRunName:
         mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {"mlflow.runName": "baseline-v2"}}]
         result, mock_client = self._run_candidates(["--run-name", "baseline-v2"], mock_runs)
         assert result.exit_code == 0
-        mock_client.compare_runs.assert_called_once_with("my-exp", run_ids=None, run_name="baseline-v2")
+        mock_client.compare_runs.assert_called_once_with(
+            "my-exp", run_ids=None, run_name="baseline-v2", child_run_name=None
+        )
+
+    def test_parent_and_child_run_names_are_passed_to_compare_runs(self):
+        mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {}}]
+        result, mock_client = self._run_candidates(
+            ["--run-name", "daily-pipeline", "--child-run-name", "evaluate_test"],
+            mock_runs,
+        )
+
+        assert result.exit_code == 0
+        mock_client.compare_runs.assert_called_once_with(
+            "my-exp",
+            run_ids=None,
+            run_name="daily-pipeline",
+            child_run_name="evaluate_test",
+        )
+
+    def test_child_run_name_requires_parent_run_name(self):
+        result, mock_client = self._run_candidates(
+            ["--child-run-name", "evaluate_test"],
+            [],
+        )
+
+        assert result.exit_code == 1
+        assert "requires --run-name" in result.stderr
+        mock_client.compare_runs.assert_not_called()
 
     def test_run_ids_takes_precedence_over_run_name_with_warning(self):
         mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {}}]
@@ -851,7 +919,9 @@ class TestCompareCandidatesRunName:
         mock_runs = [{"run_id": "r1", "metrics": {"accuracy": 0.9}, "tags": {}}]
         result, mock_client = self._run_candidates([], mock_runs)
         assert result.exit_code == 0
-        mock_client.compare_runs.assert_called_once_with("my-exp", run_ids=None, run_name=None)
+        mock_client.compare_runs.assert_called_once_with(
+            "my-exp", run_ids=None, run_name=None, child_run_name=None
+        )
 
 
 if __name__ == "__main__":
