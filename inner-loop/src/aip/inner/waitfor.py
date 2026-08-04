@@ -6,11 +6,16 @@ import os
 import time
 from typing import Annotated, Callable, Optional, Any
 
-import requests
 import typer
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
-from azure.identity import DefaultAzureCredential
 
+from .arm import (
+    REST_API_VERSION,
+    TOKEN_REFRESH_BUFFER_SECONDS,
+    TokenManager,
+    _call_rest_api,
+    _get_rest_api_base_url,
+)
 from .util import (
     empty_string_to_none,
     get_workspace_client,
@@ -24,8 +29,6 @@ from .util import (
 POLL_INTERVAL_SECONDS = 10
 # Default timeout in minutes, can be overridden via TIMEOUT_MINUTES environment variable
 DEFAULT_TIMEOUT_MINUTES = 30
-# Buffer time in seconds before token expiry to trigger refresh
-TOKEN_REFRESH_BUFFER_SECONDS = 5 * 60  # 5 minutes before expiry
 
 SUCCESS_STATES = {"succeeded", "success", "completed", "ready"}
 FAILURE_STATES = {
@@ -40,9 +43,6 @@ FAILURE_STATES = {
 }
 ENDPOINT_SUCCESS_STATES = {"succeeded"}
 ENDPOINT_FAILURE_STATES = {"failed", "canceled", "cancelled", "deleting"}
-
-# Azure REST API version for Machine Learning Services
-REST_API_VERSION = "2025-10-01-preview" # The currently last API VERSION to have the necessary results
 
 app = typer.Typer()
 
@@ -61,105 +61,6 @@ def _get_timeout_seconds() -> int:
         except ValueError:
             print(f"[waitfor] Invalid TIMEOUT_MINUTES value '{timeout_minutes_str}', using default of {DEFAULT_TIMEOUT_MINUTES} minutes.")
     return DEFAULT_TIMEOUT_MINUTES * 60
-
-
-class TokenManager:
-    """
-    Manages access tokens for Azure REST API calls with automatic refresh.
-    
-    When a static token is provided (from GitHub Actions), it will be used directly.
-    When using DefaultAzureCredential, tokens are refreshed automatically before expiry.
-    """
-    
-    def __init__(self, token: Optional[str] = None, expires_on: Optional[int] = None):
-        self._static_token = token
-        self._static_expires_on = expires_on
-        self._credential: Optional[DefaultAzureCredential] = None
-        self._cached_token: Optional[str] = None
-        self._cached_expires_on: Optional[int] = None
-        
-        if not (token and expires_on):
-            # Initialize credential for dynamic token refresh
-            self._credential = DefaultAzureCredential()
-    
-    def get_token(self) -> str:
-        """
-        Get a valid access token, refreshing if necessary.
-        
-        Returns:
-            A valid access token string.
-        """
-        if self._static_token and self._static_expires_on:
-            # Check if static token is still valid
-            current_time = int(time.time())
-            if current_time >= self._static_expires_on - TOKEN_REFRESH_BUFFER_SECONDS:
-                print("[TokenManager] Warning: Static token is expiring soon or has expired. Cannot refresh static tokens.")
-            return self._static_token
-        
-        # Use dynamic credential
-        if self._credential:
-            current_time = int(time.time())
-            
-            # Check if we need to refresh the token
-            if (self._cached_token is None or 
-                self._cached_expires_on is None or
-                current_time >= self._cached_expires_on - TOKEN_REFRESH_BUFFER_SECONDS):
-                
-                print("[TokenManager] Refreshing access token...")
-                token_response = self._credential.get_token("https://management.azure.com/.default")
-                self._cached_token = token_response.token
-                self._cached_expires_on = token_response.expires_on
-                print(f"[TokenManager] Token refreshed, valid until {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self._cached_expires_on))}")
-            
-            return self._cached_token
-        
-        raise RuntimeError("No credential available to get access token")
-
-
-def _get_access_token(token: Optional[str], expires_on: Optional[int]) -> str:
-    """Get access token for Azure REST API calls. DEPRECATED: Use TokenManager instead."""
-    if token and expires_on:
-        return token
-    else:
-        credential = DefaultAzureCredential()
-        token_response = credential.get_token("https://management.azure.com/.default")
-        return token_response.token
-
-
-def _get_rest_api_base_url(
-    subscription_id: str,
-    resource_group: str,
-    workspace_name: str,
-) -> str:
-    """Build the base URL for Azure ML REST API."""
-    return (
-        f"https://management.azure.com/subscriptions/{subscription_id}"
-        f"/resourceGroups/{resource_group}"
-        f"/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}"
-    )
-
-
-def _call_rest_api(
-    url: str,
-    access_token: str,
-) -> Optional[dict]:
-    """Call Azure REST API and return the JSON response."""
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-    try:
-        response = requests.get(url, headers=headers, timeout=30)
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as exc:
-        print(f"[REST API] HTTP error: {exc}")
-        return None
-    except requests.exceptions.RequestException as exc:
-        print(f"[REST API] Request error: {exc}")
-        return None
 
 
 def _get_provisioning_state_from_rest(
