@@ -60,10 +60,11 @@ class MLFlowBackend(Protocol):
         experiment_name: str,
         run_ids: Optional[list[str]] = None,
         run_name: Optional[str] = None,
+        child_run_name: Optional[str] = None,
     ) -> list[dict]:
         """Return comparison data for multiple runs in an experiment.
 
-        ``run_ids`` takes precedence over ``run_name`` when both are supplied.
+        ``run_ids`` takes precedence over name-based filtering when supplied.
         """
         ...
 
@@ -194,10 +195,11 @@ class MLFlowProxyClient:
         experiment_name: str,
         run_ids: Optional[list[str]] = None,
         run_name: Optional[str] = None,
+        child_run_name: Optional[str] = None,
     ) -> list[dict]:
         """Return comparison data for multiple runs in an experiment.
 
-        ``run_ids`` takes precedence over ``run_name`` when both are supplied.
+        ``run_ids`` takes precedence over name-based filtering when supplied.
 
         Raises ``RuntimeError`` with a clear message if the proxy does not
         support the ``/experiments/{name}/compare`` endpoint (HTTP 404).
@@ -216,6 +218,9 @@ class MLFlowProxyClient:
                 ) from exc
             raise
         runs = data.get("runs", [])
+        if child_run_name and not run_ids:
+            parent_runs = [run for run in runs if _run_name(run) == run_name]
+            return _select_child_runs(runs, parent_runs, child_run_name)
         if run_name and not run_ids:
             runs = [r for r in runs if r.get("tags", {}).get("mlflow.runName") == run_name]
         return runs
@@ -245,6 +250,23 @@ def _azureml_uri_to_https(uri: str) -> str:
         → https://swedencentral.api.azureml.ms/mlflow/v1.0/...
     """
     return "https://" + uri[len("azureml://"):]
+
+
+def _run_name(run: dict) -> str:
+    """Return the MLflow run name from the standard field or compatibility tag."""
+    return run.get("run_name") or run.get("tags", {}).get("mlflow.runName", "")
+
+
+def _select_child_runs(
+    runs: list[dict], parent_runs: list[dict], child_run_name: str
+) -> list[dict]:
+    """Select named child runs of the supplied parent runs."""
+    parent_ids = {run["run_id"] for run in parent_runs}
+    return [
+        run for run in runs
+        if run.get("tags", {}).get("mlflow.parentRunId") in parent_ids
+        and _run_name(run) == child_run_name
+    ]
 
 
 class AzureMLBackend:
@@ -304,6 +326,7 @@ class AzureMLBackend:
         return {
             "run_id": info.get("run_id", ""),
             "status": info.get("status", ""),
+            "run_name": info.get("run_name", tags.get("mlflow.runName", "")),
             "metrics": metrics,
             "tags": tags,
         }
@@ -348,10 +371,11 @@ class AzureMLBackend:
         experiment_name: str,
         run_ids: Optional[list[str]] = None,
         run_name: Optional[str] = None,
+        child_run_name: Optional[str] = None,
     ) -> list[dict]:
         """Return comparison data for multiple runs in an experiment.
 
-        ``run_ids`` takes precedence over ``run_name`` when both are supplied.
+        ``run_ids`` takes precedence over name-based filtering when supplied.
         """
         if run_ids:
             runs = []
@@ -359,6 +383,10 @@ class AzureMLBackend:
                 data = self._get("/api/2.0/mlflow/runs/get", params={"run_id": rid})
                 runs.append(self._normalize_run(data.get("run", {})))
             return runs
+        if child_run_name:
+            parent_runs = self.get_experiment_runs(experiment_name, max_results=100, run_name=run_name)
+            all_runs = self.get_experiment_runs(experiment_name, max_results=100)
+            return _select_child_runs(all_runs, parent_runs, child_run_name)
         return self.get_experiment_runs(experiment_name, max_results=100, run_name=run_name)
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:

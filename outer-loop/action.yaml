@@ -43,6 +43,11 @@ inputs:
       Filter compare candidates to runs with this exact display name (mlflow.runName tag).
       Ignored when run-ids is also supplied.
     required: false
+  child-run-name:
+    description: |
+      Filter compare candidates to child runs with this exact MLflow/Studio display name
+      under parent runs selected by run-name. Ignored when run-ids is also supplied.
+    required: false
 
   # --- Config files ---
   thresholds-file:
@@ -139,6 +144,7 @@ runs:
     INPUT_RUN_ID: ${{ inputs.run-id }}
     INPUT_RUN_IDS: ${{ inputs.run-ids }}
     INPUT_RUN_NAME: ${{ inputs.run-name }}
+    INPUT_CHILD_RUN_NAME: ${{ inputs.child-run-name }}
     INPUT_THRESHOLDS_FILE: ${{ inputs.thresholds-file }}
     INPUT_RANKING_CRITERIA_FILE: ${{ inputs.ranking-criteria-file }}
     INPUT_POLICY_CONFIG_FILE: ${{ inputs.policy-config-file }}
