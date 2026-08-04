@@ -157,6 +157,17 @@ class TestAssetClientUrls:
         assert f"listViewType={LIST_VIEW_ALL}" in transport.urls("GET")[0]
         assert transport.urls("GET")[1] == page_two
 
+    def test_version_list_sends_no_top_or_orderby(self):
+        """The component version API rejects both with HTTP 400."""
+        client, transport = _client([(_is_version_list, (200, {"value": []}))])
+
+        client.list_versions("component", "my-asset")
+
+        listed = transport.urls("GET")[0]
+        assert "top" not in listed
+        assert "orderBy" not in listed
+        assert "orderby" not in listed
+
     def test_registry_scope_uses_the_registries_route(self):
         registry_base = (
             f"{ARM_BASE_URL}/subscriptions/sub/resourceGroups/reg-rg"

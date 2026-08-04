@@ -25,7 +25,6 @@ ML_PROVIDER = "Microsoft.MachineLearningServices"
 REST_API_VERSION = "2025-10-01-preview"
 
 REQUEST_TIMEOUT_SECONDS = 30
-VERSION_PAGE_SIZE = 100
 # Buffer time in seconds before token expiry to trigger refresh
 TOKEN_REFRESH_BUFFER_SECONDS = 5 * 60
 
@@ -332,10 +331,12 @@ class AssetClient:
 
         `list_view_type` defaults to All because archived versions still occupy their
         version number and must be counted when deriving the next one.
+
+        No `$top` or `$orderBy`: the component version API rejects both outright.
         """
         url = self._url(
             f"{_collection(kind)}/{urllib.parse.quote(name)}/versions",
-            **{"listViewType": list_view_type, "$top": VERSION_PAGE_SIZE},
+            **{"listViewType": list_view_type},
         )
         versions: list[AssetVersion] = []
         while url:
