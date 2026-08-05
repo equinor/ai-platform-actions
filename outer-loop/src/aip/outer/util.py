@@ -257,6 +257,14 @@ def _run_name(run: dict) -> str:
     return run.get("run_name") or run.get("tags", {}).get("mlflow.runName", "")
 
 
+def _parent_run_id(run: dict) -> str:
+    """Return the AzureML or MLflow parent run identifier."""
+    return (
+        run.get("parent_run_id")
+        or run.get("tags", {}).get("mlflow.parentRunId", "")
+    )
+
+
 def _select_child_runs(
     runs: list[dict], parent_runs: list[dict], child_run_name: str
 ) -> list[dict]:
@@ -264,7 +272,7 @@ def _select_child_runs(
     parent_ids = {run["run_id"] for run in parent_runs}
     return [
         run for run in runs
-        if run.get("tags", {}).get("mlflow.parentRunId") in parent_ids
+        if _parent_run_id(run) in parent_ids
         and _run_name(run) == child_run_name
     ]
 
@@ -327,6 +335,7 @@ class AzureMLBackend:
             "run_id": info.get("run_id", ""),
             "status": info.get("status", ""),
             "run_name": info.get("run_name", tags.get("mlflow.runName", "")),
+            "parent_run_id": info.get("parent_run_id", info.get("parentRunId", "")),
             "metrics": metrics,
             "tags": tags,
         }
