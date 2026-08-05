@@ -4,8 +4,16 @@ Inner Loop Action - Main Entry Point
 Routes to deploy.py or share.py based on the verb.
 """
 
+import logging
 import typer
 from typing import Optional
+
+# azure-ai-ml emits unactionable WARNING records while serializing REST payloads
+# ("<field> is not a known attribute of class ...") and while importing preview
+# entities ("Class ...: This is an experimental class ...").
+for _noisy_logger in ("msrest.serialization", "azure.ai.ml._utils._experimental"):
+    logging.getLogger(_noisy_logger).setLevel(logging.ERROR)
+
 from . import deploy
 from . import share
 from . import waitfor
