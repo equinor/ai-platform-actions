@@ -21,6 +21,7 @@ from .util import (
     github_output,
     github_step_summary,
     load_yaml_file,
+    run_display_name,
 )
 
 app = typer.Typer()
@@ -55,6 +56,7 @@ def gate(
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     thresholds_file: Annotated[str, typer.Option("--thresholds-file")],
     run_id: Annotated[Optional[str], typer.Option("--run-id", callback=empty_string_to_none)] = None,
+    child_run_name: Annotated[Optional[str], typer.Option("--child-run-name", callback=empty_string_to_none)] = None,
     token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
 ):
@@ -64,6 +66,10 @@ def gate(
     Reads metric thresholds from a YAML config file, fetches metrics from MLFlow
     for the specified run (or the latest run in the experiment), and outputs
     pass/fail plus a Markdown summary table.
+
+    When --child-run-name is supplied, --run-id is treated as the parent (pipeline)
+    run and the named child job is evaluated instead.  This matches the inner-loop
+    'waitfor job' output, which returns the parent run ID.
 
     Thresholds YAML format:
       accuracy: {min: 0.85}
@@ -79,9 +85,17 @@ def gate(
     if not thresholds_file:
         typer.echo("[evaluate gate] ERROR: --thresholds-file is required", err=True)
         raise typer.Exit(1)
+    if child_run_name and not run_id:
+        typer.echo(
+            "[evaluate gate] ERROR: --child-run-name requires --run-id (the parent run)",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     typer.echo(f"[evaluate gate] Experiment: {experiment_name}")
     typer.echo(f"[evaluate gate] Run ID: {run_id or '(latest)'}")
+    if child_run_name:
+        typer.echo(f"[evaluate gate] Child run name: {child_run_name!r}")
     typer.echo(f"[evaluate gate] Thresholds file: {thresholds_file}")
 
     thresholds = load_yaml_file(thresholds_file, "thresholds")
@@ -91,7 +105,10 @@ def gate(
     client = create_mlflow_client(mlflow_url, credential)
 
     # Resolve run ID — use latest run in experiment if not specified
-    if run_id:
+    if run_id and child_run_name:
+        actual_run_id = _resolve_child_run_id(client, experiment_name, run_id, child_run_name)
+        typer.echo(f"[evaluate gate] Resolved child run: {actual_run_id}")
+    elif run_id:
         actual_run_id = run_id
     else:
         runs = client.get_experiment_runs(experiment_name, max_results=1)
@@ -132,9 +149,15 @@ def gate(
     typer.echo(f"[evaluate gate] Overall result: {result.upper()}")
 
     # Build Markdown summary table
+    run_line = f"**Experiment:** `{experiment_name}`  **Run:** `{actual_run_id}`"
+    if child_run_name:
+        run_line = (
+            f"**Experiment:** `{experiment_name}`  **Parent run:** `{run_id}`  "
+            f"**Child run:** `{child_run_name}` (`{actual_run_id}`)"
+        )
     summary_lines = [
         f"## Evaluation Gate — {result.upper()}",
-        f"**Experiment:** `{experiment_name}`  **Run:** `{actual_run_id}`",
+        run_line,
         "",
         "| Metric | Actual | Threshold | Status |",
         "|--------|--------|-----------|--------|",
@@ -150,12 +173,47 @@ def gate(
 
     github_output({
         "result": result,
+        "resolved-run-id": actual_run_id,
         "summary": summary,
     })
 
     if not passed:
         typer.echo("[evaluate gate] Gate FAILED — exiting with code 1")
         raise typer.Exit(1)
+
+
+def _resolve_child_run_id(
+    client, experiment_name: str, parent_run_id: str, child_run_name: str
+) -> str:
+    """Return the run ID of the uniquely named child of ``parent_run_id``."""
+    children = client.get_child_runs(experiment_name, parent_run_id)
+    if not children:
+        typer.echo(
+            f"[evaluate gate] ERROR: run '{parent_run_id}' has no child runs. "
+            "Omit --child-run-name to evaluate this run directly.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    matches = [c for c in children if run_display_name(c) == child_run_name]
+    if not matches:
+        available = ", ".join(sorted({run_display_name(c) for c in children if run_display_name(c)}))
+        typer.echo(
+            f"[evaluate gate] ERROR: no child run named {child_run_name!r} under run "
+            f"'{parent_run_id}'. Available child runs: {available or '(unnamed)'}",
+            err=True,
+        )
+        raise typer.Exit(1)
+    if len(matches) > 1:
+        matched_ids = ", ".join(c["run_id"] for c in matches)
+        typer.echo(
+            f"[evaluate gate] ERROR: {len(matches)} child runs named {child_run_name!r} "
+            f"under run '{parent_run_id}': {matched_ids}. "
+            "Pass the exact child run ID with --run-id instead.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    return matches[0]["run_id"]
 
 
 # ---------------------------------------------------------------------------

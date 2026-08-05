@@ -827,6 +827,46 @@ class TestAzureMLBackend:
             (('my-exp',), {"max_results": None}),
         ]
 
+    def test_get_child_runs_selects_children_of_parent(self):
+        backend = self._make_backend()
+        all_runs = [
+            {"run_id": "pipeline-1", "run_name": "daily-pipeline", "tags": {}},
+            {
+                "run_id": "evaluate-1",
+                "run_name": "evaluate_test",
+                "parent_run_id": "pipeline-1",
+                "tags": {},
+            },
+            {
+                "run_id": "train-1",
+                "run_name": "train",
+                "tags": {"mlflow.parentRunId": "pipeline-1"},
+            },
+            {
+                "run_id": "evaluate-2",
+                "run_name": "evaluate_test",
+                "parent_run_id": "pipeline-2",
+                "tags": {},
+            },
+        ]
+        backend.get_experiment_runs = MagicMock(return_value=all_runs)
+
+        result = backend.get_child_runs("my-exp", "pipeline-1")
+
+        assert [run["run_id"] for run in result] == ["evaluate-1", "train-1"]
+        backend.get_experiment_runs.assert_called_once_with("my-exp", max_results=None)
+
+    def test_get_child_runs_filters_by_child_run_name(self):
+        backend = self._make_backend()
+        backend.get_experiment_runs = MagicMock(return_value=[
+            {"run_id": "evaluate-1", "run_name": "evaluate_test", "parent_run_id": "pipeline-1"},
+            {"run_id": "train-1", "run_name": "train", "parent_run_id": "pipeline-1"},
+        ])
+
+        result = backend.get_child_runs("my-exp", "pipeline-1", child_run_name="evaluate_test")
+
+        assert [run["run_id"] for run in result] == ["evaluate-1"]
+
     def test_normalize_run_preserves_azureml_parent_run_id(self):
         normalized = AzureMLBackend._normalize_run({
             "info": {
@@ -910,6 +950,31 @@ class TestMLFlowProxyClientRunNameFilter:
         runs = client.compare_runs("my-exp", run_name="target")
 
         assert [r["run_id"] for r in runs] == ["r1"]
+
+    def test_get_child_runs_selects_named_children_of_parent(self):
+        client = self._make_client()
+        client._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"runs": [
+                {"run_id": "pipeline-1", "tags": {"mlflow.runName": "daily-pipeline"}},
+                {"run_id": "evaluate-1", "tags": {
+                    "mlflow.runName": "evaluate_test",
+                    "mlflow.parentRunId": "pipeline-1",
+                }},
+                {"run_id": "train-1", "tags": {
+                    "mlflow.runName": "train",
+                    "mlflow.parentRunId": "pipeline-1",
+                }},
+                {"run_id": "evaluate-2", "tags": {
+                    "mlflow.runName": "evaluate_test",
+                    "mlflow.parentRunId": "pipeline-2",
+                }},
+            ]},
+        )
+
+        runs = client.get_child_runs("my-exp", "pipeline-1", child_run_name="evaluate_test")
+
+        assert [r["run_id"] for r in runs] == ["evaluate-1"]
 
 
 # =============================================================================
@@ -999,6 +1064,129 @@ class TestCompareCandidatesRunName:
         mock_client.compare_runs.assert_called_once_with(
             "my-exp", run_ids=None, run_name=None, child_run_name=None
         )
+
+
+# =============================================================================
+# evaluate gate CLI — child-run-name resolution
+# =============================================================================
+
+
+class TestGateChildRunResolution:
+    """CLI-level tests for --child-run-name in evaluate gate."""
+
+    THRESHOLDS_YAML = "accuracy:\n  min: 0.80\n"
+
+    def _run_gate(self, extra_args, children=None, metrics=None):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(self.THRESHOLDS_YAML)
+            tmp = f.name
+        try:
+            mock_client = MagicMock()
+            mock_client.get_child_runs.return_value = children or []
+            mock_client.get_run_metrics.return_value = metrics or {"accuracy": 0.9}
+            with (
+                patch("aip.outer.evaluate.create_mlflow_client", return_value=mock_client),
+                patch("aip.outer.evaluate.get_credential", return_value=MagicMock()),
+            ):
+                result = runner.invoke(
+                    evaluate_app,
+                    [
+                        "gate",
+                        "--mlflow-url", "https://proxy.example.com",
+                        "--experiment-name", "my-exp",
+                        "--thresholds-file", tmp,
+                    ] + extra_args,
+                )
+                return result, mock_client
+        finally:
+            os.unlink(tmp)
+
+    def test_child_run_name_resolves_to_child_run_id(self):
+        children = [
+            {"run_id": "c1", "run_name": "prep_data", "parent_run_id": "parent-1"},
+            {"run_id": "c2", "run_name": "evaluate_test", "parent_run_id": "parent-1"},
+        ]
+        result, mock_client = self._run_gate(
+            ["--run-id", "parent-1", "--child-run-name", "evaluate_test"], children
+        )
+
+        assert result.exit_code == 0
+        mock_client.get_child_runs.assert_called_once_with("my-exp", "parent-1")
+        mock_client.get_run_metrics.assert_called_once_with("c2")
+
+    def test_child_run_name_matches_run_name_tag(self):
+        children = [
+            {"run_id": "c1", "tags": {"mlflow.runName": "evaluate_test"}},
+        ]
+        result, mock_client = self._run_gate(
+            ["--run-id", "parent-1", "--child-run-name", "evaluate_test"], children
+        )
+
+        assert result.exit_code == 0
+        mock_client.get_run_metrics.assert_called_once_with("c1")
+
+    def test_run_id_without_child_run_name_is_used_directly(self):
+        result, mock_client = self._run_gate(["--run-id", "run-abc"])
+
+        assert result.exit_code == 0
+        mock_client.get_child_runs.assert_not_called()
+        mock_client.get_run_metrics.assert_called_once_with("run-abc")
+
+    def test_child_run_name_without_run_id_is_rejected(self):
+        result, mock_client = self._run_gate(["--child-run-name", "evaluate_test"])
+
+        assert result.exit_code == 1
+        assert "requires --run-id" in result.stderr
+        mock_client.get_child_runs.assert_not_called()
+        mock_client.get_run_metrics.assert_not_called()
+
+    def test_unknown_child_run_name_lists_available_names(self):
+        children = [
+            {"run_id": "c1", "run_name": "prep_data"},
+            {"run_id": "c2", "run_name": "train_model"},
+        ]
+        result, mock_client = self._run_gate(
+            ["--run-id", "parent-1", "--child-run-name", "evaluate_test"], children
+        )
+
+        assert result.exit_code == 1
+        assert "no child run named 'evaluate_test'" in result.stderr
+        assert "prep_data, train_model" in result.stderr
+        mock_client.get_run_metrics.assert_not_called()
+
+    def test_parent_without_children_reports_clear_error(self):
+        result, mock_client = self._run_gate(
+            ["--run-id", "parent-1", "--child-run-name", "evaluate_test"], []
+        )
+
+        assert result.exit_code == 1
+        assert "has no child runs" in result.stderr
+        mock_client.get_run_metrics.assert_not_called()
+
+    def test_ambiguous_child_run_name_is_rejected(self):
+        children = [
+            {"run_id": "c1", "run_name": "evaluate_test"},
+            {"run_id": "c2", "run_name": "evaluate_test"},
+        ]
+        result, mock_client = self._run_gate(
+            ["--run-id", "parent-1", "--child-run-name", "evaluate_test"], children
+        )
+
+        assert result.exit_code == 1
+        assert "2 child runs named 'evaluate_test'" in result.stderr
+        assert "c1, c2" in result.stderr
+        mock_client.get_run_metrics.assert_not_called()
+
+    def test_resolved_run_id_is_written_to_github_output(self, tmp_path):
+        children = [{"run_id": "c2", "run_name": "evaluate_test"}]
+        output_file = tmp_path / "gh_output"
+        with patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_file)}):
+            result, _ = self._run_gate(
+                ["--run-id", "parent-1", "--child-run-name", "evaluate_test"], children
+            )
+
+        assert result.exit_code == 0
+        assert "resolved-run-id=c2" in output_file.read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":

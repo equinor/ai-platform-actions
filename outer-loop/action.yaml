@@ -33,7 +33,9 @@ inputs:
     description: "Azure ML / MLFlow experiment name"
     required: false
   run-id:
-    description: "Single MLFlow run ID"
+    description: |
+      Single MLFlow run ID. For evaluate gate this is the run to evaluate, or the
+      parent (pipeline) run when child-run-name is also supplied.
     required: false
   run-ids:
     description: "Comma-separated list of MLFlow run IDs for multi-run operations"
@@ -45,8 +47,11 @@ inputs:
     required: false
   child-run-name:
     description: |
-      Filter compare candidates to child runs with this exact MLflow/Studio display name
-      under parent runs selected by run-name. Ignored when run-ids is also supplied.
+      Exact MLflow/Studio display name of a child run.
+      For compare candidates it filters child runs under parent runs selected by
+      run-name, and is ignored when run-ids is also supplied.
+      For evaluate gate it selects which child of run-id to evaluate; run-id is
+      then required and must identify the parent run.
     required: false
 
   # --- Config files ---
@@ -113,6 +118,8 @@ inputs:
 outputs:
   result:
     description: "Pass/fail result for gate evaluation, or action recommendation for policy"
+  resolved-run-id:
+    description: "Run ID actually evaluated by evaluate gate, after child/latest resolution"
   best-run-id:
     description: "Run ID of the best candidate (compare candidates)"
   best-run-metrics:
