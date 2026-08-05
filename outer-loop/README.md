@@ -27,7 +27,17 @@ The Outer Loop action provides a single entry point for all post-training and pr
 Fetches metrics from MLFlow for a specific run (or the latest run in the experiment if `run-id` is omitted), compares each metric against the constraints in `thresholds-file`, and outputs a pass/fail result. If any metric fails or is missing the action exits with code 1, blocking downstream steps.
 
 **Required inputs:** `mlflow-url`, `experiment-name`, `thresholds-file`  
-**Optional inputs:** `run-id`, `token`, `expires-on`
+**Optional inputs:** `run-id`, `child-run-name`, `token`, `expires-on`
+
+Run selection:
+
+| Inputs | Run evaluated |
+|--------|---------------|
+| `run-id` | That run. |
+| `run-id` + `child-run-name` | The child of `run-id` with that MLflow/Studio display name. |
+| neither | The latest run in the experiment. |
+
+Use `run-id` + `child-run-name` for pipeline runs: the inner-loop `waitfor job` command returns the **parent** run ID, while the metrics you want to gate on usually belong to one specific child job. `child-run-name` requires `run-id`, and the command fails if the name matches zero or more than one child — the error lists the parent's available child display names.
 
 **Thresholds file format:**
 
@@ -42,7 +52,7 @@ loss:
 
 See [outer-loop-config.md](outer-loop-config.md#thresholdsyaml----used-by-evaluate-gate) for the full format reference.
 
-**Outputs:** `result` (`pass` | `fail`), `summary` (Markdown table)
+**Outputs:** `result` (`pass` | `fail`), `resolved-run-id` (the run actually evaluated), `summary` (Markdown table)
 
 ---
 
@@ -169,10 +179,10 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 | Input | Description | Required |
 |-------|-------------|----------|
 | `experiment-name` | Azure ML / MLFlow experiment name. | No |
-| `run-id` | Single MLFlow run ID. | No |
+| `run-id` | Single MLFlow run ID. For `evaluate gate`, the run to evaluate, or the parent run when `child-run-name` is also supplied. | No |
 | `run-ids` | Comma-separated list of MLFlow run IDs for multi-run operations. | No |
 | `run-name` | Filter `compare candidates` to runs with this exact display name (`mlflow.runName` tag). Ignored when `run-ids` is also supplied. | No |
-| `child-run-name` | Filter `compare candidates` to child runs with this exact MLflow/Studio display name under parents selected by `run-name`. Ignored when `run-ids` is also supplied. | No |
+| `child-run-name` | Exact MLflow/Studio display name of a child run. For `compare candidates`, filters children under parents selected by `run-name` (ignored when `run-ids` is supplied). For `evaluate gate`, selects which child of `run-id` to evaluate. | No |
 
 ### Config files
 
@@ -204,6 +214,7 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 | Output | Description |
 |--------|-------------|
 | `result` | `pass`/`fail` for `evaluate gate`; recommended action string for `evaluate policy`; JSON signals for `check monitoring`. |
+| `resolved-run-id` | Run ID actually evaluated by `evaluate gate`, after child/latest resolution. |
 | `best-run-id` | Run ID of the best candidate (`compare candidates` only). |
 | `best-run-metrics` | JSON-encoded metrics of the best candidate run (`compare candidates` only). |
 | `summary` | Human-readable Markdown summary, also posted as a GitHub step summary. |
@@ -245,6 +256,29 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
     experiment-name: my-training-experiment
     run-id: ${{ steps.train.outputs.run-id }}
     thresholds-file: .azureml/thresholds.yaml
+```
+
+### Evaluate a specific child job of a pipeline run
+
+`waitfor job` returns the parent (pipeline) run ID, so name the child job that holds the metrics.
+
+```yaml
+- name: Evaluate gate on the evaluation step
+  id: gate
+  uses: equinor/ai-platform-actions/outer-loop@main
+  with:
+    verb: evaluate
+    subject: gate
+    token: ${{ steps.azLogin.outputs.token }}
+    expires-on: ${{ steps.azLogin.outputs.expires-on }}
+    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    experiment-name: my-training-experiment
+    run-id: ${{ steps.waitfor.outputs.run-id }}
+    child-run-name: evaluate_test
+    thresholds-file: .azureml/thresholds.yaml
+
+- name: Show which run was gated
+  run: echo "Evaluated run: ${{ steps.gate.outputs.resolved-run-id }}"
 ```
 
 ### Compare candidate runs and promote the best

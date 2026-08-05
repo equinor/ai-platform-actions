@@ -93,6 +93,7 @@ COMMAND_SPECS = {
     ("evaluate", "gate"): _spec(
         "experiment-name",
         "run-id",
+        "child-run-name",
         "thresholds-file",
         required_inputs=("mlflow-url", "experiment-name", "thresholds-file"),
     ),

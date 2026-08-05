@@ -27,6 +27,9 @@ from azure.identity import DefaultAzureCredential
 AML_SCOPE = "https://ml.azure.com/.default"
 MANAGEMENT_SCOPE = "https://management.azure.com/.default"
 
+# Proxy run listing is unpaged, so child lookups fetch a single large page.
+CHILD_RUN_SEARCH_LIMIT = 1000
+
 
 # ---------------------------------------------------------------------------
 # MLFlow backend protocol
@@ -65,6 +68,19 @@ class MLFlowBackend(Protocol):
         """Return comparison data for multiple runs in an experiment.
 
         ``run_ids`` takes precedence over name-based filtering when supplied.
+        """
+        ...
+
+    def get_child_runs(
+        self,
+        experiment_name: str,
+        parent_run_id: str,
+        child_run_name: Optional[str] = None,
+    ) -> list[dict]:
+        """Return the child runs of ``parent_run_id``, most recent first.
+
+        If ``child_run_name`` is supplied, only children whose display name
+        matches exactly are returned.
         """
         ...
 
@@ -219,11 +235,27 @@ class MLFlowProxyClient:
             raise
         runs = data.get("runs", [])
         if child_run_name and not run_ids:
-            parent_runs = [run for run in runs if _run_name(run) == run_name]
-            return _select_child_runs(runs, parent_runs, child_run_name)
+            parent_ids = {
+                run["run_id"] for run in runs if run_display_name(run) == run_name
+            }
+            return _select_child_runs(runs, parent_ids, child_run_name)
         if run_name and not run_ids:
             runs = [r for r in runs if r.get("tags", {}).get("mlflow.runName") == run_name]
         return runs
+
+    def get_child_runs(
+        self,
+        experiment_name: str,
+        parent_run_id: str,
+        child_run_name: Optional[str] = None,
+    ) -> list[dict]:
+        """Return the child runs of ``parent_run_id``, optionally filtered by display name.
+
+        The proxy exposes no parent-scoped endpoint, so children are selected
+        client-side from the experiment run list.
+        """
+        runs = self.get_experiment_runs(experiment_name, max_results=CHILD_RUN_SEARCH_LIMIT)
+        return _select_child_runs(runs, {parent_run_id}, child_run_name)
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
         """List artifacts for a run."""
@@ -252,7 +284,7 @@ def _azureml_uri_to_https(uri: str) -> str:
     return "https://" + uri[len("azureml://"):]
 
 
-def _run_name(run: dict) -> str:
+def run_display_name(run: dict) -> str:
     """Return the MLflow run name from the standard field or compatibility tag."""
     return run.get("run_name") or run.get("tags", {}).get("mlflow.runName", "")
 
@@ -266,14 +298,13 @@ def _parent_run_id(run: dict) -> str:
 
 
 def _select_child_runs(
-    runs: list[dict], parent_runs: list[dict], child_run_name: str
+    runs: list[dict], parent_ids: set[str], child_run_name: Optional[str] = None
 ) -> list[dict]:
-    """Select named child runs of the supplied parent runs."""
-    parent_ids = {run["run_id"] for run in parent_runs}
+    """Select child runs of the supplied parent run IDs, optionally by display name."""
     return [
         run for run in runs
         if _parent_run_id(run) in parent_ids
-        and _run_name(run) == child_run_name
+        and (child_run_name is None or run_display_name(run) == child_run_name)
     ]
 
 
@@ -374,7 +405,7 @@ class AzureMLBackend:
             page_runs = runs_data.get("runs", [])
             normalized_runs = (self._normalize_run(run) for run in page_runs)
             if run_name:
-                runs.extend(run for run in normalized_runs if _run_name(run) == run_name)
+                runs.extend(run for run in normalized_runs if run_display_name(run) == run_name)
             else:
                 runs.extend(normalized_runs)
             if max_results is not None and len(runs) >= max_results:
@@ -411,8 +442,19 @@ class AzureMLBackend:
         if child_run_name:
             parent_runs = self.get_experiment_runs(experiment_name, max_results=None, run_name=run_name)
             all_runs = self.get_experiment_runs(experiment_name, max_results=None)
-            return _select_child_runs(all_runs, parent_runs, child_run_name)
+            parent_ids = {run["run_id"] for run in parent_runs}
+            return _select_child_runs(all_runs, parent_ids, child_run_name)
         return self.get_experiment_runs(experiment_name, max_results=100, run_name=run_name)
+
+    def get_child_runs(
+        self,
+        experiment_name: str,
+        parent_run_id: str,
+        child_run_name: Optional[str] = None,
+    ) -> list[dict]:
+        """Return the child runs of ``parent_run_id``, optionally filtered by display name."""
+        runs = self.get_experiment_runs(experiment_name, max_results=None)
+        return _select_child_runs(runs, {parent_run_id}, child_run_name)
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
         """List artifacts for a run."""
@@ -482,7 +524,7 @@ def github_output(outputs: dict[str, str]) -> None:
     """
     env_file = os.environ.get("GITHUB_OUTPUT")
     if env_file:
-        with open(env_file, "a") as f:
+        with open(env_file, "a", encoding="utf-8") as f:
             for key, value in outputs.items():
                 str_value = str(value)
                 if "\n" in str_value:
@@ -496,7 +538,7 @@ def github_step_summary(markdown: str) -> None:
     """Append markdown content to the GitHub step summary."""
     env_file = os.environ.get("GITHUB_STEP_SUMMARY")
     if env_file:
-        with open(env_file, "a") as f:
+        with open(env_file, "a", encoding="utf-8") as f:
             f.write(markdown + "\n")
     else:
         # Fallback: print to stdout when not running in GitHub Actions
