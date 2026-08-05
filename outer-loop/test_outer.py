@@ -680,7 +680,7 @@ class TestAzureMLBackend:
         assert result[0]["run_id"] == "r1"
         assert result[1]["run_id"] == "r2"
 
-    def test_get_experiment_runs_with_run_name_sends_filter_in_post_body(self):
+    def test_get_experiment_runs_with_run_name_filters_client_side(self):
         backend = self._make_backend()
         backend._session.get.return_value = MagicMock(
             status_code=200,
@@ -703,9 +703,70 @@ class TestAzureMLBackend:
 
         post_call_kwargs = backend._session.post.call_args
         body = post_call_kwargs[1]["json"]
-        assert body.get("filter") == "tags.`mlflow.runName` = 'baseline-v2'"
+        assert "filter" not in body
         assert len(runs) == 1
         assert runs[0]["tags"]["mlflow.runName"] == "baseline-v2"
+
+    def test_get_experiment_runs_follows_all_pages_when_max_results_is_none(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"experiment": {"experiment_id": "exp1"}},
+            raise_for_status=lambda: None,
+        )
+        backend._session.post.side_effect = [
+            MagicMock(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    "runs": [{"info": {"run_id": "r1"}, "data": {}}],
+                    "next_page_token": "page-2",
+                },
+            ),
+            MagicMock(
+                raise_for_status=lambda: None,
+                json=lambda: {"runs": [{"info": {"run_id": "r2"}, "data": {}}]},
+            ),
+        ]
+
+        runs = backend.get_experiment_runs("my-exp", max_results=None)
+
+        assert [run["run_id"] for run in runs] == ["r1", "r2"]
+        first_body = backend._session.post.call_args_list[0].kwargs["json"]
+        second_body = backend._session.post.call_args_list[1].kwargs["json"]
+        assert first_body["max_results"] == 1000
+        assert second_body["page_token"] == "page-2"
+
+    def test_get_experiment_runs_with_run_name_follows_pages_until_it_finds_matches(self):
+        backend = self._make_backend()
+        backend._session.get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"experiment": {"experiment_id": "exp1"}},
+            raise_for_status=lambda: None,
+        )
+        backend._session.post.side_effect = [
+            MagicMock(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    "runs": [{
+                        "info": {"run_id": "r1", "run_name": "other"},
+                        "data": {"tags": []},
+                    }],
+                    "next_page_token": "page-2",
+                },
+            ),
+            MagicMock(
+                raise_for_status=lambda: None,
+                json=lambda: {"runs": [{
+                    "info": {"run_id": "r2", "run_name": "target"},
+                    "data": {"tags": []},
+                }]},
+            ),
+        ]
+
+        runs = backend.get_experiment_runs("my-exp", max_results=1, run_name="target")
+
+        assert [run["run_id"] for run in runs] == ["r2"]
+        assert backend._session.post.call_count == 2
 
     def test_compare_runs_with_run_name_delegates_to_get_experiment_runs(self):
         backend = self._make_backend()
@@ -726,7 +787,7 @@ class TestAzureMLBackend:
         result = backend.compare_runs("my-exp", run_name="my-run")
 
         post_body = backend._session.post.call_args[1]["json"]
-        assert post_body.get("filter") == "tags.`mlflow.runName` = 'my-run'"
+        assert "filter" not in post_body
         assert result[0]["run_id"] == "r2"
 
     def test_compare_runs_with_parent_and_child_names_selects_only_named_children(self):
@@ -762,8 +823,8 @@ class TestAzureMLBackend:
 
         assert [run["run_id"] for run in result] == ["evaluate-1"]
         assert backend.get_experiment_runs.call_args_list == [
-            (('my-exp',), {"max_results": 100, "run_name": "daily-pipeline"}),
-            (('my-exp',), {"max_results": 100}),
+            (('my-exp',), {"max_results": None, "run_name": "daily-pipeline"}),
+            (('my-exp',), {"max_results": None}),
         ]
 
     def test_normalize_run_preserves_azureml_parent_run_id(self):

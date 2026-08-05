@@ -341,12 +341,14 @@ class AzureMLBackend:
         }
 
     def get_experiment_runs(
-        self, experiment_name: str, max_results: int = 100, run_name: Optional[str] = None
+        self, experiment_name: str, max_results: Optional[int] = 100, run_name: Optional[str] = None
     ) -> list[dict]:
         """Return a list of runs for an experiment, most recent first.
 
-        If ``run_name`` is supplied, the filter is pushed to the MLflow REST API
-        search query (server-side), which avoids over-fetching runs.
+        If ``run_name`` is supplied, the returned list is filtered client-side.
+        AzureML's MLflow service does not reliably apply a ``mlflow.runName``
+        server-side filter to pipeline runs.
+        Pass ``None`` for ``max_results`` to retrieve every result page.
         """
         try:
             data = self._get(
@@ -358,15 +360,29 @@ class AzureMLBackend:
                 return []
             raise
         experiment_id = data["experiment"]["experiment_id"]
-        body: dict[str, Any] = {
-            "experiment_ids": [experiment_id],
-            "max_results": max_results,
-            "order_by": ["start_time DESC"],
-        }
-        if run_name:
-            body["filter"] = f"tags.`mlflow.runName` = '{run_name}'"
-        runs_data = self._post("/api/2.0/mlflow/runs/search", body)
-        return [self._normalize_run(r) for r in runs_data.get("runs", [])]
+        runs = []
+        page_token = None
+        while True:
+            body: dict[str, Any] = {
+                "experiment_ids": [experiment_id],
+                "max_results": 1000,
+                "order_by": ["start_time DESC"],
+            }
+            if page_token:
+                body["page_token"] = page_token
+            runs_data = self._post("/api/2.0/mlflow/runs/search", body)
+            page_runs = runs_data.get("runs", [])
+            normalized_runs = (self._normalize_run(run) for run in page_runs)
+            if run_name:
+                runs.extend(run for run in normalized_runs if _run_name(run) == run_name)
+            else:
+                runs.extend(normalized_runs)
+            if max_results is not None and len(runs) >= max_results:
+                return runs[:max_results]
+            page_token = runs_data.get("next_page_token")
+            if not page_runs or not page_token:
+                break
+        return runs[:max_results] if max_results is not None else runs
 
     def get_run_metrics(self, run_id: str) -> dict[str, float]:
         """Return the final metric values for a single run."""
@@ -393,8 +409,8 @@ class AzureMLBackend:
                 runs.append(self._normalize_run(data.get("run", {})))
             return runs
         if child_run_name:
-            parent_runs = self.get_experiment_runs(experiment_name, max_results=100, run_name=run_name)
-            all_runs = self.get_experiment_runs(experiment_name, max_results=100)
+            parent_runs = self.get_experiment_runs(experiment_name, max_results=None, run_name=run_name)
+            all_runs = self.get_experiment_runs(experiment_name, max_results=None)
             return _select_child_runs(all_runs, parent_runs, child_run_name)
         return self.get_experiment_runs(experiment_name, max_results=100, run_name=run_name)
 
