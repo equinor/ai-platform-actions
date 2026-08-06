@@ -448,7 +448,7 @@ Built from `Dockerfile` using `astral/uv:python3.12-bookworm-slim` as the base i
 Two modes are supported:
 
 1. **Token-based** (recommended in GitHub Actions): pass `token` and `expires-on` from an upstream `azLogin` step. The token is wrapped in a `StaticTokenCredential` and used for all Azure SDK calls. This mode works with the `MLFlowProxyClient` backend.
-2. **DefaultAzureCredential** (local development and AzureML backend): when `token` is omitted, or when using an `azureml://` tracking URI, the standard Azure credential chain is used. The `AzureMLBackend` always uses this path — `azureml-mlflow` manages its own credential resolution via the environment variables set by `azLogin`.
+2. **DefaultAzureCredential** (local development and AzureML backend): when `token` is omitted, or when using an `azureml://` tracking URI, the standard Azure credential chain is used. The `AzureMLBackend` always uses this path, resolving credentials from the environment variables set by `azLogin`.
 
 ### MLFlow backends
 

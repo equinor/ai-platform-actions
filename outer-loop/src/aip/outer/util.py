@@ -85,7 +85,13 @@ class MLFlowBackend(Protocol):
         ...
 
     def get_run_artifacts(self, run_id: str) -> list[dict]:
-        """List artifacts for a run."""
+        """List artifacts for a run.
+
+        NB: listing only. Downloading (``mlflow.artifacts.download_artifacts``)
+        would reintroduce a dependency on ``mlflow-skinny`` — deliberately dropped
+        because ``mlflow``/``azureml-mlflow`` cap ``cryptography`` below the version
+        needed to clear its advisories. Prefer fetching artifact content over REST.
+        """
         ...
 
     def get_monitoring_run(self, experiment_name: str) -> Optional[dict]:
