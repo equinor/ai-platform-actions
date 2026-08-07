@@ -11,15 +11,86 @@ inputs:
   set-value:
     description: 'The new value to set'
     required: true
+  value-type:
+    description: 'How to interpret set-value: auto (YAML type inference), string (always a quoted string), raw (set-value is a yq expression). Defaults to string; leaving it unset is deprecated.'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
   steps:
-    - name: Override Value
+    - name: Summary
       shell: bash
+      env:
+        OVR_FILE: ${{ inputs.file }}
+        OVR_PATH: ${{ inputs.path }}
+        OVR_VALUE: ${{ inputs.set-value }}
+        OVR_TYPE: ${{ inputs.value-type }}
       run: |
-        if [ ! -f "${{ inputs.file }}" ]; then
-          echo "❌ Error: File not found: ${{ inputs.file }}"
+        set -euo pipefail
+        echo "Override: .${OVR_PATH} = ${OVR_VALUE} (value-type: ${OVR_TYPE:-string, defaulted}) in ${OVR_FILE}"
+
+    - name: Validate Inputs
+      id: validate
+      shell: bash
+      env:
+        OVR_FILE: ${{ inputs.file }}
+        OVR_PATH: ${{ inputs.path }}
+        OVR_VALUE: ${{ inputs.set-value }}
+        OVR_TYPE: ${{ inputs.value-type }}
+      run: |
+        set -euo pipefail
+
+        if [ ! -f "$OVR_FILE" ]; then
+          echo "❌ File not found: ${OVR_FILE}"
           exit 1
         fi
-        yq -i '.${{ inputs.path }} = "${{ inputs.set-value }}"' "${{ inputs.file }}"
+
+        path_re='^[A-Za-z_][A-Za-z0-9_-]*(\[[0-9]+\]|\.[A-Za-z_][A-Za-z0-9_-]*)*$'
+        if [[ ! "$OVR_PATH" =~ $path_re ]]; then
+          echo "❌ Invalid path: ${OVR_PATH}. Expected dot-notation, e.g. inputs.threshold or jobs.inference.component"
+          exit 1
+        fi
+
+        if [ -z "$OVR_TYPE" ]; then
+          OVR_TYPE=string
+          echo "::warning::override-inputs: value-type not set, defaulting to 'string' (quoted). A future major release will default to 'auto' (YAML type inference). Set value-type explicitly to keep current behaviour."
+        fi
+
+        case "$OVR_TYPE" in
+          auto)   value_expr='env(OVR_VALUE)' ;;
+          string) value_expr='strenv(OVR_VALUE)' ;;
+          raw)    value_expr="$OVR_VALUE" ;;
+          *)
+            echo "❌ Invalid value-type: ${OVR_TYPE}. Expected one of: auto, string, raw"
+            exit 1
+            ;;
+        esac
+
+        {
+          echo "value-expr<<OVR_EXPR_EOF"
+          echo "$value_expr"
+          echo "OVR_EXPR_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "✅ Validated ${OVR_FILE}, path .${OVR_PATH}, value-type ${OVR_TYPE}"
+
+    - name: Override Value
+      shell: bash
+      env:
+        OVR_FILE: ${{ inputs.file }}
+        OVR_PATH: ${{ inputs.path }}
+        OVR_VALUE: ${{ inputs.set-value }}
+        OVR_EXPR: ${{ steps.validate.outputs.value-expr }}
+      run: |
+        set -euo pipefail
+        yq -i ".${OVR_PATH} = ${OVR_EXPR}" "$OVR_FILE"
+
+    - name: Result
+      shell: bash
+      env:
+        OVR_FILE: ${{ inputs.file }}
+        OVR_PATH: ${{ inputs.path }}
+      run: |
+        set -euo pipefail
+        echo "✅ ${OVR_FILE}: .${OVR_PATH} = $(yq ".${OVR_PATH}" "$OVR_FILE") (type: $(yq ".${OVR_PATH} | type" "$OVR_FILE"))"

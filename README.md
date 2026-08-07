@@ -353,6 +353,7 @@ jobs:
 | `file` | The YAML file to modify (changes are ephemeral — only within this workflow run) |
 | `path` | Dot-notation path to the property to overwrite (e.g., `environment`) |
 | `set-value` | The new value — here, the freshly deployed environment reference |
+| `value-type` | How to interpret `set-value`: `string` (quoted, current default), `auto` (YAML type inference) or `raw` (a yq expression). Leaving it unset is deprecated and logs a warning |
 
 > **Ref:** [GitHub Actions quickstart](https://docs.github.com/en/actions/quickstart) &middot; [Setting up secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions)
 
@@ -462,6 +463,8 @@ Full reference: [changed-files/README.md](changed-files/README.md)
 ### override-inputs
 
 Overwrites a value in a YAML file using `yq`. Changes are ephemeral — they only persist within the current workflow run. Used to chain outputs from one step into the inputs of another (e.g., pinning a component to the environment version that was just deployed).
+
+The optional `value-type` input controls how `set-value` is written: `string` writes a quoted string (`"45"`), `auto` infers the YAML type (`45` as an integer, `true` as a boolean), and `raw` treats `set-value` as a yq expression. The default is `string`, but leaving `value-type` unset is deprecated and logs a warning — a future major release will default to `auto`.
 
 Full reference: [override-inputs/README.md](override-inputs/README.md)
 
