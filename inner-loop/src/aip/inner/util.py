@@ -16,35 +16,62 @@ from azure.core.credentials import AccessToken
 from azure.identity import DefaultAzureCredential
 
 AML_SCOPE = "https://ml.azure.com/.default"
+STORAGE_SCOPE = "https://storage.azure.com/.default"
+
+
+def _resource(scope: str) -> str:
+    """Reduce an OAuth scope to its bare resource, e.g. https://storage.azure.com"""
+    return scope.split("/.default", 1)[0].rstrip("/").lower()
+
+
+_AML_RESOURCE = _resource(AML_SCOPE)
+_STORAGE_RESOURCE = _resource(STORAGE_SCOPE)
+# Blob/ADLS clients sometimes request a per-account audience instead of the shared resource.
+_STORAGE_HOST_SUFFIXES = (".blob.core.windows.net", ".dfs.core.windows.net")
+
+
+def _is_storage_resource(resource: str) -> bool:
+    return resource == _STORAGE_RESOURCE or resource.endswith(_STORAGE_HOST_SUFFIXES)
 
 
 class Credential:
     """
     Credential wrapper for Azure SDK that handles Azure ML's scope requirements.
-    
+
     Azure ML operations (especially job submission) require tokens with the
-    https://ml.azure.com/.default scope. When this scope is requested, the
-    wrapper returns the dedicated AML token if provided.
+    https://ml.azure.com/.default scope, and artifact upload to a storage account
+    with shared key access disabled requires https://storage.azure.com/.default.
+    Scope-specific tokens are returned when supplied; any other scope falls back
+    to the ARM access token.
     """
-    def __init__(self, access_token: str, expires_on: int, aml_token: Optional[str] = None):
+    def __init__(self, access_token: str, expires_on: int, aml_token: Optional[str] = None,
+                 storage_token: Optional[str] = None):
         self._access_token = AccessToken(token=access_token, expires_on=expires_on)
         self._aml_token = AccessToken(token=aml_token, expires_on=expires_on) if aml_token else None
-    
+        self._storage_token = (
+            AccessToken(token=storage_token, expires_on=expires_on) if storage_token else None
+        )
+
     def get_token(self, *scopes: str, claims: str | None = None, 
                    tenant_id: str | None = None, enable_cae: bool = False, 
                    **kwargs) -> AccessToken:
-        if AML_SCOPE in scopes and self._aml_token:
-            return self._aml_token
+        for scope in scopes:
+            resource = _resource(scope)
+            if self._aml_token and resource == _AML_RESOURCE:
+                return self._aml_token
+            if self._storage_token and _is_storage_resource(resource):
+                return self._storage_token
         return self._access_token
 
 
 def get_workspace_client(subscription_id: str, resource_group: str, 
                          workspace_name: str, token: Optional[str] = None, 
                          expires_on: Optional[int] = None,
-                         aml_token: Optional[str] = None) -> MLClient:
+                         aml_token: Optional[str] = None,
+                         storage_token: Optional[str] = None) -> MLClient:
     """Create MLClient for workspace"""
     if token and expires_on:
-        credential = Credential(token, expires_on, aml_token)
+        credential = Credential(token, expires_on, aml_token, storage_token)
     else:
         credential = DefaultAzureCredential()
     return MLClient(
@@ -58,11 +85,12 @@ def get_registry_client(
         registry_name: str, 
         token: Optional[str] = None, 
         expires_on: Optional[int] = None,
-        aml_token: Optional[str] = None
+        aml_token: Optional[str] = None,
+        storage_token: Optional[str] = None
     ) -> MLClient:
     """Create MLClient for registry"""
     if token and expires_on:
-        credential = Credential(token, expires_on, aml_token)
+        credential = Credential(token, expires_on, aml_token, storage_token)
     else:
         credential = DefaultAzureCredential()
     return MLClient(
@@ -122,6 +150,42 @@ def empty_string_to_none(value: Optional[str]) -> Optional[str]:
     if value is None or (isinstance(value, str) and value.strip() == ""):
         return None
     return value
+
+
+# Storage errors that can only mean the caller was refused at the blob endpoint.
+_STORAGE_AUTH_MARKERS = (
+    "keybasedauthenticationnotpermitted",
+    "authorizationpermissionmismatch",
+    "authorizationfailure",
+)
+# Generic auth errors that only point at storage when raised in a storage context.
+_AMBIGUOUS_AUTH_MARKERS = ("authenticationfailed", "invalidauthenticationinfo")
+_STORAGE_CONTEXT_MARKERS = ("blob", "storage", "datastore")
+
+STORAGE_AUTH_HINT = (
+    "[storage] Access to the workspace storage account was denied.\n"
+    "  If the account has shared key access disabled, this action needs a storage-scoped token:\n"
+    "    az account get-access-token --resource https://storage.azure.com --query accessToken -o tsv\n"
+    "  Pass it as the 'storage-token' action input (CLI: --storage-token), and grant the identity\n"
+    "  'Storage Blob Data Contributor' on the workspace storage account."
+)
+
+
+def storage_auth_hint(error: BaseException) -> Optional[str]:
+    """Return an actionable hint when an error chain looks like a denied blob request."""
+    seen: set[int] = set()
+    current: Optional[BaseException] = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        text = str(current).lower()
+        if any(marker in text for marker in _STORAGE_AUTH_MARKERS):
+            return STORAGE_AUTH_HINT
+        if any(marker in text for marker in _AMBIGUOUS_AUTH_MARKERS) and any(
+            marker in text for marker in _STORAGE_CONTEXT_MARKERS
+        ):
+            return STORAGE_AUTH_HINT
+        current = current.__cause__ or current.__context__
+    return None
 
 
 def empty_string_to_none_int(value: Optional[str]) -> Optional[int]:

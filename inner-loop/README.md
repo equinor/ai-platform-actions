@@ -100,6 +100,34 @@ The action supports two authentication methods:
    - Supports: Environment variables, Managed identity, Azure CLI, VS Code, Azure PowerShell, and more
    - Perfect for local testing and development
 
+### Storage accounts without shared key access
+
+Deploying an asset with a local path (data, model, component code, environment build context, job code snapshot) uploads artifacts to the workspace storage account. By default the Azure ML SDK fetches an account key for that upload, so no extra token is needed.
+
+If the storage account sets `allowSharedKeyAccess: false`, the upload authenticates with Entra ID instead and needs a storage-scoped token:
+
+```yaml
+- name: Get access tokens
+  id: get-token
+  shell: bash
+  run: |
+    TOKEN=$(az account get-access-token --query accessToken --output tsv)
+    STORAGE_TOKEN=$(az account get-access-token --resource https://storage.azure.com --query accessToken --output tsv)
+    EXPIRES_ON=$(az account get-access-token --query expires_on --output tsv)
+    echo "::add-mask::$TOKEN"
+    echo "::add-mask::$STORAGE_TOKEN"
+    echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+    echo "storage-token=$STORAGE_TOKEN" >> "$GITHUB_OUTPUT"
+    echo "expires-on=$EXPIRES_ON" >> "$GITHUB_OUTPUT"
+
+- uses: equinor/ai-platform-actions/inner-loop@main
+  with:
+    storage-token: ${{ steps.get-token.outputs.storage-token }}
+    # ... remaining inputs
+```
+
+The workflow identity also needs the **Storage Blob Data Contributor** role on the workspace storage account. When the action detects a denied blob request it prints this guidance before failing.
+
 ## Usage
 
 ### Deploy Data Asset
@@ -189,6 +217,8 @@ The action supports two authentication methods:
 ```
 
 **Note:** When token-based authentication is used, `deploy job`, `deploy sweep-job`, and `waitfor job` accept an `aml-token` with the `https://ml.azure.com/.default` scope. It is optional when `DefaultAzureCredential` is available locally.
+
+**Note:** Every `deploy` command also accepts an optional `storage-token` with the `https://storage.azure.com/.default` scope. It is only needed when the workspace storage account has shared key access disabled (`allowSharedKeyAccess: false`), because artifact upload then authenticates with Entra ID instead of an account key. See [Storage accounts without shared key access](#storage-accounts-without-shared-key-access).
 
 ### Deploy Online Endpoint
 
@@ -353,6 +383,7 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 | `token` | No* | Access token from Azure login action (*required for GitHub Actions) |
 | `expires-on` | No* | Token expiration timestamp from Azure login action (*required for GitHub Actions) |
 | `aml-token` | No | Access token with Azure ML scope for `deploy job`, `deploy sweep-job`, and `waitfor job`; optional when `DefaultAzureCredential` is available locally |
+| `storage-token` | No | Access token with Azure Storage scope (`https://storage.azure.com/.default`) for `deploy` commands; only needed when the workspace storage account has shared key access disabled |
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |

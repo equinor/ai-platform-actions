@@ -5,6 +5,7 @@ Routes to deploy.py or share.py based on the verb.
 """
 
 import logging
+import sys
 import typer
 from typing import Optional
 
@@ -21,6 +22,7 @@ from . import delete
 from . import rollback
 from . import invoke
 from . import promote
+from .util import storage_auth_hint
 
 app = typer.Typer()
 
@@ -33,5 +35,17 @@ app.add_typer(rollback.app, name="rollback")
 app.add_typer(invoke.app, name="invoke")
 app.add_typer(promote.app, name="promote")
 
+
+def run() -> None:
+    """Run the CLI, annotating failures that look like a denied storage request."""
+    try:
+        app()
+    except Exception as error:
+        hint = storage_auth_hint(error)
+        if hint:
+            print(hint, file=sys.stderr)
+        raise
+
+
 if __name__ == "__main__":
-    app()
+    run()

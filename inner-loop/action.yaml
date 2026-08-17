@@ -17,6 +17,9 @@ inputs:
   aml-token:
     description: "Access token with Azure ML scope (https://ml.azure.com/.default) for deploy job, deploy sweep-job, and waitfor job. Optional when DefaultAzureCredential is available locally."
     required: false
+  storage-token:
+    description: "Access token with Azure Storage scope (https://storage.azure.com/.default) for deploy commands. Only needed when the workspace storage account has shared key access disabled."
+    required: false
   tenant-id:
     description: "Azure tenant ID"
     required: false
@@ -142,6 +145,7 @@ runs:
     INPUT_TOKEN: ${{ inputs.token }}
     INPUT_EXPIRES_ON: ${{ inputs.expires-on }}
     INPUT_AML_TOKEN: ${{ inputs.aml-token }}
+    INPUT_STORAGE_TOKEN: ${{ inputs.storage-token }}
     INPUT_TENANT_ID: ${{ inputs.tenant-id }}
     INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
     INPUT_RESOURCE_GROUP: ${{ inputs.resource-group }}

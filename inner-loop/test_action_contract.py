@@ -189,6 +189,25 @@ def test_waitfor_job_forwards_aml_token():
     assert invocation.argv[option_index + 1] == "aml-token-value"
 
 
+def test_deploy_data_forwards_storage_token():
+    values = _valid_inputs(("deploy", "data"))
+    values["storage-token"] = "storage-token-value"
+
+    invocation = adapt_action_environment(_action_environment(values))
+
+    option_index = invocation.argv.index("--storage-token")
+    assert invocation.argv[option_index + 1] == "storage-token-value"
+
+
+def test_storage_token_applies_to_deploy_commands_only():
+    for command, spec in COMMAND_SPECS.items():
+        assert ("storage-token" in spec.applicable_inputs) == (command[0] == "deploy"), command
+
+
+def test_storage_token_is_not_part_of_the_legacy_argument_contract():
+    assert "--storage-token" not in LEGACY_OPTION_INPUTS
+
+
 @pytest.mark.parametrize(
     ("command", "input_name"),
     APPLICABLE_CASES,

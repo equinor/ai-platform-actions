@@ -27,7 +27,25 @@ from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock
 from collections import namedtuple
 
-from aip.inner.util import AML_SCOPE, Credential, github_output, load_safe_tags, get_ref_properties
+from aip.inner.util import (
+    AML_SCOPE,
+    STORAGE_SCOPE,
+    STORAGE_AUTH_HINT,
+    Credential,
+    github_output,
+    load_safe_tags,
+    get_ref_properties,
+    storage_auth_hint,
+)
+
+
+@pytest.fixture
+def fake_access_token():
+    with patch(
+        "aip.inner.util.AccessToken",
+        side_effect=lambda token, expires_on: MagicMock(token=token, expires_on=expires_on),
+    ):
+        yield
 
 
 class TestCredential:
@@ -42,6 +60,52 @@ class TestCredential:
 
         assert credential.get_token(AML_SCOPE).token == "aml-token"
         assert credential.get_token("https://management.azure.com/.default").token == "arm-token"
+
+    def test_get_token_selects_storage_token_for_storage_scope(self, fake_access_token):
+        credential = Credential("arm-token", 1234567890, "aml-token", "storage-token")
+
+        assert credential.get_token(STORAGE_SCOPE).token == "storage-token"
+        assert credential.get_token(AML_SCOPE).token == "aml-token"
+        assert credential.get_token("https://management.azure.com/.default").token == "arm-token"
+
+    def test_get_token_selects_storage_token_for_account_audience(self, fake_access_token):
+        credential = Credential("arm-token", 1234567890, storage_token="storage-token")
+
+        assert credential.get_token("https://acct.blob.core.windows.net/.default").token == "storage-token"
+        assert credential.get_token("https://acct.dfs.core.windows.net/.default").token == "storage-token"
+
+    def test_get_token_falls_back_to_arm_token_without_storage_token(self, fake_access_token):
+        credential = Credential("arm-token", 1234567890, "aml-token")
+
+        assert credential.get_token(STORAGE_SCOPE).token == "arm-token"
+
+
+class TestStorageAuthHint:
+    """Test suite for the storage authorization failure hint"""
+
+    def test_hint_returned_for_disabled_shared_key_access(self):
+        error = RuntimeError(
+            "KeyBasedAuthenticationNotPermitted: Key based authentication is not permitted"
+        )
+
+        assert storage_auth_hint(error) == STORAGE_AUTH_HINT
+
+    def test_hint_returned_for_wrapped_rbac_failure(self):
+        cause = RuntimeError("AuthorizationPermissionMismatch")
+        error = RuntimeError("upload failed")
+        error.__cause__ = cause
+
+        assert storage_auth_hint(error) == STORAGE_AUTH_HINT
+
+    def test_generic_authentication_failure_needs_storage_context(self):
+        assert storage_auth_hint(RuntimeError("AuthenticationFailed for the job")) is None
+        assert (
+            storage_auth_hint(RuntimeError("AuthenticationFailed for blob upload"))
+            == STORAGE_AUTH_HINT
+        )
+
+    def test_unrelated_error_returns_no_hint(self):
+        assert storage_auth_hint(RuntimeError("asset not found")) is None
 
 
 class TestGithubOutput:

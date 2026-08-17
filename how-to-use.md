@@ -131,6 +131,31 @@ jobs:
 
 The `aml-token` input is only required for job operations, but it is safe to pass it for all subjects in a shared matrix workflow.
 
+## Optional: Storage Accounts With Shared Key Access Disabled
+
+Deploying an asset that has a local path uploads artifacts to the workspace storage account. Normally the Azure ML SDK uses an account key for that upload, so no extra configuration is needed.
+
+If your workspace storage account is configured with `allowSharedKeyAccess: false`, the upload must authenticate with Entra ID instead. Add a storage-scoped token to the token step and pass it to the action:
+
+```yaml
+      - name: Get access tokens
+        id: get-token
+        shell: bash
+        run: |
+          # ... existing token lines
+          STORAGE_TOKEN=$(az account get-access-token --resource https://storage.azure.com --query accessToken --output tsv)
+          echo "::add-mask::$STORAGE_TOKEN"
+          echo "storage-token=$STORAGE_TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy changed asset
+        uses: equinor/ai-platform-actions/inner-loop@main
+        with:
+          storage-token: ${{ steps.get-token.outputs.storage-token }}
+          # ... remaining inputs
+```
+
+The `storage-token` input is accepted by every `deploy` subject, and the workflow identity needs the **Storage Blob Data Contributor** role on that storage account. When the token is missing, the action prints this guidance as soon as a blob request is denied.
+
 ## Customization
 
 - You can add additional steps to deploy only specific asset types (e.g., only environments or only components) by filtering the changed files output.

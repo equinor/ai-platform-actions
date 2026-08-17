@@ -290,6 +290,35 @@ python main.py deploy component \
   --filepath "./components/my-component.yaml"
 ```
 
+### Storage Account Without Shared Key Access
+
+Only needed when the workspace storage account has `allowSharedKeyAccess: false`.
+The identity also needs the `Storage Blob Data Contributor` role on that account.
+
+```yaml
+- name: Get access tokens
+  id: get-token
+  shell: bash
+  run: |
+    TOKEN=$(az account get-access-token --query accessToken --output tsv)
+    STORAGE_TOKEN=$(az account get-access-token --resource https://storage.azure.com --query accessToken --output tsv)
+    EXPIRES_ON=$(az account get-access-token --query expires_on --output tsv)
+    echo "::add-mask::$TOKEN"
+    echo "::add-mask::$STORAGE_TOKEN"
+    echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+    echo "storage-token=$STORAGE_TOKEN" >> "$GITHUB_OUTPUT"
+    echo "expires-on=$EXPIRES_ON" >> "$GITHUB_OUTPUT"
+
+- uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: component
+    token: ${{ steps.get-token.outputs.token }}
+    expires-on: ${{ steps.get-token.outputs.expires-on }}
+    storage-token: ${{ steps.get-token.outputs.storage-token }}
+    # ... other parameters
+```
+
 ## File Structure
 
 ```

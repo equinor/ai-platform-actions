@@ -6,9 +6,9 @@ This repository has two independently runnable Python test suites, one for each 
 
 | Area | Test modules | Collected pytest items | Primary test level |
 | --- | ---: | ---: | --- |
-| Inner loop | 6 | 1,409 | Action-contract matrix and unit tests |
+| Inner loop | 6 | 1,449 | Action-contract matrix and unit tests |
 | Outer loop | 2 | 87 | Action contracts, unit tests, and command-level tests |
-| Total | 8 | 1,496 | Isolated/local tests |
+| Total | 8 | 1,536 | Isolated/local tests |
 
 The item count is from `pytest --collect-only` on 2026-08-05. It is higher than the number of test functions because the inner-loop contract tests are heavily parameterized across commands and inputs.
 
@@ -29,11 +29,11 @@ The inner-loop action manages Azure ML asset and endpoint operations. Its test s
 
 | Test module | Items | What it verifies |
 | --- | ---: | --- |
-| [`inner-loop/test_action_contract.py`](../inner-loop/test_action_contract.py) | 1,326 | The complete 30-command action matrix: all applicable action inputs are forwarded, non-applicable and unsupported inputs are rejected without leaking values, required inputs and aliases are validated, blanks are omitted, and legacy invocation remains compatible. It also verifies `action.yaml` exposure, Docker/direct entrypoints, lazy import behavior, and exact agreement between the action contract and the Typer/Click command tree. |
+| [`inner-loop/test_action_contract.py`](../inner-loop/test_action_contract.py) | 1,359 | The complete 30-command action matrix: all applicable action inputs are forwarded, non-applicable and unsupported inputs are rejected without leaking values, required inputs and aliases are validated, blanks are omitted, and legacy invocation remains compatible. It also verifies `action.yaml` exposure, Docker/direct entrypoints, lazy import behavior, and exact agreement between the action contract and the Typer/Click command tree. |
 | [`inner-loop/test_arm.py`](../inner-loop/test_arm.py) | 38 | ARM URL construction, API-version use, pagination, registry resource-group discovery, error redaction, integer-version parsing and selection, archived-version counting, and archived-container recovery behavior. Requests are handled by a recording fake transport. |
 | [`inner-loop/test_batch_lifecycle.py`](../inner-loop/test_batch_lifecycle.py) | 9 | Batch endpoint and deployment creation, tag handling, GitHub outputs, idempotent default-deployment changes, concurrent-change protection, update verification, promotion/rollback, and pinned deployment invocation. |
 | [`inner-loop/test_deploy_versioning.py`](../inner-loop/test_deploy_versioning.py) | 3 | Data-asset version assignment from existing workspace versions, ignoring non-integer versions, and the no-existing-asset case. |
-| [`inner-loop/test_util.py`](../inner-loop/test_util.py) | 32 | Credential scope routing, `GITHUB_OUTPUT` writing, safe tag parsing, and Azure ML asset-reference parsing for simple, workspace, and registry forms. |
+| [`inner-loop/test_util.py`](../inner-loop/test_util.py) | 39 | Credential scope routing for ARM, Azure ML, and storage tokens, the denied-storage-request hint, `GITHUB_OUTPUT` writing, safe tag parsing, and Azure ML asset-reference parsing for simple, workspace, and registry forms. |
 | [`inner-loop/test_waitfor_job.py`](../inner-loop/test_waitfor_job.py) | 1 | Separate routing of ARM and Azure ML tokens for job polling. |
 
 The contract matrix is the dominant source of inner-loop depth. It enumerates command/input combinations rather than sampling a small subset, so a new input, command, or CLI option has a high chance of breaking a focused contract assertion.
