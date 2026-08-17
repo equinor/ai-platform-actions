@@ -16,6 +16,7 @@ ACTION_INPUTS = frozenset({
     "token",
     "expires-on",
     "aml-token",
+    "storage-token",
     "tenant-id",
     "subscription-id",
     "resource-group",
@@ -68,6 +69,7 @@ CLI_OPTIONS = {
     "token": "--token",
     "expires-on": "--expires-on",
     "aml-token": "--aml-token",
+    "storage-token": "--storage-token",
     "registry-name": "--registry-name",
     "tags": "--tags",
     "promote-stage": "--promote-stage",
@@ -150,8 +152,10 @@ def _spec(
     )
 
 
-_DEPLOY_YAML_OPTIONS = ("tags",)
-_DEPLOY_AML_OPTIONS = ("aml-token", "tags")
+# Every deploy command may upload artifacts, so all of them accept a storage-scoped token.
+_DEPLOY_STORAGE_OPTIONS = ("storage-token",)
+_DEPLOY_YAML_OPTIONS = _DEPLOY_STORAGE_OPTIONS + ("tags",)
+_DEPLOY_AML_OPTIONS = _DEPLOY_STORAGE_OPTIONS + ("aml-token", "tags")
 _SHARE_OPTIONS = ("registry-name", "tags", "promote-stage")
 _WAIT_OPTIONS = ("tags",)
 _WAIT_ENV = {"timeout-minutes": "TIMEOUT_MINUTES"}
@@ -173,7 +177,7 @@ COMMAND_SPECS = {
     ("deploy", "online-endpoint"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
     ("deploy", "online-deployment"): _spec(
         "filepath",
-        option_inputs=("traffic-allocation", "tags"),
+        option_inputs=_DEPLOY_STORAGE_OPTIONS + ("traffic-allocation", "tags"),
     ),
     ("deploy", "batch-endpoint"): _spec("filepath", option_inputs=_DEPLOY_AML_OPTIONS),
     ("deploy", "batch-deployment"): _spec("filepath", option_inputs=_DEPLOY_AML_OPTIONS),
@@ -181,7 +185,8 @@ COMMAND_SPECS = {
         "job-ref",
         positional_aliases=("job-name",),
         required_inputs=("schedule-name", "cron-expression"),
-        option_inputs=("schedule-name", "cron-expression", "time-zone"),
+        option_inputs=_DEPLOY_STORAGE_OPTIONS
+        + ("schedule-name", "cron-expression", "time-zone"),
     ),
     ("share", "data"): _spec(
         "data-ref",
@@ -477,9 +482,9 @@ def main() -> None:
     os.environ.update(invocation.environment)
     sys.argv[1:] = invocation.argv
 
-    from .main import app
+    from .main import run
 
-    app()
+    run()
 
 
 if __name__ == "__main__":

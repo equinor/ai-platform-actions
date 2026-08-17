@@ -29,6 +29,12 @@ has been setup with Federated Credentials toward this repository and to the name
 The UAMI is expected to have the Contributor on the resource group with the AML workspace,
 or at least "AI Developer" on the AML workspace, and at least "Registry User" on the Registry.
 
+If the workspace storage account has shared key access disabled (`allowSharedKeyAccess: false`),
+the UAMI additionally needs "Storage Blob Data Contributor" on that storage account, and the
+Get Token step must also produce a storage-scoped token
+(`az account get-access-token --resource https://storage.azure.com`) that is passed to every
+deploy step as the `storage-token` input. Do not add this unless shared key access is disabled.
+
 ## Asset Dependencies
 
 ML assets should always be deployed accroding to their dependencies.

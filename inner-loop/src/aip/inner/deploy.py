@@ -56,6 +56,7 @@ def data(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -73,7 +74,8 @@ def data(
         resource_group=resource_group,
         workspace_name=workspace_name,
         token=token,
-        expires_on=expires_on
+        expires_on=expires_on,
+        storage_token=storage_token
     )
 
     print("[deploy data] Loading data configuration from file")
@@ -124,6 +126,7 @@ def environment(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -149,7 +152,8 @@ def environment(
         resource_group=resource_group,
         workspace_name=workspace_name,
         token=token,
-        expires_on=expires_on
+        expires_on=expires_on,
+        storage_token=storage_token
     )
    
     print("[deploy environment] Creating or updating environment")
@@ -174,6 +178,7 @@ def component(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -206,7 +211,8 @@ def component(
         resource_group=resource_group,
         workspace_name=workspace_name,
         token=token,
-        expires_on=expires_on
+        expires_on=expires_on,
+        storage_token=storage_token
     )
 
     # Due to components being deployed has a "non-standard" version by default,
@@ -251,6 +257,7 @@ def model(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -268,7 +275,8 @@ def model(
         resource_group=resource_group,
         workspace_name=workspace_name,
         token=token,
-        expires_on=expires_on
+        expires_on=expires_on,
+        storage_token=storage_token
     )
 
     print("[deploy model] Loading model configuration from file")
@@ -301,6 +309,7 @@ def job(
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -328,7 +337,8 @@ def job(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
-        aml_token=aml_token
+        aml_token=aml_token,
+        storage_token=storage_token
     )
 
     print("[deploy job] Loading job configuration from file")
@@ -399,6 +409,7 @@ def sweep_job(
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
@@ -424,7 +435,8 @@ def sweep_job(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
-        aml_token=aml_token
+        aml_token=aml_token,
+        storage_token=storage_token
     )
 
     print("[deploy sweep-job] Loading sweep job configuration from file")
@@ -463,6 +475,7 @@ def feature_set(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -487,7 +500,8 @@ def feature_set(
         resource_group=resource_group,
         workspace_name=workspace_name,
         token=token,
-        expires_on=expires_on
+        expires_on=expires_on,
+        storage_token=storage_token
     )
 
     print("[deploy feature-set] Loading data asset configuration from file")
@@ -532,6 +546,7 @@ def online_endpoint(
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -552,6 +567,7 @@ def online_endpoint(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
+        storage_token=storage_token,
     )
 
     print("[deploy online-endpoint] Loading endpoint configuration from file")
@@ -607,6 +623,7 @@ def online_deployment(
         ] = None,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
         tags: Annotated[
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
@@ -640,6 +657,7 @@ def online_deployment(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
+        storage_token=storage_token,
     )
 
     if is_kubernetes:
@@ -734,6 +752,7 @@ def batch_endpoint(
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
     ):
     """Create or update an Azure ML batch endpoint from a YAML definition."""
     print(f"[deploy batch-endpoint] Loading endpoint configuration from {filepath}")
@@ -748,6 +767,7 @@ def batch_endpoint(
         token=token,
         expires_on=int(expires_on) if expires_on else None,
         aml_token=aml_token,
+        storage_token=storage_token,
     )
     result = client.batch_endpoints.begin_create_or_update(endpoint).result()
 
@@ -772,6 +792,7 @@ def batch_deployment(
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ] = None,
         aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
     ):
     """Create or update a versioned Azure ML batch deployment from YAML."""
     print(f"[deploy batch-deployment] Loading deployment configuration from {filepath}")
@@ -788,6 +809,7 @@ def batch_deployment(
         token=token,
         expires_on=int(expires_on) if expires_on else None,
         aml_token=aml_token,
+        storage_token=storage_token,
     )
     result = client.batch_deployments.begin_create_or_update(deployment).result()
 
@@ -814,6 +836,7 @@ def schedule(
         time_zone: Annotated[Optional[str], typer.Option("--time-zone", )] = "UTC",
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
 ):
     print(f"[deploy schedule] Deploying Schedule")
     print(f"  Workspace: {workspace_name}")
@@ -830,6 +853,7 @@ def schedule(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
+        storage_token=storage_token,
     )
 
     print("[deploy schedule] Instantiating Schedule")
