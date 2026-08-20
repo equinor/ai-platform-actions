@@ -108,7 +108,7 @@ inputs:
     description: "Optional deterministic name for a batch invocation job"
     required: false
   expected-current-deployment:
-    description: "Expected batch endpoint default used for guarded promotion or rollback"
+    description: "Optional expected batch endpoint default; when set, promotion or rollback fails if the default differs"
     required: false
 
 outputs:
