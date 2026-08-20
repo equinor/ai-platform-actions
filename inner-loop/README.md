@@ -23,10 +23,10 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 
 ### Batch Release Operations
 - ✅ **invoke batch-deployment**: Invoke one named deployment on a pinned data asset or URI
-- ✅ **promote batch-deployment**: Change the endpoint default with expected-current and post-update checks
+- ✅ **promote batch-deployment**: Change the endpoint default with an optional expected-current check and post-update verification
 - ✅ **rollback batch-deployment**: Restore an explicitly recorded prior default deployment
 
-Batch promotion and rollback are idempotent. A retry that already reached its target is a no-op; a different unexpected current default fails before mutation, and the result is read back after update. The SDK does not expose an ETag precondition, so orchestrating workflows must also use a GitHub concurrency group per endpoint.
+Batch promotion and rollback are idempotent. A retry that already reached its target is a no-op, and the result is read back after update. `expected-current-deployment` is optional: leave it blank to replace whatever default is there (the only option for an endpoint that has no default yet), or set it to fail before mutation when the default is not what the workflow observed. The SDK does not expose an ETag precondition, so orchestrating workflows must also use a GitHub concurrency group per endpoint.
 
 ### Share Operations
 - ✅ **share data**: Share data assets from workspace to registry
