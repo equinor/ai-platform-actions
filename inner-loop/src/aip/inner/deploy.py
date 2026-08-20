@@ -7,6 +7,8 @@ from azure.ai.ml import (
     load_data,
     load_environment,
     load_component,
+    load_feature_set,
+    load_feature_store_entity,
     load_model,
     load_job,
     load_batch_endpoint,
@@ -35,6 +37,7 @@ from .util import (
     get_workspace_client, 
     github_output, 
     load_safe_tags,
+    amlignore_preserved,
     empty_string_to_none,
     empty_string_to_none_int,
     load_online_endpoint_safe,
@@ -42,7 +45,7 @@ from .util import (
 )
 import yaml
 from pathlib import Path
-from .arm import AssetClient
+from .arm import AssetClient, workspace_asset_id
 from .getasset import next_int_version
 import re
 
@@ -467,11 +470,31 @@ def sweep_job(
     })
 
 
+def _feature_set_spec_folder(feature_set_config) -> Optional[Path]:
+    """Resolve the spec folder the way azure-ai-ml does; None when the spec already lives in cloud storage."""
+    specification = feature_set_config.specification
+    if specification is None or not specification.path:
+        raise typer.BadParameter(
+            "Feature set YAML must set 'specification.path' to the folder holding FeatureSetSpec.yaml"
+        )
+    raw_path = str(specification.path)
+    if "://" in raw_path:
+        return None
+    folder = Path(raw_path)
+    if not folder.is_absolute():
+        folder = Path(feature_set_config.base_path, folder).resolve()
+    if not folder.is_dir():
+        raise typer.BadParameter(f"Feature set spec folder '{folder}' does not exist")
+    if not (folder / "FeatureSetSpec.yaml").is_file():
+        raise typer.BadParameter(f"Feature set spec folder '{folder}' does not contain FeatureSetSpec.yaml")
+    return folder
+
+
 @app.command()
 def feature_set(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
         resource_group: Annotated[str, typer.Option("--resource-group","-g")],
-        workspace_name: Annotated[str, typer.Option("--workspace-name","-w")],
+        feature_store_name: Annotated[str, typer.Option("--feature-store-name","-f")],
         filepath: str,
         token: Optional[str] = None,
         expires_on: Optional[int] = None,
@@ -481,52 +504,133 @@ def feature_set(
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
     ):
-    """Register a feature set data asset with feature-pipeline convention tags (US7 — Feature Engineering).
+    """Register a feature set with an Azure ML managed feature store.
 
-    Deploys a data asset (from the provided YAML) and enforces the feature-set naming
-    and tagging convention: names must start with 'feature-pipeline-' and the asset
-    receives a 'type=feature-pipeline' tag automatically.
-
-    The YAML file follows the standard AzureML data asset format.
+    Uploads the local spec folder referenced by 'specification.path', then starts provisioning
+    without waiting for it. Use 'waitfor feature-set' on the emitted reference to wait for completion.
+    https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-feature-set?view=azureml-api-2
     """
-    print(f"[deploy feature-set] Deploying feature set data asset")
-    print(f"  Workspace: {workspace_name}")
+    print(f"[deploy feature-set] Deploying feature set")
+    print(f"  Feature Store: {feature_store_name}")
     print(f"  Resource Group: {resource_group}")
     print(f"  Filepath: {filepath}")
 
-    print("[deploy feature-set] Creating workspace client")
+    print("[deploy feature-set] Loading feature set configuration from file")
+    feature_set_config = load_feature_set(source=filepath)
+    if tags:
+        if feature_set_config.tags:
+            feature_set_config.tags.update(tags)
+        else:
+            feature_set_config.tags = tags
+
+    spec_folder = _feature_set_spec_folder(feature_set_config)
+    print(f"  Spec folder: {spec_folder or feature_set_config.specification.path}")
+    print(f"  Entities: {', '.join(feature_set_config.entities or []) or 'none'}")
+    print(f"  Stage: {feature_set_config.stage}")
+
+    print("[deploy feature-set] Creating feature store client")
+    # A feature store is a workspace of kind FeatureStore, so the workspace client addresses it.
     client = get_workspace_client(
         subscription_id=subscription_id,
         resource_group=resource_group,
-        workspace_name=workspace_name,
+        workspace_name=feature_store_name,
         token=token,
         expires_on=expires_on,
         storage_token=storage_token
     )
 
-    print("[deploy feature-set] Loading data asset configuration from file")
-    data_asset = load_data(source=filepath)
+    # Feature set versions are author-managed in the YAML, so derive the next integer version
+    # from the feature store to keep repeated deployments deterministic.
+    asset_client = AssetClient.for_workspace(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=feature_store_name,
+        token=token,
+        expires_on=expires_on,
+    )
+    feature_set_config.version = next_int_version(
+        client=asset_client,
+        kind="feature-set",
+        name=feature_set_config.name,
+        subject="deploy feature-set",
+    )
 
-    # Enforce feature-set naming convention
-    if not data_asset.name.startswith("feature-pipeline-"):
-        raise typer.BadParameter(
-            f"Feature set data assets must follow the naming convention 'feature-pipeline-<name>', "
-            f"got '{data_asset.name}'"
-        )
+    print("[deploy feature-set] Uploading spec folder and starting provisioning")
+    with amlignore_preserved(spec_folder, subject="deploy feature-set"):
+        client.feature_sets.begin_create_or_update(feature_set_config)
 
-    # Enforce feature-pipeline tag
-    convention_tags = {"type": "feature-pipeline"}
+    resource_id = workspace_asset_id(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=feature_store_name,
+        kind="feature-set",
+        name=feature_set_config.name,
+        version=feature_set_config.version,
+    )
+
+    print(f"[deploy feature-set] ✅ Feature set provisioning started")
+    print(f"  Name: {feature_set_config.name}")
+    print(f"  Version: {feature_set_config.version}")
+    print(f"  Resource ID: {resource_id}")
+    print(f"  Run 'waitfor feature-set' on the reference to wait for provisioning to complete.")
+
+    github_output({
+        "reference": f"azureml:{feature_set_config.name}:{feature_set_config.version}",
+        "version": feature_set_config.version,
+        "resource-id": resource_id,
+    })
+
+
+@app.command()
+def feature_store_entity(
+        subscription_id: Annotated[str, typer.Option("--subscription","-s")],
+        resource_group: Annotated[str, typer.Option("--resource-group","-g")],
+        feature_store_name: Annotated[str, typer.Option("--feature-store-name","-f")],
+        filepath: str,
+        token: Optional[str] = None,
+        expires_on: Optional[int] = None,
+        storage_token: Annotated[Optional[str], typer.Option("--storage-token", callback=empty_string_to_none)] = None,
+        tags: Annotated[
+            Optional[str],
+            typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+        ]=None,
+    ):
+    """Register a feature store entity, defining the join keys that feature sets share.
+
+    The version in the YAML is used as written, so that feature sets can pin a stable
+    'azureml:<entity>:<version>' reference.
+    https://learn.microsoft.com/en-us/azure/machine-learning/concept-top-level-entities-in-managed-feature-store?view=azureml-api-2
+    """
+    print(f"[deploy feature-store-entity] Deploying feature store entity")
+    print(f"  Feature Store: {feature_store_name}")
+    print(f"  Resource Group: {resource_group}")
+    print(f"  Filepath: {filepath}")
+
+    print("[deploy feature-store-entity] Loading entity configuration from file")
+    entity = load_feature_store_entity(source=filepath)
     if tags:
-        convention_tags.update(tags)
-    if data_asset.tags:
-        data_asset.tags.update(convention_tags)
-    else:
-        data_asset.tags = convention_tags
+        if entity.tags:
+            entity.tags.update(tags)
+        else:
+            entity.tags = tags
 
-    print("[deploy feature-set] Creating or updating feature set data asset")
-    result = client.data.create_or_update(data_asset)
+    index_columns = ", ".join(f"{c.name}:{c.type}" for c in entity.index_columns or [])
+    print(f"  Index columns: {index_columns or 'none'}")
 
-    print(f"[deploy feature-set] ✅ Feature set deployed successfully")
+    print("[deploy feature-store-entity] Creating feature store client")
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=feature_store_name,
+        token=token,
+        expires_on=expires_on,
+        storage_token=storage_token
+    )
+
+    print("[deploy feature-store-entity] Creating or updating feature store entity")
+    result = client.feature_store_entities.begin_create_or_update(entity).result()
+
+    print(f"[deploy feature-store-entity] ✅ Feature store entity deployed successfully")
     print(f"  Name: {result.name}")
     print(f"  Version: {result.version}")
     print(f"  Resource ID: {result.id}")

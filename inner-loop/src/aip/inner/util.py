@@ -7,8 +7,9 @@ import os
 import re
 import secrets
 from collections import namedtuple
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Union
+from typing import Iterator, Optional, Union
 
 import yaml
 from azure.ai.ml import MLClient
@@ -193,6 +194,31 @@ def empty_string_to_none_int(value: Optional[str]) -> Optional[int]:
     if value is None or (isinstance(value, str) and value.strip() == ""):
         return None
     return int(value)
+
+
+AMLIGNORE_FILENAME = ".amlignore"
+AMLIGNORE_SDK_RULES = "'.*', '*.amltmp', '*.amltemp'"
+
+
+@contextmanager
+def amlignore_preserved(folder: Optional[Path], subject: str) -> Iterator[None]:
+    """Restore the folder's .amlignore, which azure-ai-ml overwrites while uploading a spec folder."""
+    if folder is None or not Path(folder).is_dir():
+        yield
+        return
+    target = Path(folder) / AMLIGNORE_FILENAME
+    original = target.read_bytes() if target.is_file() else None
+    if original is not None:
+        print(f"[{subject}] Warning: '{target}' is overwritten by Azure ML during upload, so its rules were not applied.")
+        print(f"[{subject}]   The spec folder was uploaded ignoring {AMLIGNORE_SDK_RULES} instead.")
+        print(f"[{subject}]   The original file is restored once the upload completes.")
+    try:
+        yield
+    finally:
+        if original is None:
+            target.unlink(missing_ok=True)
+        else:
+            target.write_bytes(original)
 
 
 def get_yaml_from_folder(asset_type:str, folder_path:Path)->Path|None:

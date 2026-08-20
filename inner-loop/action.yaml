@@ -6,7 +6,7 @@ inputs:
     description: "Action verb (deploy, share, waitfor, delete, invoke, promote, rollback)"
     required: true
   subject:
-    description: "Target subject (data, environment, component, model, job, online-endpoint, online-deployment, batch-endpoint, batch-deployment)"
+    description: "Target subject (data, environment, component, model, job, feature-set, feature-store-entity, online-endpoint, online-deployment, batch-endpoint, batch-deployment)"
     required: true
   token:
     description: "From azLogin action. Required unless running locally."
@@ -30,8 +30,11 @@ inputs:
     description: "Azure resource group name"
     required: true
   workspace-name:
-    description: "Azure Machine Learning workspace name"
-    required: true
+    description: "Azure Machine Learning workspace name. Required for every command except the feature store commands, which use 'feature-store-name' instead."
+    required: false
+  feature-store-name:
+    description: "Azure ML managed feature store name (for deploy feature-set, deploy feature-store-entity, waitfor feature-set). Replaces 'workspace-name' for those commands."
+    required: false
   registry-name:
     description: "Azure ML registry name (for share operations)"
     required: false
@@ -55,6 +58,9 @@ inputs:
     required: false
   model-ref:
     description: "Model reference (for share model operations)"
+    required: false
+  feature-set-ref:
+    description: "Feature set reference (for waitfor feature-set operations)"
     required: false
   job-name:
     description: "Azure ML job name (for waitfor job operations)"
@@ -150,6 +156,7 @@ runs:
     INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
     INPUT_RESOURCE_GROUP: ${{ inputs.resource-group }}
     INPUT_WORKSPACE_NAME: ${{ inputs.workspace-name }}
+    INPUT_FEATURE_STORE_NAME: ${{ inputs.feature-store-name }}
     INPUT_REGISTRY_NAME: ${{ inputs.registry-name }}
     INPUT_CLIENT_ID: ${{ inputs.client-id }}
     INPUT_FILEPATH: ${{ inputs.filepath }}
@@ -158,6 +165,7 @@ runs:
     INPUT_DATA_REF: ${{ inputs.data-ref }}
     INPUT_ENV_REF: ${{ inputs.env-ref }}
     INPUT_MODEL_REF: ${{ inputs.model-ref }}
+    INPUT_FEATURE_SET_REF: ${{ inputs.feature-set-ref }}
     INPUT_JOB_NAME: ${{ inputs.job-name }}
     INPUT_ENDPOINT_NAME: ${{ inputs.endpoint-name }}
     INPUT_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
