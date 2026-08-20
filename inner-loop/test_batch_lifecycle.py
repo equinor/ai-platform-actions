@@ -115,6 +115,28 @@ def test_set_default_deployment_rejects_concurrent_change():
     client.batch_endpoints.begin_create_or_update.assert_not_called()
 
 
+def test_set_default_deployment_replaces_unconditionally_without_expected_current():
+    endpoint = MagicMock()
+    endpoint.defaults = None
+    verified = MagicMock()
+    verified.defaults = {"deployment_name": "candidate-17"}
+    client = MagicMock()
+    client.batch_endpoints.get.side_effect = [endpoint, verified]
+
+    result, previous, changed = set_default_deployment(
+        client,
+        endpoint_name="forecast-batch",
+        target_deployment_name="candidate-17",
+        expected_current_deployment=None,
+    )
+
+    assert previous is None
+    assert changed is True
+    assert result is verified
+    assert endpoint.defaults == {"deployment_name": "candidate-17"}
+    client.batch_endpoints.begin_create_or_update.assert_called_once_with(endpoint)
+
+
 def test_set_default_deployment_rejects_unretained_update():
     before = MagicMock()
     before.defaults = {"deployment_name": "production-16"}
@@ -131,6 +153,52 @@ def test_set_default_deployment_rejects_unretained_update():
             target_deployment_name="candidate-17",
             expected_current_deployment="production-16",
         )
+
+
+class _RestDefaults:
+    """Stand-in for the SDK's BatchEndpointDefaults model, which is not a mapping."""
+
+    def __init__(self, deployment_name=None):
+        self.deployment_name = deployment_name
+
+
+def test_set_default_deployment_reads_and_writes_rest_defaults_object():
+    endpoint = MagicMock()
+    endpoint.defaults = _RestDefaults("production-16")
+    verified = MagicMock()
+    verified.defaults = _RestDefaults("candidate-17")
+    client = MagicMock()
+    client.batch_endpoints.get.side_effect = [endpoint, verified]
+
+    result, previous, changed = set_default_deployment(
+        client,
+        endpoint_name="forecast-batch",
+        target_deployment_name="candidate-17",
+        expected_current_deployment="production-16",
+    )
+
+    assert previous == "production-16"
+    assert changed is True
+    assert result is verified
+    assert endpoint.defaults.deployment_name == "candidate-17"
+
+
+def test_set_default_deployment_is_idempotent_with_rest_defaults_object():
+    endpoint = MagicMock()
+    endpoint.defaults = _RestDefaults("candidate-17")
+    client = MagicMock()
+    client.batch_endpoints.get.return_value = endpoint
+
+    _, previous, changed = set_default_deployment(
+        client,
+        endpoint_name="forecast-batch",
+        target_deployment_name="candidate-17",
+        expected_current_deployment=None,
+    )
+
+    assert previous == "candidate-17"
+    assert changed is False
+    client.batch_endpoints.begin_create_or_update.assert_not_called()
 
 
 def test_promote_batch_deployment_records_previous_default():
