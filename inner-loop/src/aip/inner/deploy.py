@@ -539,8 +539,9 @@ def feature_set(
         storage_token=storage_token
     )
 
-    # Feature set versions are author-managed in the YAML, so derive the next integer version
-    # from the feature store to keep repeated deployments deterministic.
+    # While feature set versions may be author-managed in the YAML,
+    # there is a need to keep repeated deployments deterministic,
+    # so override with a derived next integer version from the feature store.
     asset_client = AssetClient.for_workspace(
         subscription_id=subscription_id,
         resource_group=resource_group,
