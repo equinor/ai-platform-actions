@@ -22,7 +22,7 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 - ✅ **deploy batch-deployment**: Create or update a versioned batch deployment
 
 ### Batch Release Operations
-- ✅ **invoke batch-deployment**: Invoke one named deployment on a pinned data asset or URI
+- ✅ **invoke batch-deployment**: Invoke one named deployment on a pinned data asset, datastore URI or preceding job's output
 - ✅ **promote batch-deployment**: Change the endpoint default with an optional expected-current check and post-update verification
 - ✅ **rollback batch-deployment**: Restore an explicitly recorded prior default deployment
 
@@ -336,6 +336,45 @@ instance_count: 1
 
 The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the specified asset exists and reports a success status. If the asset reports a failure state or the timeout expires, the action stops with a failure, allowing pipelines to halt early when provisioned artifacts break.
 
+### Invoke a Batch Deployment
+
+```yaml
+- uses: ./inner-loop
+  with:
+    verb: invoke
+    subject: batch-deployment
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
+    aml-token: ${{ steps.azure-login.outputs.aml-token }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    workspace-name: my-workspace
+    endpoint-name: forecast-batch
+    deployment-name: candidate-17
+    input-path: azureml://jobs/${{ steps.generate-inference-data.outputs.version }}/outputs/scored
+    input-type: uri_folder
+```
+
+The invocation targets one named deployment directly, so it validates a candidate without touching endpoint traffic or the endpoint default. Use `promote batch-deployment` once the invocation result is accepted.
+
+**Accepted `input-path` forms:**
+
+| Form | Example |
+|------|---------|
+| Job output reference | `azureml://jobs/<job-name>/outputs/<output-name>` |
+| Job output subpath | `azureml://jobs/<job-name>/outputs/<output-name>/paths/<file>` |
+| Short datastore URI | `azureml://datastores/<datastore>/paths/<path>` |
+| Long datastore URI | `azureml://subscriptions/<sub>/resourcegroups/<rg>/workspaces/<ws>/datastores/<datastore>/paths/<path>` |
+| Registered data asset | `azureml:<name>:<version>` or `azureml:<name>@latest` |
+| Public URI | `https://<host>/<path>` |
+| Local path | `./data/validation` (uploaded to the workspace datastore) |
+
+Azure ML batch endpoints only consume datastore URIs, registered data assets, public URIs and local paths. Job output references are the natural handoff from a preceding `deploy job` step, so the action resolves them to the underlying datastore URI before invoking, and appends the trailing `/` that `uri_folder` inputs require. Any other `azureml://` URI is rejected up front with the list of accepted forms instead of the SDK's generic validation error.
+
+`invocation-job-name` pins the name of the created Azure ML job, which makes a retried workflow run observable under a known name. Leave it blank to let Azure ML generate one; a rerun with an already-used name fails. `experiment-name` groups the invocation job in the Azure ML studio experiment view.
+
+Outputs: `invocation-job-name` and `version` carry the submitted job name, `status` its initial status, and `resource-id` its resource ID. Chain `waitfor job` on `invocation-job-name` to block until the batch job reaches a terminal state.
+
 ### Share to Registry with Stage Promotion
 
 ```yaml
@@ -378,8 +417,8 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 
 | Input | Required | Description |
 |-------|----------|-------------|
-| `verb` | Yes | Action verb: `deploy`, `share`, `waitfor`, or `delete` |
-| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, or `online-deployment` |
+| `verb` | Yes | Action verb: `deploy`, `share`, `waitfor`, `delete`, `invoke`, `promote`, or `rollback` |
+| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, `online-deployment`, `batch-endpoint`, or `batch-deployment` |
 | `token` | No* | Access token from Azure login action (*required for GitHub Actions) |
 | `expires-on` | No* | Token expiration timestamp from Azure login action (*required for GitHub Actions) |
 | `aml-token` | No | Access token with Azure ML scope for `deploy job`, `deploy sweep-job`, and `waitfor job`; optional when `DefaultAzureCredential` is available locally |
@@ -396,8 +435,14 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 | `env-ref` | No* | Environment name (*for share environment) |
 | `model-ref` | No* | Model name (*for share model) |
 | `job-name` | No* | Job name (*for waitfor job) |
-| `endpoint-name` | No* | Online endpoint name (*for waitfor/delete online-endpoint) |
+| `endpoint-name` | No* | Endpoint name (*for waitfor/delete online-endpoint and for invoke/promote/rollback batch-deployment) |
+| `deployment-name` | No* | Deployment name (*required for invoke/promote/rollback batch-deployment) |
 | `deployment-resource` | No* | Online deployment resource ID (*for waitfor/delete online-deployment) |
+| `input-path` | No* | Pinned data asset or URI used to invoke a batch deployment (*required for invoke batch-deployment) |
+| `input-type` | No | Batch invocation input type: `uri_folder` (default) or `uri_file` |
+| `invocation-job-name` | No | Deterministic name for the created batch invocation job |
+| `experiment-name` | No | Azure ML experiment name (for `deploy job`, `deploy sweep-job`, `invoke batch-deployment`) |
+| `expected-current-deployment` | No | Expected batch endpoint default; promotion or rollback fails when the actual default differs |
 | `traffic-allocation` | No | Traffic percentage (0-100) to allocate to deployment |
 | `tags` | No | Tags in format: `key1=value1,key2=value2` |
 | `promote-stage` | No | Stage to promote asset to (e.g., "Production") |
@@ -410,6 +455,14 @@ The waitfor verb polls Azure ML every 10 seconds (up to 30 minutes) until the sp
 | `resource-id` | Full Azure resource ID of the created/shared resource |
 | `reference` | Azure ML reference string (e.g., `azureml:name:version`) |
 | `version` | Version number of the resource (or job name for jobs) |
+| `lineage-metadata` | JSON-encoded lineage metadata for a submitted job (git SHA, branch, workflow run ID) |
+| `best-trial-run-id` | Run ID of the best trial in a completed sweep job |
+| `invocation-job-name` | Azure ML job created by `invoke batch-deployment` |
+| `status` | Status of the submitted batch invocation job |
+| `previous-deployment-name` | Batch endpoint default before promotion |
+| `replaced-deployment-name` | Batch endpoint default replaced during rollback |
+| `default-deployment-name` | Batch endpoint default after promotion or rollback |
+| `changed` | Whether promotion or rollback changed the endpoint |
 
 ## Complete Example Pipeline
 

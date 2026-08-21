@@ -294,6 +294,99 @@ def test_invoke_named_batch_deployment_uses_pinned_input():
     assert output.call_args.args[0]["invocation-job-name"] == "validation-job-17"
 
 
+def test_invoke_resolves_job_output_reference_to_datastore_uri():
+    client = MagicMock()
+    client.jobs._get_named_output_uri.return_value = {
+        "scored": "azureml://datastores/workspaceblobstore/paths/azureml/run-guid/scored/"
+    }
+    invocation = MagicMock()
+    invocation.name = "validation-job-18"
+    client.batch_endpoints.invoke.return_value = invocation
+
+    with (
+        patch("aip.inner.invoke.get_workspace_client", return_value=client),
+        patch("aip.inner.invoke.Input") as input_factory,
+        patch("aip.inner.invoke.github_output"),
+    ):
+        invoke.batch_deployment(
+            "subscription",
+            "resource-group",
+            "workspace",
+            "forecast-batch",
+            "candidate-18",
+            "azureml://jobs/musing_thread_mjx4lbyg7r/outputs/scored",
+            "uri_folder",
+        )
+
+    client.jobs._get_named_output_uri.assert_called_once_with("musing_thread_mjx4lbyg7r", "scored")
+    input_factory.assert_called_once_with(
+        path="azureml://datastores/workspaceblobstore/paths/azureml/run-guid/scored/",
+        type="uri_folder",
+    )
+
+
+def test_normalize_input_path_appends_job_output_subpath():
+    client = MagicMock()
+    client.jobs._get_named_output_uri.return_value = {
+        "scored": "azureml://datastores/workspaceblobstore/paths/azureml/run-guid/scored/"
+    }
+
+    resolved = invoke.normalize_input_path(
+        client, "azureml://jobs/run-guid/outputs/scored/paths/predictions.csv", "uri_file"
+    )
+
+    assert resolved == "azureml://datastores/workspaceblobstore/paths/azureml/run-guid/scored/predictions.csv"
+
+
+def test_normalize_input_path_falls_back_to_declared_job_output_path():
+    client = MagicMock()
+    client.jobs._get_named_output_uri.return_value = {}
+    client.jobs.get.return_value.outputs = {
+        "scored": MagicMock(path="azureml://datastores/pinned/paths/exports/scored")
+    }
+
+    resolved = invoke.normalize_input_path(client, "azureml://jobs/run-guid/outputs/scored", "uri_folder")
+
+    client.jobs.get.assert_called_once_with("run-guid")
+    assert resolved == "azureml://datastores/pinned/paths/exports/scored/"
+
+
+def test_normalize_input_path_rejects_unresolvable_job_output():
+    client = MagicMock()
+    client.jobs._get_named_output_uri.return_value = {}
+    client.jobs.get.return_value.outputs = {}
+
+    with pytest.raises(typer.BadParameter):
+        invoke.normalize_input_path(client, "azureml://jobs/run-guid/outputs/missing", "uri_folder")
+
+
+def test_normalize_input_path_rejects_unsupported_azureml_uri():
+    with pytest.raises(typer.BadParameter):
+        invoke.normalize_input_path(MagicMock(), "azureml://locations/westeurope/workspaces/ws/data/x/versions/1", "uri_folder")
+
+
+@pytest.mark.parametrize(
+    "input_path, input_type, expected",
+    [
+        (
+            "azureml://datastores/workspaceblobstore/paths/exports/scored",
+            "uri_folder",
+            "azureml://datastores/workspaceblobstore/paths/exports/scored/",
+        ),
+        (
+            "azureml://datastores/workspaceblobstore/paths/exports/scored.csv",
+            "uri_file",
+            "azureml://datastores/workspaceblobstore/paths/exports/scored.csv",
+        ),
+        ("azureml:validation-data:4", "uri_folder", "azureml:validation-data:4"),
+        ("azureml:validation-data@latest", "uri_folder", "azureml:validation-data@latest"),
+        ("./local/inputs", "uri_folder", "./local/inputs"),
+    ],
+)
+def test_normalize_input_path_preserves_supported_forms(input_path, input_type, expected):
+    assert invoke.normalize_input_path(MagicMock(), input_path, input_type) == expected
+
+
 def test_action_adapter_routes_promote_arguments_and_environment():
     endpoint = MagicMock()
     endpoint.defaults = {"deployment_name": "production-16"}
