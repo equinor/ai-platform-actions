@@ -99,7 +99,7 @@ inputs:
     description: "Azure ML experiment name (for deploy job, deploy sweep-job). Overrides the experiment name in the YAML."
     required: false
   input-path:
-    description: "Pinned Azure ML data asset or URI used to invoke a batch deployment"
+    description: "Data asset, datastore URI, job output reference (azureml://jobs/<job>/outputs/<output>), public URI or local path used to invoke a batch deployment"
     required: false
   input-type:
     description: "Batch invocation input type (uri_file or uri_folder)"
