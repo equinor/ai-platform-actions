@@ -20,6 +20,8 @@ The Inner Loop action consolidates various Azure ML operations (deploy, share, w
 - ✅ **deploy online-deployment**: Deploy managed online deployments with traffic allocation
 - ✅ **deploy batch-endpoint**: Create or update an Azure ML batch endpoint
 - ✅ **deploy batch-deployment**: Create or update a versioned batch deployment
+- ✅ **deploy feature-set**: Register a feature set with a managed feature store (does not wait; pair with `waitfor feature-set`)
+- ✅ **deploy feature-store-entity**: Register the join-key entity that feature sets reference
 
 ### Batch Release Operations
 - ✅ **invoke batch-deployment**: Invoke one named deployment on a pinned data asset, datastore URI or preceding job's output
@@ -42,6 +44,7 @@ Batch promotion and rollback are idempotent. A retry that already reached its ta
 - ✅ **waitfor job**: Observe Azure ML job lifecycle until it reaches a terminal status (Completed/Failed)
 - ✅ **waitfor online-endpoint**: Wait for online endpoint provisioning to complete
 - ✅ **waitfor online-deployment**: Wait for online deployment provisioning to complete
+- ✅ **waitfor feature-set**: Wait for a feature set registration to finish provisioning in the feature store
 
 ### Delete Operations
 - ✅ **delete online-endpoint**: Delete an online endpoint (and all its deployments)
@@ -413,12 +416,62 @@ Outputs: `invocation-job-name` and `version` carry the submitted job name, `stat
 - Supports stage promotion via tags
 - Works for data, environment, component, and model assets
 
+### Deploy to a Managed Feature Store
+
+The feature store commands target an Azure ML [managed feature store](https://learn.microsoft.com/en-us/azure/machine-learning/concept-what-is-managed-feature-store?view=azureml-api-2), which is a workspace of kind `FeatureStore`. They take `feature-store-name` instead of `workspace-name`, and passing `workspace-name` to them fails input validation so a feature set cannot be sent to a regular workspace by mistake. The feature store itself must already exist.
+
+Register the entity first, because the feature set YAML references it as `azureml:<entity>:<version>`. Entity versions are taken from the YAML exactly as written so those references stay stable; feature set versions are auto-incremented from the feature store like `deploy data` and `deploy component`.
+
+```yaml
+- name: Deploy Feature Store Entity
+  uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: feature-store-entity
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    feature-store-name: my-feature-store
+    filepath: ./featurestore/entities/account.yaml
+
+- name: Deploy Feature Set
+  id: feature-set
+  uses: ./inner-loop
+  with:
+    verb: deploy
+    subject: feature-set
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    feature-store-name: my-feature-store
+    filepath: ./featurestore/featuresets/transactions/featureset_asset.yaml
+    tags: "data_type=nonPII"
+
+- name: Wait for Feature Set
+  uses: ./inner-loop
+  with:
+    verb: waitfor
+    subject: feature-set
+    token: ${{ steps.azure-login.outputs.access-token }}
+    expires-on: ${{ steps.azure-login.outputs.expires-on }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    resource-group: my-resource-group
+    feature-store-name: my-feature-store
+    feature-set-ref: ${{ steps.feature-set.outputs.reference }}
+```
+
+`deploy feature-set` uploads the spec folder, starts provisioning and returns immediately with a reference, so chain `waitfor feature-set` whenever a later step consumes the feature set. See [Deploy Feature Set](EXAMPLES.md#deploy-feature-set) for the required spec folder layout and the `.amlignore` caveat.
+
+The identity needs **AzureML Data Scientist** on the feature store, plus **Storage Blob Data Contributor** on its storage account for the spec folder upload.
+
 ## Inputs
 
 | Input | Required | Description |
 |-------|----------|-------------|
 | `verb` | Yes | Action verb: `deploy`, `share`, `waitfor`, `delete`, `invoke`, `promote`, or `rollback` |
-| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `online-endpoint`, `online-deployment`, `batch-endpoint`, or `batch-deployment` |
+| `subject` | Yes | Target subject: `data`, `environment`, `component`, `model`, `job`, `feature-set`, `feature-store-entity`, `online-endpoint`, `online-deployment`, `batch-endpoint`, or `batch-deployment` |
 | `token` | No* | Access token from Azure login action (*required for GitHub Actions) |
 | `expires-on` | No* | Token expiration timestamp from Azure login action (*required for GitHub Actions) |
 | `aml-token` | No | Access token with Azure ML scope for `deploy job`, `deploy sweep-job`, and `waitfor job`; optional when `DefaultAzureCredential` is available locally |
@@ -426,7 +479,8 @@ Outputs: `invocation-job-name` and `version` carry the submitted job name, `stat
 | `tenant-id` | No | Azure tenant ID (required for token-based auth) |
 | `subscription-id` | Yes | Azure subscription ID |
 | `resource-group` | Yes | Azure resource group name |
-| `workspace-name` | Yes | Azure ML workspace name |
+| `workspace-name` | No* | Azure ML workspace name (*required for every command except the feature store commands, which must omit it) |
+| `feature-store-name` | No* | Managed feature store name (*required for `deploy feature-set`, `deploy feature-store-entity` and `waitfor feature-set`) |
 | `registry-name` | No* | Azure ML registry name (*required for share operations) |
 | `client-id` | No | Client ID for federated credentials (required for token-based auth) |
 | `filepath` | No* | Path to configuration YAML file (*required for deploy operations) |
@@ -434,6 +488,7 @@ Outputs: `invocation-job-name` and `version` carry the submitted job name, `stat
 | `data-ref` | No* | Data asset name (*for share data) |
 | `env-ref` | No* | Environment name (*for share environment) |
 | `model-ref` | No* | Model name (*for share model) |
+| `feature-set-ref` | No* | Feature set reference with an explicit version (*for waitfor feature-set) |
 | `job-name` | No* | Job name (*for waitfor job) |
 | `endpoint-name` | No* | Endpoint name (*for waitfor/delete online-endpoint and for invoke/promote/rollback batch-deployment) |
 | `deployment-name` | No* | Deployment name (*required for invoke/promote/rollback batch-deployment) |

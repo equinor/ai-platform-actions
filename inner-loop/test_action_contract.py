@@ -74,7 +74,7 @@ def _valid_inputs(command: tuple[str, str]) -> dict[str, str]:
         "subject": command[1],
         "subscription-id": "subscription-value",
         "resource-group": "resource-group-value",
-        "workspace-name": "workspace-name-value",
+        spec.scope_input: f"{spec.scope_input}-value",
         spec.positional_input: "positional-value",
     })
     for input_name in spec.required_inputs:
@@ -151,21 +151,38 @@ def test_action_entrypoint_import_does_not_import_cli_or_azure():
     assert result.returncode == 0, result.stderr
 
 
-def test_matrix_has_all_30_registered_pairs():
+def test_matrix_has_all_32_registered_pairs():
     counts: dict[str, int] = {}
     for verb, _ in COMMAND_SPECS:
         counts[verb] = counts.get(verb, 0) + 1
 
-    assert len(COMMAND_SPECS) == 30
+    assert len(COMMAND_SPECS) == 32
     assert counts == {
-        "deploy": 12,
+        "deploy": 13,
         "share": 4,
-        "waitfor": 8,
+        "waitfor": 9,
         "delete": 2,
         "invoke": 1,
         "promote": 1,
         "rollback": 2,
     }
+
+
+def test_feature_store_commands_are_scoped_to_the_feature_store():
+    feature_commands = {
+        command for command, spec in COMMAND_SPECS.items()
+        if spec.scope_input == "feature-store-name"
+    }
+
+    assert feature_commands == {
+        ("deploy", "feature-set"),
+        ("deploy", "feature-store-entity"),
+        ("waitfor", "feature-set"),
+    }
+    for command in feature_commands:
+        spec = COMMAND_SPECS[command]
+        assert "workspace-name" not in spec.applicable_inputs, command
+        assert "feature-store-name" in spec.required_inputs, command
 
 
 @pytest.mark.parametrize("command", COMMANDS, ids=lambda value: "-".join(value))

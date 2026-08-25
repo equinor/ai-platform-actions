@@ -21,6 +21,7 @@ ACTION_INPUTS = frozenset({
     "subscription-id",
     "resource-group",
     "workspace-name",
+    "feature-store-name",
     "registry-name",
     "client-id",
     "filepath",
@@ -29,6 +30,7 @@ ACTION_INPUTS = frozenset({
     "data-ref",
     "env-ref",
     "model-ref",
+    "feature-set-ref",
     "job-name",
     "endpoint-name",
     "deployment-name",
@@ -56,6 +58,7 @@ POSITIONAL_INPUTS = frozenset({
     "data-ref",
     "env-ref",
     "model-ref",
+    "feature-set-ref",
     "job-name",
     "job-ref",
     "endpoint-name",
@@ -66,6 +69,7 @@ CLI_OPTIONS = {
     "subscription-id": "--subscription",
     "resource-group": "--resource-group",
     "workspace-name": "--workspace-name",
+    "feature-store-name": "--feature-store-name",
     "token": "--token",
     "expires-on": "--expires-on",
     "aml-token": "--aml-token",
@@ -90,15 +94,18 @@ COMMON_REQUIRED = frozenset({
     "subject",
     "subscription-id",
     "resource-group",
-    "workspace-name",
 })
-COMMON_OPTION_INPUTS = ("subscription-id", "resource-group", "workspace-name", "token", "expires-on")
+DEFAULT_SCOPE_INPUT = "workspace-name"
+FEATURE_STORE_SCOPE_INPUT = "feature-store-name"
+COMMON_LEADING_OPTIONS = ("subscription-id", "resource-group")
+COMMON_TRAILING_OPTIONS = ("token", "expires-on")
 
 
 @dataclass(frozen=True)
 class CommandSpec:
     positional_input: str
     positional_aliases: tuple[str, ...]
+    scope_input: str
     required_inputs: frozenset[str]
     cli_options: Mapping[str, str]
     environment_inputs: Mapping[str, str]
@@ -132,11 +139,12 @@ def _spec(
     positional_input: str,
     *,
     positional_aliases: tuple[str, ...] = (),
+    scope_input: str = DEFAULT_SCOPE_INPUT,
     required_inputs: tuple[str, ...] = (),
     option_inputs: tuple[str, ...] = (),
     environment_inputs: Mapping[str, str] | None = None,
 ) -> CommandSpec:
-    options = COMMON_OPTION_INPUTS + option_inputs
+    options = COMMON_LEADING_OPTIONS + (scope_input,) + COMMON_TRAILING_OPTIONS + option_inputs
     conflicts = (
         (frozenset({positional_input, *positional_aliases}),)
         if positional_aliases
@@ -145,7 +153,8 @@ def _spec(
     return CommandSpec(
         positional_input=positional_input,
         positional_aliases=positional_aliases,
-        required_inputs=COMMON_REQUIRED | {positional_input, *required_inputs},
+        scope_input=scope_input,
+        required_inputs=COMMON_REQUIRED | {scope_input, positional_input, *required_inputs},
         cli_options={name: CLI_OPTIONS[name] for name in options},
         environment_inputs=environment_inputs or {},
         conflicting_inputs=conflicts,
@@ -173,7 +182,16 @@ COMMAND_SPECS = {
         "filepath",
         option_inputs=_DEPLOY_AML_OPTIONS + ("experiment-name",),
     ),
-    ("deploy", "feature-set"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
+    ("deploy", "feature-set"): _spec(
+        "filepath",
+        scope_input=FEATURE_STORE_SCOPE_INPUT,
+        option_inputs=_DEPLOY_YAML_OPTIONS,
+    ),
+    ("deploy", "feature-store-entity"): _spec(
+        "filepath",
+        scope_input=FEATURE_STORE_SCOPE_INPUT,
+        option_inputs=_DEPLOY_YAML_OPTIONS,
+    ),
     ("deploy", "online-endpoint"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
     ("deploy", "online-deployment"): _spec(
         "filepath",
@@ -248,6 +266,12 @@ COMMAND_SPECS = {
     ("waitfor", "sweep-job"): _spec(
         "job-name",
         positional_aliases=("job-ref",),
+        option_inputs=_WAIT_OPTIONS,
+        environment_inputs=_WAIT_ENV,
+    ),
+    ("waitfor", "feature-set"): _spec(
+        "feature-set-ref",
+        scope_input=FEATURE_STORE_SCOPE_INPUT,
         option_inputs=_WAIT_OPTIONS,
         environment_inputs=_WAIT_ENV,
     ),

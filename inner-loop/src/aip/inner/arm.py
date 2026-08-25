@@ -33,6 +33,8 @@ ASSET_COLLECTIONS = {
     "environment": "environments",
     "component": "components",
     "model": "models",
+    "feature-set": "featuresets",
+    "feature-store-entity": "featurestoreEntities",
 }
 
 LIST_VIEW_ACTIVE = "ActiveOnly"
@@ -379,6 +381,23 @@ def _collection(kind: str) -> str:
     if not collection:
         raise ValueError(f"Unknown asset kind '{kind}'. Expected one of {sorted(ASSET_COLLECTIONS)}.")
     return collection
+
+
+def workspace_asset_id(
+    subscription_id: str,
+    resource_group: str,
+    workspace_name: str,
+    kind: str,
+    name: str,
+    version: str,
+) -> str:
+    """ARM ID of an asset version, for commands that report a resource before it finishes provisioning."""
+    return (
+        f"/subscriptions/{subscription_id}"
+        f"/resourceGroups/{resource_group}"
+        f"/providers/{ML_PROVIDER}/workspaces/{workspace_name}"
+        f"/{_collection(kind)}/{name}/versions/{version}"
+    )
 
 
 def _to_asset_version(body: dict, asset_name: str) -> AssetVersion:

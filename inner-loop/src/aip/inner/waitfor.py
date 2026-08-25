@@ -78,7 +78,7 @@ def _get_provisioning_state_from_rest(
     The SDK objects don't expose provisioning_state, so we need to call
     the REST API directly to get this information.
     
-    Supported asset types: environment, component, data, model
+    Supported asset types: environment, component, data, model, feature-set
     """
     base_url = _get_rest_api_base_url(subscription_id, resource_group, workspace_name)
     
@@ -88,6 +88,7 @@ def _get_provisioning_state_from_rest(
         "component": "components",
         "data": "data",
         "model": "models",
+        "feature-set": "featuresets",
     }
     
     rest_asset_type = asset_type_map.get(asset_type)
@@ -815,6 +816,59 @@ def sweep_job(
     if best_trial_run_id:
         output["best-trial-run-id"] = best_trial_run_id
     github_output(output)
+
+
+@app.command()
+def feature_set(
+    subscription_id: Annotated[str, typer.Option("--subscription", "-s")],
+    resource_group: Annotated[str, typer.Option("--resource-group", "-g")],
+    feature_store_name: Annotated[str, typer.Option("--feature-store-name", "-f")],
+    feature_set_ref: str,
+    token: Optional[str] = None,
+    expires_on: Optional[int] = None,
+    tags: Annotated[
+        Optional[str],
+        typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
+    ] = None,
+):
+    """Wait for a feature set registered by 'deploy feature-set' to finish provisioning."""
+    print(f"[waitfor feature-set] Waiting for feature set {feature_set_ref}")
+    feature_set_props = get_ref_properties(feature_set_ref)
+    feature_set_version = _require_version("feature-set", feature_set_props.version)
+
+    # A feature store is a workspace of kind FeatureStore, so the workspace client addresses it.
+    client = get_workspace_client(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        workspace_name=feature_store_name,
+        token=token,
+        expires_on=expires_on,
+    )
+
+    token_manager = TokenManager(token=token, expires_on=expires_on)
+
+    entity, final_state = _wait_for_asset(
+        subject="feature-set",
+        fetch_entity=lambda: client.feature_sets.get(
+            name=feature_set_props.name, version=feature_set_version
+        ),
+        tags=tags,
+        fetch_state=lambda access_token: _get_provisioning_state_from_rest(
+            asset_type="feature-set",
+            subscription_id=subscription_id,
+            resource_group=resource_group,
+            workspace_name=feature_store_name,
+            name=feature_set_props.name,
+            version=feature_set_version,
+            access_token=access_token,
+        ),
+        token_manager=token_manager,
+    )
+
+    print(
+        f"[waitfor feature-set] ✅ Feature set '{entity.name}' version '{entity.version}' reached state '{final_state or 'available'}'."
+    )
+    _emit_github_output(entity)
 
 
 if __name__ == "__main__":
