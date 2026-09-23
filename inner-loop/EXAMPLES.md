@@ -284,6 +284,7 @@ python main.py share component \
 
 **Features:**
 - Downloads component from workspace
+- Filters the source workspace component by the supplied tags
 - Replaces environment references with registry equivalents
 - Automatically increments version in registry
 - Supports stage promotion via tags
