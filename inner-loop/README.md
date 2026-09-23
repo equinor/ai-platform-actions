@@ -76,8 +76,9 @@ Each module uses typer's `@app.command()` decorator for clean, self-documenting 
 - **Automatic Version Management**: Components automatically increment to next integer version
 - **Archived Container Recovery**: Every versioned asset is two resources in Azure, a container and its versions. An archived container hides all its versions, including active ones, and the SDK cannot reach that flag. Asset lookups read both layers over the [ARM REST API](https://learn.microsoft.com/rest/api/azureml/) instead, so deploy restores an archived workspace container automatically and reports an archived registry container without touching it.
 - **Command Normalization**: Multiline component commands are automatically cleaned (backslashes and line breaks removed)
-- **Tag Merging**: Tags from YAML configs and command-line inputs are intelligently merged
-- **Stage Promotion**: Share operations support promoting assets to specific stages (e.g., "Production")
+- **Deploy Tag Merging**: Deploy operations merge tags from YAML configs and command-line inputs
+- **Share Tag Selection**: For data, environment, and model shares, `tags` selects a source workspace asset whose tags must match
+- **Registry Stage Tagging**: `promote-stage` writes a `stage` tag (for example, `stage=Production`) on the new registry version
 - **Environment Replacement**: Component sharing automatically replaces workspace environments with registry equivalents
 - **Flexible Authentication**: Supports both token-based (federated credentials) and DefaultAzureCredential
 
@@ -380,6 +381,17 @@ Outputs: `invocation-job-name` and `version` carry the submitted job name, `stat
 
 ### Share to Registry with Stage Promotion
 
+Share inputs have different tag behavior depending on the asset type:
+
+| Input | Data, environment, and model | Component |
+|-------|------------------------------|-----------|
+| `tags` | Filters the source workspace asset version selected by the command. Every supplied key must exist and every nonempty supplied value must match exactly. Extra source tags are allowed. | Merges the supplied tags into the component that is created in the registry. It does not filter the source component. |
+| `promote-stage` | After sharing, sets `stage=<value>` on the newly created registry version. | Before creating the registry component, merges `stage=<value>` into its tags. |
+
+Tag keys and nonempty values are case-sensitive. A tag without a value (`key` or `key=`) requires only that the key exists. Tag matching does not search all versions: `share environment` filters the explicit version in `env-ref`, or the latest active version when no version is given. `share data` and `share model` currently filter the latest active version even if their reference includes a version.
+
+`promote-stage` is ordinary registry tag mutation, not a separate Azure ML lifecycle operation. It is independent of source selection: for example, `tags: "stage=prod"` requires that exact tag on the source, while `promote-stage: "Production"` writes `stage=Production` to the destination.
+
 ```yaml
 - name: Deploy Component to Workspace
   id: deploy
@@ -410,10 +422,12 @@ Outputs: `invocation-job-name` and `version` carry the submitted job name, `stat
     tags: "env=prod"
 ```
 
+  In this component example, `env=prod` and `stage=Production` are written to the new registry component. For `share environment`, `share data`, or `share model`, the same `tags: "env=prod"` input would instead require the source workspace asset to already have that tag. A source tag mismatch is currently reported as though the named asset does not exist.
+
 **Share Features:**
 - Automatically increments version in registry
 - Replaces workspace environment references with registry equivalents (for components)
-- Supports stage promotion via tags
+  - Can set a `stage` tag on the new registry version with `promote-stage`
 - Works for data, environment, component, and model assets
 
 ### Deploy to a Managed Feature Store
@@ -499,8 +513,8 @@ The identity needs **AzureML Data Scientist** on the feature store, plus **Stora
 | `experiment-name` | No | Azure ML experiment name (for `deploy job`, `deploy sweep-job`, `invoke batch-deployment`) |
 | `expected-current-deployment` | No | Expected batch endpoint default; promotion or rollback fails when the actual default differs |
 | `traffic-allocation` | No | Traffic percentage (0-100) to allocate to deployment |
-| `tags` | No | Tags in format: `key1=value1,key2=value2` |
-| `promote-stage` | No | Stage to promote asset to (e.g., "Production") |
+| `tags` | No | Comma-separated `key=value` pairs. For sharing data, environments, and models, these must match tags on the source workspace asset; for sharing components, they are merged into the registry component. Deploy behavior is described in each deploy example. |
+| `promote-stage` | No | For share operations, sets the ordinary tag `stage=<value>` on the newly created registry version (e.g., `stage=Production`); it does not select or modify the source asset. |
 | `image-build-compute` | No | Compute cluster name for environment builds (instead of serverless) |
 
 ## Outputs
