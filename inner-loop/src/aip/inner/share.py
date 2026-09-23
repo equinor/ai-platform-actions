@@ -4,6 +4,7 @@ Share operations for Inner Loop Action
 
 import os
 import typer
+from collections.abc import Callable, Sequence
 from typing import Optional, Annotated
 from .util import (
     get_new_asset_version,
@@ -15,7 +16,7 @@ from .util import (
     get_ref_properties,
     github_output
 )
-from .arm import AssetClient
+from .arm import AssetClient, AssetVersion
 from .getasset import (
     getcomponent, 
     getenvironment,
@@ -30,11 +31,40 @@ from time import sleep
 
 app = typer.Typer()
 
+_SHARE_VISIBILITY_RETRY_DELAYS = (2, 4, 8, 16, 30, 30, 30)
+
 
 def _registry_reference(registry_name: Optional[str], asset_type: str, asset) -> str:
     if not registry_name:
         raise ValueError("registry-name is required for share operations")
     return f"azureml://registries/{registry_name}/{asset_type}/{asset.name}/versions/{asset.version}"
+
+
+def _wait_for_shared_asset(
+    fetch_versions: Callable[[], list[AssetVersion]],
+    asset_type: str,
+    asset_name: str,
+    asset_version: str | int,
+    retry_delays: Sequence[int] = _SHARE_VISIBILITY_RETRY_DELAYS,
+) -> AssetVersion:
+    for attempt in range(len(retry_delays) + 1):
+        versions = fetch_versions()
+        if versions:
+            return versions[0]
+        if attempt < len(retry_delays):
+            delay = retry_delays[attempt]
+            print(
+                f"[share {asset_type}] Registry {asset_type} '{asset_name}' version "
+                f"'{asset_version}' is not visible through ARM yet. Retrying in {delay} seconds "
+                f"({attempt + 1}/{len(retry_delays)})."
+            )
+            sleep(delay)
+
+    raise RuntimeError(
+        f"Registry {asset_type} '{asset_name}' version '{asset_version}' was not visible through ARM "
+        f"after {len(retry_delays) + 1} attempts over {sum(retry_delays)} seconds. "
+        "The share may have succeeded; check the Azure ML registry before retrying."
+    )
 
 
 @app.command()
@@ -138,21 +168,16 @@ def data(
         reg_data.tags=reg_data_tags
         reg_client.data.create_or_update(reg_data)
     
-    data_result=getdata(
-        client=reg_assets,
-        name=data_name,
-        version=latest_reg_version
-    )
-
-    if len(data_result) < 1:
-        sleep(5)
-        data_result=getdata(
+    data_result = _wait_for_shared_asset(
+        lambda: getdata(
             client=reg_assets,
             name=data_name,
             version=latest_reg_version
-        )
-
-    data_result = data_result[0]
+        ),
+        asset_type="data",
+        asset_name=data_name,
+        asset_version=latest_reg_version,
+    )
 
     print(f"[share data] ✅ Data shared successfully")
     print(f"  Name: {data_result.name}")
@@ -267,21 +292,16 @@ def environment(
         reg_env.tags=reg_env_tags
         reg_client.environments.create_or_update(reg_env)
 
-    environment_result = getenvironment(
-        client=reg_assets,
-        name=env_name,
-        version=latest_reg_version
-    )
-
-    if len(environment_result) < 1:
-        sleep(5)
-        environment_result = getenvironment(
+    environment_result = _wait_for_shared_asset(
+        lambda: getenvironment(
             client=reg_assets,
             name=env_name,
             version=latest_reg_version
-        )
-
-    environment_result = environment_result[0]
+        ),
+        asset_type="environment",
+        asset_name=env_name,
+        asset_version=latest_reg_version,
+    )
 
 
     print(f"[share environment] ✅ Environment shared successfully")
@@ -391,21 +411,16 @@ def model(
         reg_model.tags=reg_model_tags
         reg_client.models.create_or_update(reg_model)
 
-    model_result = getmodel(
-        client=reg_assets,
-        name=model_name,
-        version=latest_reg_version
-    )
-
-    if len(model_result) < 1:
-        sleep(5)
-        model_result = getmodel(
+    model_result = _wait_for_shared_asset(
+        lambda: getmodel(
             client=reg_assets,
             name=model_name,
             version=latest_reg_version
-        )
-
-    model_result = model_result[0]
+        ),
+        asset_type="model",
+        asset_name=model_name,
+        asset_version=latest_reg_version,
+    )
 
     print(f"[share model] ✅ Model shared successfully")
     print(f"  Name: {model_result.name}")
@@ -526,21 +541,16 @@ def component(
             version=latest_reg_version
         )
     
-    component_result = getcomponent(
-        client=reg_assets,
-        name=component_name,
-        version=latest_reg_version
-    )
-    
-    if len(component_result) < 1:
-        sleep(5)
-        component_result = getcomponent(
+    component_result = _wait_for_shared_asset(
+        lambda: getcomponent(
             client=reg_assets,
             name=component_name,
             version=latest_reg_version
-        )
-
-    component_result = component_result[0]
+        ),
+        asset_type="component",
+        asset_name=component_name,
+        asset_version=latest_reg_version,
+    )
 
     print(f"[share component] ✅ Component shared successfully")
     print(f"  Name: {component_result.name}")
