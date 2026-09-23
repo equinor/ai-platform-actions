@@ -31,6 +31,12 @@ from time import sleep
 app = typer.Typer()
 
 
+def _registry_reference(registry_name: Optional[str], asset_type: str, asset) -> str:
+    if not registry_name:
+        raise ValueError("registry-name is required for share operations")
+    return f"azureml://registries/{registry_name}/{asset_type}/{asset.name}/versions/{asset.version}"
+
+
 @app.command()
 def data(
         subscription_id: Annotated[str, typer.Option("--subscription","-s")],
@@ -153,6 +159,8 @@ def data(
     print(f"  Version: {data_result.version}")
     print(f"  Resource ID: {data_result.id}")
     github_output({
+        "reference": _registry_reference(registry_name, "data", data_result),
+        "version": data_result.version,
         "resource-id":data_result.id
     })
 
@@ -281,8 +289,8 @@ def environment(
     print(f"  Version: {environment_result.version}")
     print(f"  Resource ID: {environment_result.id}")
     github_output({
-        #"reference":f"azureml:{environment_result.name}:{environment_result.version}",
-        #"version":environment_result.version,
+        "reference": _registry_reference(registry_name, "environments", environment_result),
+        "version": environment_result.version,
         "resource-id":environment_result.id
     })
 
@@ -404,6 +412,8 @@ def model(
     print(f"  Version: {model_result.version}")
     print(f"  Resource ID: {model_result.id}")
     github_output({
+        "reference": _registry_reference(registry_name, "models", model_result),
+        "version": model_result.version,
         "resource-id":model_result.id
     })
 
@@ -456,7 +466,12 @@ def component(
         token=token,
         expires_on=expires_on
     )
-    list_comp_ws = getcomponent(client=ws_assets, name=component_name, version=component_version)
+    list_comp_ws = getcomponent(
+        client=ws_assets,
+        name=component_name,
+        version=component_version,
+        tags=tags
+    )
     if len(list_comp_ws)<1:
         raise ValueError("There is no such component in the workspace")
     if len(list_comp_ws)>1:
@@ -532,6 +547,8 @@ def component(
     print(f"  Version: {component_result.version}")
     print(f"  Resource ID: {component_result.id}")
     github_output({
+        "reference": _registry_reference(registry_name, "components", component_result),
+        "version": component_result.version,
         "resource-id":component_result.id
     })
 
