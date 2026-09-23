@@ -139,7 +139,7 @@ outputs:
 
 runs:
   using: docker
-  image: Dockerfile
+  image: docker://ghcr.io/equinor/ai-platform-actions/outer-loop@sha256:9891f238ddd33f90137263c744917d38430d62c69eb8235d01248b5098edfe99
   env:
     AIP_OUTER_ACTION_MODE: "true"
     INPUT_VERB: ${{ inputs.verb }}
