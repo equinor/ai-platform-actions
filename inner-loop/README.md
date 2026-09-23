@@ -79,6 +79,7 @@ Each module uses typer's `@app.command()` decorator for clean, self-documenting 
 - **Deploy Tag Merging**: Deploy operations merge tags from YAML configs and command-line inputs
 - **Share Tag Selection**: For data, environment, and model shares, `tags` selects a source workspace asset whose tags must match
 - **Registry Stage Tagging**: `promote-stage` writes a `stage` tag (for example, `stage=Production`) on the new registry version
+- **Registry Visibility Retry**: Share commands allow up to two minutes for a newly created registry version to become visible through ARM
 - **Environment Replacement**: Component sharing automatically replaces workspace environments with registry equivalents
 - **Flexible Authentication**: Supports both token-based (federated credentials) and DefaultAzureCredential
 
@@ -391,6 +392,8 @@ Share inputs have different tag behavior depending on the asset type:
 Tag keys and nonempty values are case-sensitive. A tag without a value (`key` or `key=`) requires only that the key exists. Tag matching does not search all versions: `share environment` filters the explicit version in `env-ref`, or the latest active version when no version is given. `share data` and `share model` currently filter the latest active version even if their reference includes a version.
 
 `promote-stage` is ordinary registry tag mutation, not a separate Azure ML lifecycle operation. It is independent of source selection: for example, `tags: "stage=prod"` requires that exact tag on the source, while `promote-stage: "Production"` writes `stage=Production` to the destination.
+
+After Azure ML accepts a share, the action verifies the new registry version through ARM. Because registry writes can be eventually consistent, this verification retries with backoff for up to two minutes. If the version is still not visible, the action reports that the share may have succeeded; check the Azure ML registry before retrying the workflow to avoid creating another version.
 
 ```yaml
 - name: Deploy Component to Workspace
