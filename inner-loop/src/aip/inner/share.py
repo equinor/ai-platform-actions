@@ -22,16 +22,20 @@ from .getasset import (
     getenvironment,
     getmodel,
     getdata,
+    next_int_version,
     parse_int_version
 )
 import tempfile
 from azure.ai.ml import load_component
+from azure.ai.ml.exceptions import ValidationException
 from pathlib import Path
 from time import sleep
 
 app = typer.Typer()
 
 _SHARE_VISIBILITY_RETRY_DELAYS = (2, 4, 8, 16, 30, 30, 30)
+_MODEL_VERSION_CONFLICT_MESSAGE = "model with this name and version already exists in registry"
+_MODEL_VERSION_CONFLICT_RETRIES = 10
 
 
 def _registry_reference(registry_name: Optional[str], asset_type: str, asset) -> str:
@@ -65,6 +69,37 @@ def _wait_for_shared_asset(
         f"after {len(retry_delays) + 1} attempts over {sum(retry_delays)} seconds. "
         "The share may have succeeded; check the Azure ML registry before retrying."
     )
+
+
+def _share_model_with_version_retry(
+    workspace_client,
+    workspace_model: AssetVersion,
+    registry_name: str,
+    initial_version: str,
+) -> str:
+    target_version = int(initial_version)
+    for conflict_attempt in range(_MODEL_VERSION_CONFLICT_RETRIES + 1):
+        try:
+            workspace_client.models.share(
+                name=workspace_model.name,
+                version=workspace_model.version,
+                registry_name=registry_name,
+                share_with_name=workspace_model.name,
+                share_with_version=str(target_version),
+            )
+            return str(target_version)
+        except ValidationException as exc:
+            is_version_conflict = _MODEL_VERSION_CONFLICT_MESSAGE in str(exc).lower()
+            if not is_version_conflict or conflict_attempt == _MODEL_VERSION_CONFLICT_RETRIES:
+                raise
+            previous_version = target_version
+            target_version += 1
+            print(
+                f"[share model] Registry model '{workspace_model.name}' version '{previous_version}' "
+                f"already exists. Retrying with version '{target_version}'."
+            )
+
+    raise RuntimeError("Unreachable model share retry state")
 
 
 @app.command()
@@ -330,6 +365,9 @@ def model(
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
     ):
     """Share model from workspace to registry"""
+    if not registry_name:
+        raise ValueError("registry-name is required for share operations")
+
     print(f"[share model] Sharing model")
     print(f"  Subscription: {subscription_id}")
     print(f"  RG (of WS): {resource_group}")
@@ -375,29 +413,19 @@ def model(
         token=token,
         expires_on=expires_on
     )
-    list_m_reg = getmodel(
+    latest_reg_version = next_int_version(
         client=reg_assets,
+        kind="model",
         name=model_name,
-        #tags=tags,
-        req_int_version=True
+        subject="share model",
     )
 
-    # find latest registry version to use
-    latest_reg_version=0
-    if list_m_reg:
-        for m in list_m_reg:
-            lrv = parse_int_version(m.version)
-            if lrv is not None and lrv>latest_reg_version:
-                latest_reg_version=lrv
-    latest_reg_version=str(latest_reg_version+1)
-
     print("[share model] Sharing model to registry")
-    ws_client.models.share(
-        name=ws_model.name,
-        version=ws_model.version,
+    latest_reg_version = _share_model_with_version_retry(
+        workspace_client=ws_client,
+        workspace_model=ws_model,
         registry_name=registry_name,
-        share_with_name=ws_model.name,
-        share_with_version=latest_reg_version
+        initial_version=latest_reg_version,
     )
 
     print("[share model] Applying stage promotion if provided")
