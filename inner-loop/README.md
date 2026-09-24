@@ -205,6 +205,37 @@ The workflow identity also needs the **Storage Blob Data Contributor** role on t
     tags: "owner=mlops,stage=staging"
 ```
 
+  To copy a versioned registry model into the target workspace, use a registry URI in the model YAML:
+
+  ```yaml
+  name: workspace-model
+  version: 1
+  type: custom_model
+  path: azureml://registries/my-registry/models/source-model/versions/8
+  ```
+
+  `deploy model` downloads the registry artifact into a temporary directory and registers it in the
+  workspace. Files, folders, and MLflow model roots are preserved without the SDK's download wrapper.
+  Temporary files are removed on success or failure. Other model paths retain their existing behavior.
+  Registry references must pin `/versions/<version>`; label references are not supported by this transfer.
+
+  The YAML controls the destination name, version, type, description, and metadata. Specify the source
+  model's actual type (`custom_model`, `mlflow_model`, or `triton_model`). Registry tags and training
+  lineage are not automatically imported. Choose an unused destination version when registering a new
+  artifact; this command does not introduce version allocation or collision retries. It returns the
+  workspace `reference`, `version`, and `resource-id` outputs for subsequent deployment steps.
+
+  Keep `verb: deploy`, `subject: model`, `filepath`, and the target `subscription-id`, `resource-group`,
+  and `workspace-name`. No `registry-name` input is needed: the source registry comes from the YAML path.
+  The identity needs registry/model read and download access and workspace model registration/upload
+  access. With supplied tokens, `aml-token` is available for `https://ml.azure.com` requests and
+  `storage-token` for Entra-authenticated workspace storage uploads; `token` remains the ARM token.
+  For local use without supplied tokens, the existing `DefaultAzureCredential` flow is unchanged.
+
+  This copies the model only, not its batch scoring environment. See Microsoft's
+  [model download reference](https://learn.microsoft.com/en-us/cli/azure/ml/model#az-ml-model-download)
+  and [local model registration guidance](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-manage-models?view=azureml-api-2#local-file-or-folder).
+
 ### Deploy Job
 
 ```yaml

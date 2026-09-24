@@ -196,8 +196,9 @@ def test_new_action_mode_dispatches_every_command(command: tuple[str, str]):
     assert invocation.argv[:2] == command
 
 
-def test_waitfor_job_forwards_aml_token():
-    values = _valid_inputs(("waitfor", "job"))
+@pytest.mark.parametrize("command", [("waitfor", "job"), ("deploy", "model")])
+def test_command_forwards_aml_token(command):
+    values = _valid_inputs(command)
     values["aml-token"] = "aml-token-value"
 
     invocation = adapt_action_environment(_action_environment(values))

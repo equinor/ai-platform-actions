@@ -2,6 +2,7 @@
 Deploy operations for Inner Loop Action
 """
 from datetime import datetime
+from tempfile import TemporaryDirectory
 
 from azure.ai.ml import (
     load_data,
@@ -35,6 +36,7 @@ import typer
 from typing import Annotated, Any, Optional
 from .util import (
     get_workspace_client, 
+    get_registry_client,
     github_output, 
     load_safe_tags,
     amlignore_preserved,
@@ -265,6 +267,7 @@ def model(
             Optional[str],
             typer.Option(help="Tags in the config file to use", callback=load_safe_tags),
         ]=None,
+        aml_token: Annotated[Optional[str], typer.Option("--aml-token", callback=empty_string_to_none)] = None,
     ):
     """Deploy model to Azure ML workspace"""
     print(f"[deploy model] Deploying model")
@@ -279,6 +282,7 @@ def model(
         workspace_name=workspace_name,
         token=token,
         expires_on=expires_on,
+        aml_token=aml_token,
         storage_token=storage_token
     )
 
@@ -290,8 +294,46 @@ def model(
         else:
             model.tags = tags
 
-    print("[deploy model] Creating or updating model")
-    model_result = client.models.create_or_update(model)
+    source_path = model.path
+    if isinstance(source_path, str) and source_path.startswith("azureml://registries/"):
+        registry_ref = re.fullmatch(
+            r"azureml://registries/([A-Za-z0-9][A-Za-z0-9_.-]*)"
+            r"/models/([A-Za-z0-9][A-Za-z0-9_.-]*)/versions/([A-Za-z0-9][A-Za-z0-9_.-]*)",
+            source_path,
+        )
+        if not registry_ref:
+            raise typer.BadParameter(
+                "Registry model path must use azureml://registries/<registry>/models/<name>/versions/<version>"
+            )
+        registry_name, source_name, source_version = registry_ref.groups()
+        registry_client = get_registry_client(
+            registry_name=registry_name,
+            token=token,
+            expires_on=expires_on,
+            aml_token=aml_token,
+            storage_token=storage_token,
+        )
+        print(f"[deploy model] Downloading registry model '{source_name}:{source_version}' from '{registry_name}'")
+        with TemporaryDirectory(prefix="aip-registry-model-") as download_dir:
+            registry_client.models.download(
+                name=source_name, version=source_version, download_path=download_dir,
+            )
+            wrapper = Path(download_dir, source_name)
+            artifacts = list(wrapper.iterdir()) if wrapper.is_dir() else []
+            if len(artifacts) != 1:
+                raise RuntimeError("Registry model download must contain exactly one artifact file or root folder")
+            artifact = artifacts[0]
+            if not artifact.is_file() and not any(path.is_file() for path in artifact.rglob("*")):
+                raise RuntimeError("Registry model download contains no files")
+            model.path = str(artifact.resolve())
+            try:
+                print(f"[deploy model] Registering downloaded artifact in workspace '{workspace_name}'")
+                model_result = client.models.create_or_update(model)
+            finally:
+                model.path = source_path
+    else:
+        print("[deploy model] Creating or updating model")
+        model_result = client.models.create_or_update(model)
 
     print(f"[deploy model] ✅ Model deployed successfully")
     print(f"  Name: {model_result.name}")

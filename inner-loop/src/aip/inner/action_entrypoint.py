@@ -174,7 +174,7 @@ COMMAND_SPECS = {
     ("deploy", "data"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
     ("deploy", "environment"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
     ("deploy", "component"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
-    ("deploy", "model"): _spec("filepath", option_inputs=_DEPLOY_YAML_OPTIONS),
+    ("deploy", "model"): _spec("filepath", option_inputs=_DEPLOY_AML_OPTIONS),
     ("deploy", "job"): _spec(
         "filepath",
         option_inputs=_DEPLOY_AML_OPTIONS + ("experiment-name",),
