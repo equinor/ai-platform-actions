@@ -206,6 +206,7 @@ python -m aip.inner.main waitfor feature-set \
 ## Share Operations
 
 All share operations are **fully implemented** with stage promotion support.
+After creating the registry asset, each command retrieves that exact version through ARM until it becomes visible. The default limit is 5 minutes; set `timeout-minutes` in the action or pass `--timeout-minutes` to the CLI to replace it.
 
 ### Share Data Asset
 

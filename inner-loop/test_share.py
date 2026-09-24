@@ -8,7 +8,18 @@ from azure.ai.ml.exceptions import ValidationException
 
 from aip.inner.arm import AssetContainer, AssetVersion
 from aip.inner import share
-from aip.inner.share import _wait_for_shared_asset
+from aip.inner.share import _share_visibility_retry_delays, _wait_for_shared_asset
+
+
+def test_share_visibility_default_timeout_is_five_minutes():
+    assert sum(_share_visibility_retry_delays()) == 5 * 60
+
+
+def test_share_visibility_custom_timeout_replaces_default():
+    retry_delays = _share_visibility_retry_delays(timeout_minutes=1)
+
+    assert sum(retry_delays) == 60
+    assert retry_delays == (2, 4, 8, 16, 30)
 
 
 def test_share_model_increments_existing_registry_version():
@@ -27,11 +38,20 @@ def test_share_model_increments_existing_registry_version():
         patch.object(share.AssetClient, "for_workspace", return_value=workspace_assets),
         patch.object(share.AssetClient, "for_registry", return_value=registry_assets),
         patch.object(share, "get_registry_client"),
-        patch.object(share, "getmodel", return_value=[workspace_model]),
-        patch.object(share, "_wait_for_shared_asset", return_value=shared_registry_model),
+        patch.object(share, "getmodel", return_value=[workspace_model]) as getmodel,
+        patch.object(share, "_wait_for_shared_asset", return_value=shared_registry_model) as wait_for_shared_asset,
         patch.object(share, "github_output"),
     ):
-        share.model("subscription", "resource-group", "workspace", "registry", "azureml:my-model:16")
+        share.model(
+            "subscription",
+            "resource-group",
+            "workspace",
+            "registry",
+            "azureml:my-model:16",
+            timeout_minutes=7,
+        )
+        fetch_registry_version = wait_for_shared_asset.call_args.args[0]
+        fetch_registry_version()
 
     registry_assets.list_versions.assert_called_once_with("model", "my-model", list_view_type="All")
     workspace_client.models.share.assert_called_once_with(
@@ -41,6 +61,8 @@ def test_share_model_increments_existing_registry_version():
         share_with_name="my-model",
         share_with_version="2",
     )
+    assert wait_for_shared_asset.call_args.kwargs["timeout_minutes"] == 7
+    getmodel.assert_called_with(client=registry_assets, name="my-model", version="2")
 
 
 def test_share_model_retries_a_registry_version_conflict():

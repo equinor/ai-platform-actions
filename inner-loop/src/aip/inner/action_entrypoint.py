@@ -77,6 +77,7 @@ CLI_OPTIONS = {
     "registry-name": "--registry-name",
     "tags": "--tags",
     "promote-stage": "--promote-stage",
+    "timeout-minutes": "--timeout-minutes",
     "traffic-allocation": "--traffic-allocation",
     "schedule-name": "--schedule-name",
     "cron-expression": "--cron-expression",
@@ -165,7 +166,7 @@ def _spec(
 _DEPLOY_STORAGE_OPTIONS = ("storage-token",)
 _DEPLOY_YAML_OPTIONS = _DEPLOY_STORAGE_OPTIONS + ("tags",)
 _DEPLOY_AML_OPTIONS = _DEPLOY_STORAGE_OPTIONS + ("aml-token", "tags")
-_SHARE_OPTIONS = ("registry-name", "tags", "promote-stage")
+_SHARE_OPTIONS = ("registry-name", "tags", "promote-stage", "timeout-minutes")
 _WAIT_OPTIONS = ("tags",)
 _WAIT_ENV = {"timeout-minutes": "TIMEOUT_MINUTES"}
 
