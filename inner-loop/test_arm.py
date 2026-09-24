@@ -137,6 +137,33 @@ class TestAssetClientUrls:
         client, _ = _client([])
         assert client.get_container("model", "absent") is None
 
+    @pytest.mark.parametrize(
+        "resource_id,response_name,expected_version",
+        [
+            ("azureml://registries/registry/models/my-model/versions/3", "my-model", "3"),
+            (f"{WORKSPACE_BASE}/models/my-model/versions/3", "3", "3"),
+            (f"{WORKSPACE_BASE}/models/my-model/versions/3", "my-model", "3"),
+            ("azureml://registries/registry/models/my-model/versions/release%2Dnext", "my-model", "release-next"),
+            ("", "3", "3"),
+            (f"{WORKSPACE_BASE}/models/my-model", "3", "3"),
+        ],
+    )
+    def test_version_is_parsed_from_resource_id(self, resource_id, response_name, expected_version):
+        body = {
+            "id": resource_id,
+            "name": response_name,
+            "properties": {"tags": {"stage": "Production"}, "isArchived": False},
+        }
+        client, _ = _client([(_is_version, (200, body))])
+
+        asset = client.get_version("model", "my-model", expected_version)
+
+        assert asset.name == "my-model"
+        assert asset.version == expected_version
+        assert asset.id == resource_id
+        assert asset.tags == {"stage": "Production"}
+        assert asset.is_archived is False
+
     def test_version_list_requests_all_versions_and_follows_next_link(self):
         page_two = f"{WORKSPACE_BASE}/components/my-asset/versions?$skiptoken=abc"
         responses = [
