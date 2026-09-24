@@ -100,6 +100,76 @@ def test_share_model_retries_a_registry_version_conflict():
     ]
 
 
+def test_share_model_handles_registry_responses_with_asset_name_instead_of_version():
+    workspace_client = MagicMock()
+    workspace_assets = MagicMock()
+    workspace_assets.get_container.return_value = AssetContainer(name="my-model", latest_version="19")
+    workspace_assets.list_versions.return_value = [AssetVersion(name="my-model", version="19")]
+    registry_client = MagicMock()
+    registry_model = SimpleNamespace(tags={"stage": "dev"})
+    registry_client.models.get.return_value = registry_model
+    reference_prefix = "azureml://registries/registry/models/my-model/versions/"
+    container = {"name": "my-model", "properties": {}}
+    versions = [
+        {
+            "name": "my-model",
+            "id": reference_prefix + version,
+            "properties": {"isArchived": False, "tags": {"stage": "Production"}},
+        }
+        for version in ("1", "2", "3")
+    ]
+    transport = MagicMock(side_effect=[
+        (200, container),
+        (200, {"value": versions[:2]}),
+        (200, container),
+        (200, versions[2]),
+    ])
+    registry_assets = share.AssetClient(
+        base_url="https://management.azure.com/registry",
+        token_manager=MagicMock(),
+        scope_label="registry 'registry'",
+        is_registry=True,
+        transport=transport,
+    )
+
+    with (
+        patch.object(share, "get_workspace_client", return_value=workspace_client),
+        patch.object(share.AssetClient, "for_workspace", return_value=workspace_assets),
+        patch.object(share.AssetClient, "for_registry", return_value=registry_assets),
+        patch.object(share, "get_registry_client", return_value=registry_client),
+        patch.object(share, "sleep") as sleep_mock,
+        patch.object(share, "github_output") as github_output,
+    ):
+        share.model(
+            "subscription",
+            "resource-group",
+            "workspace",
+            "registry",
+            "azureml:my-model:19",
+            promote_stage="Production",
+            timeout_minutes=10,
+        )
+
+    workspace_client.models.share.assert_called_once_with(
+        name="my-model",
+        version="19",
+        registry_name="registry",
+        share_with_name="my-model",
+        share_with_version="3",
+    )
+    registry_client.models.get.assert_called_once_with(name="my-model", version="3")
+    registry_client.models.create_or_update.assert_called_once_with(registry_model)
+    assert registry_model.tags == {"stage": "Production"}
+    assert transport.call_count == 4
+    assert "/models/my-model/versions/3?" in transport.call_args.args[1]
+    sleep_mock.assert_not_called()
+    github_output.assert_called_once_with({
+        "reference": reference_prefix + "3",
+        "version": "3",
+        "resource-id": reference_prefix + "3",
+    })
+
+
 def test_wait_for_shared_asset_retries_until_visible():
     asset = AssetVersion(name="my-model", version="7")
     fetch_versions = MagicMock(side_effect=[[], [], [asset]])

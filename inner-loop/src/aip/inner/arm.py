@@ -403,10 +403,15 @@ def workspace_asset_id(
 def _to_asset_version(body: dict, asset_name: str) -> AssetVersion:
     properties = body.get("properties") or {}
     system_data = body.get("systemData") or {}
+    resource_id = body.get("id") or ""
+    resource_path = urllib.parse.urlsplit(resource_id).path.rstrip("/").rsplit("/", 2)
+    version = str(body.get("name") or "")
+    if len(resource_path) == 3 and resource_path[-2].lower() == "versions":
+        version = urllib.parse.unquote(resource_path[-1])
     return AssetVersion(
         name=asset_name,
-        version=str(body.get("name") or ""),
-        id=body.get("id") or "",
+        version=version,
+        id=resource_id,
         tags=properties.get("tags") or {},
         properties=properties,
         created_at=_parse_timestamp(system_data.get("createdAt")),
