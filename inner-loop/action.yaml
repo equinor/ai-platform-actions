@@ -143,7 +143,7 @@ outputs:
 
 runs:
   using: docker
-  image: Dockerfile
+  image: docker://ghcr.io/equinor/ai-platform-actions/inner-loop@sha256:56055b661ef5916e313309367ea2af9c5d9cbe1bfef633fc345edd65105b137f
   env:
     AIP_INNER_ACTION_MODE: "true"
     INPUT_VERB: ${{ inputs.verb }}
