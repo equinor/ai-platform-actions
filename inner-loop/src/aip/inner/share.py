@@ -33,7 +33,9 @@ from time import sleep
 
 app = typer.Typer()
 
-_SHARE_VISIBILITY_RETRY_DELAYS = (2, 4, 8, 16, 30, 30, 30)
+_SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES = 5
+_SHARE_VISIBILITY_INITIAL_RETRY_DELAYS = (2, 4, 8, 16)
+_SHARE_VISIBILITY_MAX_RETRY_DELAY_SECONDS = 30
 _MODEL_VERSION_CONFLICT_MESSAGE = "model with this name and version already exists in registry"
 _MODEL_VERSION_CONFLICT_RETRIES = 10
 
@@ -44,29 +46,54 @@ def _registry_reference(registry_name: Optional[str], asset_type: str, asset) ->
     return f"azureml://registries/{registry_name}/{asset_type}/{asset.name}/versions/{asset.version}"
 
 
+def _share_visibility_retry_delays(
+    timeout_minutes: int = _SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES,
+) -> tuple[int, ...]:
+    if timeout_minutes < 1:
+        raise ValueError("timeout-minutes must be at least 1")
+
+    remaining_seconds = timeout_minutes * 60
+    retry_delays = []
+    for initial_delay in _SHARE_VISIBILITY_INITIAL_RETRY_DELAYS:
+        delay = min(initial_delay, remaining_seconds)
+        retry_delays.append(delay)
+        remaining_seconds -= delay
+        if remaining_seconds == 0:
+            return tuple(retry_delays)
+
+    while remaining_seconds:
+        delay = min(_SHARE_VISIBILITY_MAX_RETRY_DELAY_SECONDS, remaining_seconds)
+        retry_delays.append(delay)
+        remaining_seconds -= delay
+
+    return tuple(retry_delays)
+
+
 def _wait_for_shared_asset(
     fetch_versions: Callable[[], list[AssetVersion]],
     asset_type: str,
     asset_name: str,
     asset_version: str | int,
-    retry_delays: Sequence[int] = _SHARE_VISIBILITY_RETRY_DELAYS,
+    timeout_minutes: int = _SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES,
+    retry_delays: Sequence[int] | None = None,
 ) -> AssetVersion:
-    for attempt in range(len(retry_delays) + 1):
+    delays = tuple(retry_delays) if retry_delays is not None else _share_visibility_retry_delays(timeout_minutes)
+    for attempt in range(len(delays) + 1):
         versions = fetch_versions()
         if versions:
             return versions[0]
-        if attempt < len(retry_delays):
-            delay = retry_delays[attempt]
+        if attempt < len(delays):
+            delay = delays[attempt]
             print(
                 f"[share {asset_type}] Registry {asset_type} '{asset_name}' version "
                 f"'{asset_version}' is not visible through ARM yet. Retrying in {delay} seconds "
-                f"({attempt + 1}/{len(retry_delays)})."
+                f"({attempt + 1}/{len(delays)})."
             )
             sleep(delay)
 
     raise RuntimeError(
         f"Registry {asset_type} '{asset_name}' version '{asset_version}' was not visible through ARM "
-        f"after {len(retry_delays) + 1} attempts over {sum(retry_delays)} seconds. "
+        f"after {len(delays) + 1} attempts over {sum(delays)} seconds. "
         "The share may have succeeded; check the Azure ML registry before retrying."
     )
 
@@ -116,6 +143,7 @@ def data(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        timeout_minutes: Annotated[int, typer.Option(min=1)] = _SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES,
     ):
     """Share data asset from workspace to registry"""
     print(f"[share data] Sharing data asset")
@@ -212,6 +240,7 @@ def data(
         asset_type="data",
         asset_name=data_name,
         asset_version=latest_reg_version,
+        timeout_minutes=timeout_minutes,
     )
 
     print(f"[share data] ✅ Data shared successfully")
@@ -239,6 +268,7 @@ def environment(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        timeout_minutes: Annotated[int, typer.Option(min=1)] = _SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES,
     ):
     """Share environment from workspace to registry"""
     print(f"[share environment] Sharing environment")
@@ -336,6 +366,7 @@ def environment(
         asset_type="environment",
         asset_name=env_name,
         asset_version=latest_reg_version,
+        timeout_minutes=timeout_minutes,
     )
 
 
@@ -363,6 +394,7 @@ def model(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        timeout_minutes: Annotated[int, typer.Option(min=1)] = _SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES,
     ):
     """Share model from workspace to registry"""
     if not registry_name:
@@ -448,6 +480,7 @@ def model(
         asset_type="model",
         asset_name=model_name,
         asset_version=latest_reg_version,
+        timeout_minutes=timeout_minutes,
     )
 
     print(f"[share model] ✅ Model shared successfully")
@@ -474,6 +507,7 @@ def component(
             typer.Option(help="string of key=value pairs separated by ,", callback=load_safe_tags),
         ]=None,
         promote_stage: Annotated[Optional[str], typer.Option(callback=empty_string_to_none)] = None,
+        timeout_minutes: Annotated[int, typer.Option(min=1)] = _SHARE_VISIBILITY_DEFAULT_TIMEOUT_MINUTES,
     ):
     registry_env_ref = os.environ.get("REGISTRY_ENV_REF")
     if not registry_env_ref or registry_env_ref.strip() == "":
@@ -578,6 +612,7 @@ def component(
         asset_type="component",
         asset_name=component_name,
         asset_version=latest_reg_version,
+        timeout_minutes=timeout_minutes,
     )
 
     print(f"[share component] ✅ Component shared successfully")

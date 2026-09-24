@@ -87,7 +87,7 @@ inputs:
     description: "When building environments and you need specific compute instead of serverless, set this to the name of the cluster in the workspace"
     required: false
   timeout-minutes:
-    description: "When using waitfor verb, override default timeout of 30"
+    description: "Maximum wait in minutes. Defaults to 5 for share operations and 30 for waitfor operations."
     required: false
   job-ref:
     description: "Job reference (for deploy schedule)"

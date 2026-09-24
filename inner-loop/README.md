@@ -519,6 +519,7 @@ The identity needs **AzureML Data Scientist** on the feature store, plus **Stora
 | `tags` | No | Comma-separated `key=value` pairs. For every share asset type, these must match tags on the source workspace asset. Matching component tags remain on the component created in the registry. Deploy behavior is described in each deploy example. |
 | `promote-stage` | No | For share operations, sets the ordinary tag `stage=<value>` on the newly created registry version (e.g., `stage=Production`); it does not select or modify the source asset. |
 | `image-build-compute` | No | Compute cluster name for environment builds (instead of serverless) |
+| `timeout-minutes` | No | Maximum wait for completion. Share operations default to 5 minutes while retrieving the new registry version; `waitfor` operations default to 30 minutes. A supplied value replaces the applicable default. |
 
 ## Outputs
 
