@@ -153,6 +153,16 @@ The workflow identity also needs the **Storage Blob Data Contributor** role on t
 
 ### Deploy Environment
 
+The `filepath` input accepts either a local environment YAML or a registry environment reference.
+For a registry source, use `azureml://registries/<registry>/environments/<name>/versions/<version>`
+or `/labels/<label>`. The action fetches the environment definition and registers it in the
+target workspace under the resolved name and version; its `reference` output is a workspace
+reference suitable for `waitfor environment` and batch deployment YAML. Registry environments
+defined with a Docker build context are not supported by this transfer because the SDK does not
+copy their remote build context into workspace storage. Image-based environments (including
+Conda specifications) are supported. An existing workspace version can only change its tags
+or description; choose a different version if its image or dependencies differ.
+
 ```yaml
 - uses: ./inner-loop
   with:
@@ -166,6 +176,12 @@ The workflow identity also needs the **Storage Blob Data Contributor** role on t
     filepath: ./environments/my-env.yaml
     tags: "version=1.0"
 ```
+
+  To deploy a registry environment instead, keep the same inputs and set
+  `filepath: azureml://registries/my-registry/environments/my-env/versions/8`.
+  The workflow identity needs read access to the source registry and permission to create
+  environments in the target workspace. See Microsoft's
+  [environment management guide](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-manage-environments-v2?view=azureml-api-2).
 
 ### Deploy Component
 

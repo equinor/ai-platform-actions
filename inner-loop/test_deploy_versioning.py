@@ -4,10 +4,108 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from azure.ai.ml.entities import Model
+from azure.ai.ml.entities import BuildContext, Environment, Model
 
 from aip.inner import deploy
 from aip.inner.arm import AssetClient, TokenManager
+
+
+@pytest.mark.parametrize("reference,lookup", [
+    ("versions/8", {"version": "8"}),
+    ("labels/latest", {"label": "latest"}),
+])
+def test_deploy_environment_registers_registry_definition_in_workspace(reference, lookup):
+    source = Environment(
+        name="batch-env", version="8", image="mcr.microsoft.com/azureml/base:1",
+        conda_file={"dependencies": ["python=3.11"]}, tags={"origin": "registry"},
+        description="Batch scoring", properties={"team": "ml"},
+    )
+    registry_client = MagicMock()
+    registry_client.environments.get.return_value = source
+    workspace_client = MagicMock()
+
+    def register(environment):
+        assert environment is not source
+        assert environment.name == "batch-env"
+        assert environment.version == "8"
+        assert environment.image == source.image
+        assert environment.conda_file == source.conda_file
+        assert environment.description == source.description
+        assert environment.properties == source.properties
+        assert environment.tags == {"origin": "registry", "stage": "prod"}
+        return Environment(name="batch-env", version="8", id="/workspace/environments/batch-env/versions/8")
+
+    workspace_client.environments.create_or_update.side_effect = register
+    with (
+        patch("aip.inner.deploy.get_registry_client", return_value=registry_client) as registry_factory,
+        patch("aip.inner.deploy.get_workspace_client", return_value=workspace_client),
+        patch("aip.inner.deploy.load_environment") as load_environment,
+        patch("aip.inner.deploy.github_output") as output,
+    ):
+        deploy.environment(
+            "subscription", "resource-group", "workspace",
+            f"azureml://registries/shared/environments/batch-env/{reference}",
+            token="arm-token", expires_on=123, storage_token="storage-token", tags={"stage": "prod"},
+        )
+
+    registry_factory.assert_called_once_with(
+        registry_name="shared", token="arm-token", expires_on=123, storage_token="storage-token",
+    )
+    registry_client.environments.get.assert_called_once_with(name="batch-env", **lookup)
+    load_environment.assert_not_called()
+    assert source.tags == {"origin": "registry"}
+    output.assert_called_once_with({
+        "reference": "azureml:batch-env:8", "version": "8",
+        "resource-id": "/workspace/environments/batch-env/versions/8",
+    })
+
+
+def test_deploy_environment_still_loads_local_yaml():
+    source = Environment(name="local-env", version="2", image="ubuntu:22.04")
+    workspace_client = MagicMock()
+    workspace_client.environments.create_or_update.return_value = source
+    with (
+        patch("aip.inner.deploy.load_environment", return_value=source) as loader,
+        patch("aip.inner.deploy.get_registry_client") as registry_factory,
+        patch("aip.inner.deploy.get_workspace_client", return_value=workspace_client),
+        patch("aip.inner.deploy.github_output"),
+    ):
+        deploy.environment("subscription", "resource-group", "workspace", "environment.yaml")
+    loader.assert_called_once_with(source="environment.yaml")
+    registry_factory.assert_not_called()
+    workspace_client.environments.create_or_update.assert_called_once_with(source)
+
+
+@pytest.mark.parametrize("source", [
+    "azureml://registries/shared/environments/batch-env",
+    "azureml://registries/shared/models/batch-env/versions/8",
+    "azureml://registries/shared/environments/batch-env/versions/8?extra=true",
+])
+def test_deploy_environment_rejects_invalid_registry_reference(source):
+    with (
+        patch("aip.inner.deploy.get_registry_client") as registry_factory,
+        patch("aip.inner.deploy.get_workspace_client") as workspace_factory,
+        pytest.raises(deploy.typer.BadParameter, match="Registry environment source must use"),
+    ):
+        deploy.environment("subscription", "resource-group", "workspace", source)
+    registry_factory.assert_not_called()
+    workspace_factory.assert_not_called()
+
+
+def test_deploy_environment_rejects_registry_build_context():
+    source = Environment(name="batch-env", version="8", build=BuildContext(path="https://example.blob.core.windows.net/context"))
+    registry_client = MagicMock()
+    registry_client.environments.get.return_value = source
+    with (
+        patch("aip.inner.deploy.get_registry_client", return_value=registry_client),
+        patch("aip.inner.deploy.get_workspace_client") as workspace_factory,
+        pytest.raises(deploy.typer.BadParameter, match="Docker build context"),
+    ):
+        deploy.environment(
+            "subscription", "resource-group", "workspace",
+            "azureml://registries/shared/environments/batch-env/versions/8",
+        )
+    workspace_factory.assert_not_called()
 
 
 @pytest.mark.parametrize("artifact_kind", ["file", "folder", "mlflow"])

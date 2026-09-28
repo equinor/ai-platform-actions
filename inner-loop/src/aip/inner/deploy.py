@@ -143,8 +143,43 @@ def environment(
     print(f"  Resource Group: {resource_group}")
     print(f"  Filepath: {filepath}")
     
-    print("[deploy environment] Loading environment configuration from file")
-    environment = load_environment(source=filepath)
+    if filepath.startswith("azureml://registries/"):
+        registry_ref = re.fullmatch(
+            r"azureml://registries/([A-Za-z0-9][A-Za-z0-9_.-]*)"
+            r"/environments/([A-Za-z0-9][A-Za-z0-9_.-]*)/(versions|labels)/([A-Za-z0-9][A-Za-z0-9_.-]*)",
+            filepath,
+        )
+        if not registry_ref:
+            raise typer.BadParameter(
+                "Registry environment source must use azureml://registries/<registry>/environments/<name>/versions/<version> or /labels/<label>"
+            )
+        registry_name, source_name, reference_kind, source_version = registry_ref.groups()
+        print(f"[deploy environment] Retrieving registry environment '{source_name}:{source_version}' from '{registry_name}'")
+        registry_client = get_registry_client(
+            registry_name=registry_name, token=token, expires_on=expires_on,
+            storage_token=storage_token,
+        )
+        source_environment = registry_client.environments.get(
+            name=source_name, **{"version" if reference_kind == "versions" else "label": source_version}
+        )
+        if source_environment.build:
+            raise typer.BadParameter(
+                "Registry environment has a Docker build context; copying registry build contexts into a workspace is not supported"
+            )
+        environment = Environment(
+            name=source_environment.name,
+            version=source_environment.version,
+            image=source_environment.image,
+            conda_file=source_environment.conda_file,
+            description=source_environment.description,
+            tags=dict(source_environment.tags or {}),
+            properties=dict(source_environment.properties or {}),
+            os_type=source_environment.os_type,
+            inference_config=source_environment.inference_config,
+        )
+    else:
+        print("[deploy environment] Loading environment configuration from file")
+        environment = load_environment(source=filepath)
     if tags:
         if environment.tags:
             environment.tags.update(tags)
