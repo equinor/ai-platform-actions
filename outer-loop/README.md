@@ -6,7 +6,7 @@ A unified GitHub Action for ML experiment analytics and evaluation: evaluate gat
 
 ## Overview
 
-The Outer Loop action provides a single entry point for all post-training and production-monitoring workflows. It uses a `verb` + `subject` pattern (e.g. `evaluate gate`, `compare candidates`) to route requests to the appropriate command module. Authentication is handled via a token from the `azLogin` action or, when running locally, via `DefaultAzureCredential`. All metric data is read through an MLFlow backend — either an **MLFlow proxy** service or directly from an **AzureML workspace tracking URI** — the action does not call Azure ML directly except where noted.
+The Outer Loop action provides a single entry point for all post-training and production-monitoring workflows. It uses a `verb` + `subject` pattern (e.g. `evaluate gate`, `compare candidates`) to route requests to the appropriate command module. Every command requires a caller-supplied bearer `token` (see [Authentication](#authentication-and-tokens)). All metric data is read through the standard [MLflow REST API](https://mlflow.org/docs/latest/rest-api.html) — from any **MLflow tracking server** (`https://`) or from an **AzureML workspace tracking URI** (`azureml://`) — the action does not call Azure ML directly except where noted.
 
 ### Commands
 
@@ -26,8 +26,8 @@ The Outer Loop action provides a single entry point for all post-training and pr
 
 Fetches metrics from MLFlow for a specific run (or the latest run in the experiment if `run-id` is omitted), compares each metric against the constraints in `thresholds-file`, and outputs a pass/fail result. If any metric fails or is missing the action exits with code 1, blocking downstream steps.
 
-**Required inputs:** `mlflow-url`, `experiment-name`, `thresholds-file`  
-**Optional inputs:** `run-id`, `child-run-name`, `token`, `expires-on`
+**Required inputs:** `mlflow-url`, `token`, `experiment-name`, `thresholds-file`  
+**Optional inputs:** `run-id`, `child-run-name`, `expires-on`
 
 Run selection:
 
@@ -62,8 +62,8 @@ Reads the latest monitoring run from MLFlow (experiment `monitoring-<model-name>
 
 Possible recommended actions: `retrain` | `data-refresh` | `label-improvement` | `feature-change` | `code-fix` | `no-change`
 
-**Required inputs:** `mlflow-url`, `policy-config-file`  
-**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `endpoint-name`, `deployment-name`, `max-evidence-age-minutes`, `min-sample-count`, `token`, `expires-on`
+**Required inputs:** `mlflow-url`, `token`, `policy-config-file`  
+**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `endpoint-name`, `deployment-name`, `max-evidence-age-minutes`, `min-sample-count`, `expires-on`
 
 **Policy config file format:**
 
@@ -97,8 +97,8 @@ The selected action is the first matching rule, but every matched rule is retain
 
 Queries MLFlow for all runs in the experiment (or a scoped subset), scores each run using a weighted combination of metrics defined in `ranking-criteria-file`, and outputs the best run ID together with a ranked comparison table posted as a GitHub step summary.
 
-**Required inputs:** `mlflow-url`, `experiment-name`, `ranking-criteria-file`  
-**Optional inputs:** `run-ids`, `run-name`, `child-run-name`, `token`, `expires-on`
+**Required inputs:** `mlflow-url`, `token`, `experiment-name`, `ranking-criteria-file`  
+**Optional inputs:** `run-ids`, `run-name`, `child-run-name`, `expires-on`
 
 Scoping options (mutually exclusive — `run-ids` wins if both are supplied, with a warning):
 
@@ -129,8 +129,8 @@ See [outer-loop-config.md](outer-loop-config.md#rankingyaml----used-by-compare-c
 
 Fetches the 20 most recent runs from MLFlow for the named experiment, computes a metric trend (latest run vs. the run before it), and renders a Markdown report that is posted as a GitHub step summary.
 
-**Required inputs:** `mlflow-url`, `experiment-name`  
-**Optional inputs:** `token`, `expires-on`
+**Required inputs:** `mlflow-url`, `token`, `experiment-name`  
+**Optional inputs:** `expires-on`
 
 **Outputs:** `summary` (Markdown report with trend table and run list)
 
@@ -152,8 +152,8 @@ Threshold interpretation belongs to the versioned policy, not the monitoring rep
 
 Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1`, `aip.model.name`, `aip.model.version`, `aip.endpoint.name`, `aip.deployment.name`, and a timezone-aware `aip.observed_at`. Metrics must include `sample_count`.
 
-**Required inputs:** `mlflow-url`  
-**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `endpoint-name`, `deployment-name`, `max-evidence-age-minutes`, `min-sample-count`, `token`, `expires-on`
+**Required inputs:** `mlflow-url`, `token`  
+**Optional inputs:** `model-name` or `experiment-name`, `model-version`, `endpoint-name`, `deployment-name`, `max-evidence-age-minutes`, `min-sample-count`, `expires-on`
 
 **Outputs:** `result` and `signals` (JSON-encoded signals), `evidence-status`, `evidence-issues`, `summary`. Invalid evidence exits with code 2.
 
@@ -165,14 +165,14 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `token` | Access token from the `azLogin` action. Not needed when running locally. | No |
-| `expires-on` | Token expiry as epoch seconds, from the `azLogin` action. | No |
+| `token` | Bearer token sent as `Authorization: Bearer <token>` on every MLflow request. What it must contain depends on `mlflow-url` — see [Authentication](#authentication-and-tokens). | Yes |
+| `expires-on` | Token expiry as epoch seconds. Optional for JWTs (the `exp` claim is used; an earlier `expires-on` takes precedence). Required for non-JWT tokens. | No |
 
 ### MLFlow backend
 
 | Input | Description | Required |
 |-------|-------------|----------|
-| `mlflow-url` | MLFlow backend URL or AzureML tracking URI. Accepts `https://` proxy URLs (e.g. `https://mlflow-proxy.cluster.aurora.equinor.com`) or `azureml://` tracking URIs from an AzureML workspace. | Yes |
+| `mlflow-url` | MLflow tracking URL or AzureML tracking URI. Accepts an `https://` MLflow tracking server URL, optionally with a path prefix (e.g. `https://mlflow.example.com/my-mlflow`), or an `azureml://` tracking URI from an AzureML workspace. | Yes |
 
 ### Experiment / run targeting
 
@@ -221,7 +221,125 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
 
 ---
 
+## Authentication and tokens
+
+Every command requires `token`. The action does not acquire tokens itself: it sends the supplied token unchanged as `Authorization: Bearer <token>` on every MLflow REST request — the same as `MlflowClient` does with `MLFLOW_TRACKING_TOKEN`. The token value is never logged; only its effective expiry is.
+
+### What the token must contain depends on `mlflow-url`
+
+The server behind `mlflow-url` decides which audience (`aud` claim) and which roles (`roles` claim) it accepts, so the token has to be requested for that server:
+
+| `mlflow-url` | How to request the token | Expected `aud` | Authorization |
+|--------------|--------------------------|----------------|---------------|
+| `azureml://…` (AzureML workspace tracking URI) | `az account get-access-token --resource https://ml.azure.com` | `https://ml.azure.com` | Azure RBAC on the workspace |
+| `https://…` (MLflow server protected by an Entra ID app registration) | `az account get-access-token --scope <resource-id>/.default`, where `<resource-id>` is the app's Application ID URI (e.g. `api://<app-id>`) | `<app-id>` | App role(s) in the `roles` claim, e.g. `<App>.Developer` |
+
+A decoded token for the second case looks like this (abridged):
+
+```json
+{
+  "aud": "00000000-0000-0000-0000-000000000000",
+  "iss": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+  "exp": 1791901586,
+  "roles": ["<App>.Developer"]
+}
+```
+
+References: [az account get-access-token](https://learn.microsoft.com/cli/azure/account#az-account-get-access-token), [Access token claims](https://learn.microsoft.com/entra/identity-platform/access-token-claims-reference), [App roles](https://learn.microsoft.com/entra/identity-platform/howto-add-app-roles-in-apps), [MLflow tracking in AzureML](https://learn.microsoft.com/azure/machine-learning/how-to-use-mlflow-configure-tracking), [azure/login](https://github.com/Azure/login).
+
+### Token expiry
+
+- If the token is a JWT (as returned by `az account get-access-token`), its `exp` claim is used. The signature is not verified by the action — that is the server's job.
+- `expires-on` (epoch seconds) is optional. If supplied and earlier than `exp`, it takes precedence; the effective expiry is always the earliest of the two. Non-JWT tokens require `expires-on`.
+- The command fails early (exit code 1) when the effective expiry has passed or is less than 60 seconds away, and re-checks before every MLflow request.
+
+### Example: AzureML tracking URI with `azure/login@v3`
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+
+steps:
+  - name: Azure Login
+    uses: azure/login@v3
+    with:
+      client-id: ${{ vars.AZURE_CLIENT_ID }}
+      tenant-id: ${{ vars.AZURE_TENANT_ID }}
+      subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+
+  - name: Get token
+    id: get-token
+    shell: bash
+    run: |
+      TOKEN=$(az account get-access-token --resource https://ml.azure.com --query accessToken --output tsv)
+      echo "::add-mask::$TOKEN"
+      echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+  - name: Report experiment
+    uses: equinor/ai-platform-actions/outer-loop@main
+    with:
+      verb: report
+      subject: experiment
+      token: ${{ steps.get-token.outputs.token }}
+      mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
+      experiment-name: my-training-experiment
+```
+
+### Example: MLflow server protected by an app registration (resource ID)
+
+The identity used by `azure/login` must be assigned the app role the MLflow server requires (e.g. `<App>.Developer`) on the app registration identified by the resource ID.
+
+```yaml
+steps:
+  - name: Azure Login
+    uses: azure/login@v3
+    with:
+      client-id: ${{ vars.AZURE_CLIENT_ID }}
+      tenant-id: ${{ vars.AZURE_TENANT_ID }}
+      subscription-id: ${{ vars.SUBSCRIPTION_ID }}
+
+  - name: Get token for the MLflow server
+    id: get-token
+    shell: bash
+    env:
+      MLFLOW_RESOURCE_ID: api://00000000-0000-0000-0000-000000000000
+    run: |
+      TOKEN=$(az account get-access-token --scope "$MLFLOW_RESOURCE_ID/.default" --query accessToken --output tsv)
+      echo "::add-mask::$TOKEN"
+      echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+  - name: Report experiment
+    uses: equinor/ai-platform-actions/outer-loop@main
+    with:
+      verb: report
+      subject: experiment
+      token: ${{ steps.get-token.outputs.token }}
+      mlflow-url: https://<cluster-host>/<team>-mlflow/
+      experiment-name: my-training-experiment
+```
+
+The same token can be obtained in Python, e.g. for direct CLI use:
+
+```python
+from azure.identity import DefaultAzureCredential
+
+resource_id = "api://00000000-0000-0000-0000-000000000000"
+token = DefaultAzureCredential().get_token(f"{resource_id}/.default").token
+```
+
+```bash
+python -m aip.outer.main report experiment \
+  --mlflow-url https://<cluster-host>/<team>-mlflow/ \
+  --token "$TOKEN" \
+  --experiment-name my-training-experiment
+```
+
+---
+
 ## Usage Examples
+
+The examples below assume a preceding `get-token` step in the same job, as shown in [Authentication and tokens](#authentication-and-tokens), and a repository variable `MLFLOW_URL` holding the MLflow tracking URL.
 
 ### Evaluate a training gate
 
@@ -232,9 +350,8 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
   with:
     verb: evaluate
     subject: gate
-    token: ${{ steps.azLogin.outputs.token }}
-    expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    token: ${{ steps.get-token.outputs.token }}
+    mlflow-url: ${{ vars.MLFLOW_URL }}
     experiment-name: my-training-experiment
     run-id: ${{ steps.train.outputs.run-id }}
     thresholds-file: .azureml/thresholds.yaml
@@ -252,6 +369,7 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
   with:
     verb: evaluate
     subject: gate
+    token: ${{ steps.get-token.outputs.token }}
     mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
     experiment-name: my-training-experiment
     run-id: ${{ steps.train.outputs.run-id }}
@@ -269,9 +387,8 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
   with:
     verb: evaluate
     subject: gate
-    token: ${{ steps.azLogin.outputs.token }}
-    expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    token: ${{ steps.get-token.outputs.token }}
+    mlflow-url: ${{ vars.MLFLOW_URL }}
     experiment-name: my-training-experiment
     run-id: ${{ steps.waitfor.outputs.run-id }}
     child-run-name: evaluate_test
@@ -290,9 +407,8 @@ Autonomous decisions require these MLFlow tags: `aip.monitoring.schema_version=1
   with:
     verb: compare
     subject: candidates
-    token: ${{ steps.azLogin.outputs.token }}
-    expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    token: ${{ steps.get-token.outputs.token }}
+    mlflow-url: ${{ vars.MLFLOW_URL }}
     experiment-name: my-training-experiment
     ranking-criteria-file: .azureml/ranking.yaml
 
@@ -318,6 +434,7 @@ or `mlflow.start_run(run_name="baseline-v2")`), use `run-name` to scope the comp
   with:
     verb: compare
     subject: candidates
+    token: ${{ steps.get-token.outputs.token }}
     mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
     experiment-name: my-training-experiment
     run-name: baseline-v2
@@ -339,6 +456,7 @@ then selects only child runs linked through MLflow's `mlflow.parentRunId` tag.
   with:
     verb: compare
     subject: candidates
+    token: ${{ steps.get-token.outputs.token }}
     mlflow-url: azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/${{ vars.SUBSCRIPTION_ID }}/resourceGroups/${{ vars.RESOURCE_GROUP }}/providers/Microsoft.MachineLearningServices/workspaces/${{ vars.WORKSPACE_NAME }}
     experiment-name: temporal-equipment-health
     run-name: temporal-equipment-health
@@ -354,9 +472,8 @@ then selects only child runs linked through MLflow's `mlflow.parentRunId` tag.
   with:
     verb: report
     subject: experiment
-    token: ${{ steps.azLogin.outputs.token }}
-    expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    token: ${{ steps.get-token.outputs.token }}
+    mlflow-url: ${{ vars.MLFLOW_URL }}
     experiment-name: my-training-experiment
 ```
 
@@ -369,9 +486,8 @@ then selects only child runs linked through MLflow's `mlflow.parentRunId` tag.
   with:
     verb: check
     subject: monitoring
-    token: ${{ steps.azLogin.outputs.token }}
-    expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    token: ${{ steps.get-token.outputs.token }}
+    mlflow-url: ${{ vars.MLFLOW_URL }}
     model-name: my-registered-model
     model-version: "7"
     endpoint-name: my-batch-endpoint
@@ -385,9 +501,8 @@ then selects only child runs linked through MLflow's `mlflow.parentRunId` tag.
   with:
     verb: evaluate
     subject: policy
-    token: ${{ steps.azLogin.outputs.token }}
-    expires-on: ${{ steps.azLogin.outputs.expires-on }}
-    mlflow-url: https://mlflow-proxy.cluster.aurora.equinor.com
+    token: ${{ steps.get-token.outputs.token }}
+    mlflow-url: ${{ vars.MLFLOW_URL }}
     model-name: my-registered-model
     model-version: "7"
     endpoint-name: my-batch-endpoint
@@ -417,7 +532,7 @@ The action is organized into modular Python files under `src/aip/outer/`:
 | `compare.py` | `compare candidates` command |
 | `report.py` | `report experiment` command |
 | `check.py` | `check monitoring` command |
-| `util.py` | MLFlow backend protocol, proxy client, AzureML backend, factory function, authentication helpers, GitHub output utilities |
+| `util.py` | MLFlow backend protocol, MLflow REST backend, factory function, bearer-token validation, GitHub output utilities |
 
 ### Command routing
 
@@ -445,14 +560,13 @@ Built from `Dockerfile` using `astral/uv:python3.12-bookworm-slim` as the base i
 
 ### Authentication
 
-Two modes are supported:
-
-1. **Token-based** (recommended in GitHub Actions): pass `token` and `expires-on` from an upstream `azLogin` step. The token is wrapped in a `StaticTokenCredential` and used for all Azure SDK calls. This mode works with the `MLFlowProxyClient` backend.
-2. **DefaultAzureCredential** (local development and AzureML backend): when `token` is omitted, or when using an `azureml://` tracking URI, the standard Azure credential chain is used. The `AzureMLBackend` always uses this path, resolving credentials from the environment variables set by `azLogin`.
+`util.resolve_bearer_token` validates the required `token`, determines its effective expiry (earliest of the JWT `exp` claim and `expires-on`) and fails early on expired or unusable tokens. The resulting `BearerToken` is passed to the backend, which sends it as `Authorization: Bearer <token>` and re-checks expiry before every request. No Azure credential chain is used. See [Authentication and tokens](#authentication-and-tokens).
 
 ### MLFlow backends
 
-| Input `mlflow-url` prefix | Backend | Auth |
-|---------------------------|---------|------|
-| `https://` or `http://` | `MLFlowProxyClient` — authenticated HTTP calls to the proxy REST API | Bearer token from `token`/`expires-on` or DefaultAzureCredential |
-| `azureml://` | `AzureMLBackend` — converts URI to `https://` and calls the MLflow REST API directly; no `azureml-mlflow` SDK dependency | Bearer token via `AML_SCOPE` — same mechanism as proxy client, fully compatible with `token`/`expires-on` from `azLogin` |
+All URLs are served by a single `MLflowRestBackend`, which calls the standard [MLflow REST API](https://mlflow.org/docs/latest/rest-api.html) at `<base-url>/api/2.0/mlflow/...`; there is no `mlflow`/`azureml-mlflow` SDK dependency.
+
+| Input `mlflow-url` prefix | Base URL used |
+|---------------------------|---------------|
+| `https://` or `http://` | The URL as given, including any path prefix (e.g. `https://<cluster-host>/<team>-mlflow`) |
+| `azureml://` | The URI rewritten to `https://` (same host and path) |

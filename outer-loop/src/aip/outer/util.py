@@ -3,32 +3,29 @@ Shared utilities for the Outer Loop Action.
 
 Provides:
 - MLFlowBackend: Protocol defining the shared interface for all MLFlow backends
-- MLFlowProxyClient: authenticated HTTP client for the MLFlow proxy API (https://)
-- AzureMLBackend: MLFlow backend using direct MLflow REST API calls against an AzureML workspace
-- create_mlflow_client: factory that selects the correct backend from the URL/URI scheme
+- MLflowRestBackend: MLFlow backend using the standard MLflow REST API over HTTP(S)
+- create_mlflow_client: factory that maps ``https://``/``http://`` URLs and
+  ``azureml://`` tracking URIs onto :class:`MLflowRestBackend`
+- BearerToken / resolve_bearer_token: validation of the caller-supplied bearer token
 - github_output / github_step_summary: GitHub Actions integration helpers
-- Auth helpers (token credential, DefaultAzureCredential passthrough)
 """
 
 import os
 import time
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
+import jwt
 import requests
 import typer
 import yaml
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from azure.core.credentials import AccessToken
-from azure.identity import DefaultAzureCredential
 
-AML_SCOPE = "https://ml.azure.com/.default"
-MANAGEMENT_SCOPE = "https://management.azure.com/.default"
-
-# Proxy run listing is unpaged, so child lookups fetch a single large page.
-CHILD_RUN_SEARCH_LIMIT = 1000
+TOKEN_EXPIRY_MARGIN_SECONDS = 60
 
 
 # ---------------------------------------------------------------------------
@@ -100,36 +97,100 @@ class MLFlowBackend(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Credential helpers (mirror of inner-loop pattern)
+# Bearer token
 # ---------------------------------------------------------------------------
 
-class Credential:
+class TokenError(ValueError):
+    """The supplied bearer token is missing, unusable or expired."""
+
+
+def _format_epoch(epoch_seconds: int) -> str:
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat()
+
+
+@dataclass(frozen=True)
+class BearerToken:
+    """A caller-supplied bearer token together with its effective expiry (epoch seconds)."""
+
+    value: str
+    expires_on: int
+
+    def __repr__(self) -> str:
+        return f"BearerToken(expires_on={_format_epoch(self.expires_on)})"
+
+    def is_expired(self, now: Optional[float] = None) -> bool:
+        current = time.time() if now is None else now
+        return self.expires_on - current < TOKEN_EXPIRY_MARGIN_SECONDS
+
+    def ensure_valid(self) -> None:
+        if self.is_expired():
+            raise TokenError(
+                f"token expired (or expires within {TOKEN_EXPIRY_MARGIN_SECONDS} s) "
+                f"at {_format_epoch(self.expires_on)}; obtain a fresh token"
+            )
+
+
+def jwt_expiry(token: str) -> Optional[int]:
+    """Return the ``exp`` claim of a JWT, or ``None`` if the token is not a JWT with ``exp``.
+
+    The signature is not verified: the MLflow server is responsible for that.
+    The claim is only read to fail early on tokens that are already expired.
     """
-    Credential wrapper that returns a pre-fetched access token.
-    Used when running inside GitHub Actions where a token is injected.
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False})
+    except jwt.PyJWTError:
+        return None
+    exp = claims.get("exp")
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        return None
+    return int(exp)
+
+
+def resolve_bearer_token(token: Optional[str], expires_on: Optional[str] = None) -> BearerToken:
+    """Validate the caller-supplied token and determine its effective expiry.
+
+    The effective expiry is the earliest of the JWT ``exp`` claim and ``expires_on``
+    (epoch seconds). At least one of them must be available.
+
+    Raises:
+        TokenError: when the token is missing, ``expires_on`` is malformed, no expiry
+            can be determined, or the token has already expired.
     """
+    if not token or not token.strip():
+        raise TokenError("--token is required")
+    value = token.strip()
 
-    def __init__(self, access_token: str, expires_on: int):
-        self._access_token = AccessToken(token=access_token, expires_on=expires_on)
+    user_expiry: Optional[int] = None
+    if expires_on is not None and expires_on.strip():
+        try:
+            user_expiry = int(expires_on.strip())
+        except ValueError:
+            raise TokenError("--expires-on must be an integer number of epoch seconds") from None
 
-    def get_token(self, *scopes: str, **kwargs) -> AccessToken:
-        return self._access_token
+    expiries = [e for e in (jwt_expiry(value), user_expiry) if e is not None]
+    if not expiries:
+        raise TokenError(
+            "token is not a JWT with an 'exp' claim; supply --expires-on (epoch seconds)"
+        )
+
+    bearer = BearerToken(value=value, expires_on=min(expiries))
+    bearer.ensure_valid()
+    return bearer
 
 
-def get_credential(token: Optional[str] = None, expires_on: Optional[int] = None):
-    """Return a credential object suitable for Azure SDK calls."""
-    if token and expires_on:
-        return Credential(token, int(expires_on))
-    return DefaultAzureCredential()
-
-
-def get_bearer_token(credential, scope: str = MANAGEMENT_SCOPE) -> str:
-    """Obtain a raw bearer token string from a credential."""
-    return credential.get_token(scope).token
+def require_bearer_token(token: Optional[str], expires_on: Optional[str], log_prefix: str) -> BearerToken:
+    """Resolve the bearer token for a command, exiting with code 1 on any token error."""
+    try:
+        bearer = resolve_bearer_token(token, expires_on)
+    except TokenError as exc:
+        typer.echo(f"{log_prefix} ERROR: {exc}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(f"{log_prefix} Token valid until: {_format_epoch(bearer.expires_on)}")
+    return bearer
 
 
 # ---------------------------------------------------------------------------
-# MLFlow Proxy client
+# MLflow REST backend
 # ---------------------------------------------------------------------------
 
 def _make_requests_session() -> requests.Session:
@@ -147,138 +208,7 @@ def _make_requests_session() -> requests.Session:
     return session
 
 
-class MLFlowProxyClient:
-    """
-    Thin HTTP client for the MLFlow proxy API.
-
-    Uses a persistent ``requests.Session`` with automatic retry on transient
-    server errors.  The bearer token is cached and only refreshed when it is
-    within 60 seconds of expiry.
-    All methods raise ``requests.HTTPError`` on non-2xx responses (except where
-    noted).
-    """
-
-    def __init__(self, base_url: str, credential, scope: str = MANAGEMENT_SCOPE):
-        if not base_url.startswith(("http://", "https://")):
-            raise ValueError(
-                f"mlflow-proxy-url must be an http(s) URL of the MLFlow proxy service "
-                f"(e.g. https://mlflow-proxy.cluster.aurora.equinor.com), got: {base_url!r}. "
-                "This input is NOT the AzureML MLflow tracking URI (azureml://...); "
-                "it is the URL of the FastAPI mlflow-proxy that fronts MLflow."
-            )
-        self._base_url = base_url.rstrip("/")
-        self._credential = credential
-        self._scope = scope
-        self._session = _make_requests_session()
-        self._cached_token = None
-
-    def _headers(self) -> dict[str, str]:
-        now = int(time.time())
-        if self._cached_token is None or self._cached_token.expires_on - now < 60:
-            self._cached_token = self._credential.get_token(self._scope)
-        return {
-            "Authorization": f"Bearer {self._cached_token.token}",
-            "Accept": "application/json",
-        }
-
-    def _get(self, path: str, params: Optional[dict] = None) -> Any:
-        url = f"{self._base_url}{path}"
-        response = self._session.get(url, headers=self._headers(), params=params, timeout=30)
-        response.raise_for_status()
-        return response.json()
-
-    # --- Experiment endpoints ---
-
-    def get_experiment_runs(
-        self, experiment_name: str, max_results: int = 100, run_name: Optional[str] = None
-    ) -> list[dict]:
-        """Return a list of runs for an experiment, most recent first.
-
-        If ``run_name`` is supplied, the returned list is filtered client-side to runs
-        whose ``mlflow.runName`` tag matches exactly.  The proxy API is external and
-        uncontrolled, so filtering is performed after fetching.
-        """
-        data = self._get(
-            f"/experiments/{experiment_name}/runs",
-            params={"max_results": max_results},
-        )
-        runs = data.get("runs", [])
-        if run_name:
-            runs = [r for r in runs if r.get("tags", {}).get("mlflow.runName") == run_name]
-        return runs
-
-    def get_run_metrics(self, run_id: str) -> dict[str, float]:
-        """Return the final metric values for a single run."""
-        data = self._get(f"/runs/{run_id}/metrics")
-        return data.get("metrics", {})
-
-    def compare_runs(
-        self,
-        experiment_name: str,
-        run_ids: Optional[list[str]] = None,
-        run_name: Optional[str] = None,
-        child_run_name: Optional[str] = None,
-    ) -> list[dict]:
-        """Return comparison data for multiple runs in an experiment.
-
-        ``run_ids`` takes precedence over name-based filtering when supplied.
-
-        Raises ``RuntimeError`` with a clear message if the proxy does not
-        support the ``/experiments/{name}/compare`` endpoint (HTTP 404).
-        """
-        params: dict[str, Any] = {}
-        if run_ids:
-            params["run_ids"] = ",".join(run_ids)
-        try:
-            data = self._get(f"/experiments/{experiment_name}/compare", params=params)
-        except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 404:
-                raise RuntimeError(
-                    f"The MLFlow proxy does not support the /experiments/compare endpoint "
-                    f"(received 404 for experiment '{experiment_name}'). "
-                    "Ensure your proxy version supports server-side run comparison."
-                ) from exc
-            raise
-        runs = data.get("runs", [])
-        if child_run_name and not run_ids:
-            parent_ids = {
-                run["run_id"] for run in runs if run_display_name(run) == run_name
-            }
-            return _select_child_runs(runs, parent_ids, child_run_name)
-        if run_name and not run_ids:
-            runs = [r for r in runs if r.get("tags", {}).get("mlflow.runName") == run_name]
-        return runs
-
-    def get_child_runs(
-        self,
-        experiment_name: str,
-        parent_run_id: str,
-        child_run_name: Optional[str] = None,
-    ) -> list[dict]:
-        """Return the child runs of ``parent_run_id``, optionally filtered by display name.
-
-        The proxy exposes no parent-scoped endpoint, so children are selected
-        client-side from the experiment run list.
-        """
-        runs = self.get_experiment_runs(experiment_name, max_results=CHILD_RUN_SEARCH_LIMIT)
-        return _select_child_runs(runs, {parent_run_id}, child_run_name)
-
-    def get_run_artifacts(self, run_id: str) -> list[dict]:
-        """List artifacts for a run."""
-        data = self._get(f"/runs/{run_id}/artifacts")
-        return data.get("artifacts", [])
-
-    def get_monitoring_run(self, experiment_name: str) -> Optional[dict]:
-        """Return the latest monitoring run for a model/experiment."""
-        runs = self.get_experiment_runs(experiment_name, max_results=1)
-        return runs[0] if runs else None
-
-
-# ---------------------------------------------------------------------------
-# AzureML backend (azureml:// tracking URI → direct MLflow REST API over HTTPS)
-# ---------------------------------------------------------------------------
-
-def _azureml_uri_to_https(uri: str) -> str:
+def azureml_uri_to_https(uri: str) -> str:
     """Convert an ``azureml://`` tracking URI to the equivalent ``https://`` REST base URL.
 
     The two schemes share the same host and path, so the conversion is a simple
@@ -314,32 +244,31 @@ def _select_child_runs(
     ]
 
 
-class AzureMLBackend:
-    """MLFlow backend that talks directly to an AzureML workspace via the MLflow REST API.
+class MLflowRestBackend:
+    """MLFlow backend that talks to any MLflow tracking server via the MLflow REST API.
 
-    The ``azureml://`` tracking URI encodes the same host and path as the HTTPS
-    MLflow tracking server, so authentication reuses the same bearer-token
-    mechanism as :class:`MLFlowProxyClient` (scope: ``AML_SCOPE``).  This avoids
-    any dependency on the ``azureml-mlflow`` SDK plugin and its internal
-    credential chain.
+    ``base_url`` is the tracking server root (it may include a path prefix, e.g.
+    ``https://host/my-mlflow``); requests go to ``<base_url>/api/2.0/mlflow/...``.
+    Every request carries ``Authorization: Bearer <token>`` with the caller-supplied
+    token, exactly as ``MlflowClient`` does with ``MLFLOW_TRACKING_TOKEN``.
 
     MLflow REST API reference:
     https://mlflow.org/docs/latest/rest-api.html
     """
 
-    def __init__(self, tracking_uri: str, credential):
-        self._base_url = _azureml_uri_to_https(tracking_uri).rstrip("/")
-        self._credential = credential
-        self._scope = AML_SCOPE
+    def __init__(self, base_url: str, token: BearerToken):
+        self._base_url = base_url.rstrip("/")
+        self._token = token
         self._session = _make_requests_session()
-        self._cached_token = None
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
 
     def _headers(self) -> dict[str, str]:
-        now = int(time.time())
-        if self._cached_token is None or self._cached_token.expires_on - now < 60:
-            self._cached_token = self._credential.get_token(self._scope)
+        self._token.ensure_valid()
         return {
-            "Authorization": f"Bearer {self._cached_token.token}",
+            "Authorization": f"Bearer {self._token.value}",
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
@@ -365,7 +294,7 @@ class AzureMLBackend:
         """
         info = run.get("info", {})
         data = run.get("data", {})
-        # AzureML's MLflow proxy omits "value" for NaN metrics, since JSON has no NaN.
+        # NaN metrics are returned without "value", since JSON has no NaN.
         metrics = {m["key"]: m["value"] for m in data.get("metrics", []) if "value" in m}
         tags = {t["key"]: t["value"] for t in data.get("tags", [])}
         return {
@@ -425,7 +354,7 @@ class AzureMLBackend:
         """Return the final metric values for a single run."""
         data = self._get("/api/2.0/mlflow/runs/get", params={"run_id": run_id})
         run_data = data.get("run", {}).get("data", {})
-        # AzureML's MLflow proxy omits "value" for NaN metrics, since JSON has no NaN.
+        # NaN metrics are returned without "value", since JSON has no NaN.
         return {m["key"]: m["value"] for m in run_data.get("metrics", []) if "value" in m}
 
     def compare_runs(
@@ -477,22 +406,22 @@ class AzureMLBackend:
 # Backend factory
 # ---------------------------------------------------------------------------
 
-def create_mlflow_client(url: str, credential) -> MLFlowBackend:
-    """Return the correct MLFlow backend based on the URL/URI scheme.
+def create_mlflow_client(url: str, token: BearerToken) -> MLFlowBackend:
+    """Return an :class:`MLflowRestBackend` for an MLflow tracking URL or URI.
 
-    - ``https://`` or ``http://`` → :class:`MLFlowProxyClient` (HTTP proxy service)
-    - ``azureml://``              → :class:`AzureMLBackend`    (AzureML tracking URI)
+    - ``https://`` or ``http://`` → used as the tracking server root as-is
+    - ``azureml://``              → rewritten to ``https://`` (AzureML workspace tracking URI)
 
     Raises :class:`ValueError` for any other scheme.
     """
     if url.startswith(("http://", "https://")):
-        return MLFlowProxyClient(url, credential)
+        return MLflowRestBackend(url, token)
     if url.startswith("azureml://"):
-        return AzureMLBackend(url, credential)
+        return MLflowRestBackend(azureml_uri_to_https(url), token)
     raise ValueError(
-        f"mlflow-url must be an https:// proxy URL or an azureml:// tracking URI, got: {url!r}. "
+        f"mlflow-url must be an https:// MLflow tracking URL or an azureml:// tracking URI, got: {url!r}. "
         "Examples:\n"
-        "  https://mlflow-proxy.cluster.aurora.equinor.com\n"
+        "  https://mlflow.example.com/my-mlflow\n"
         "  azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/<sub>/..."
     )
 

@@ -13,10 +13,10 @@ import typer
 from .util import (
     create_mlflow_client,
     empty_string_to_none,
-    get_credential,
     github_output,
     github_step_summary,
     load_yaml_file,
+    require_bearer_token,
 )
 
 app = typer.Typer()
@@ -25,18 +25,18 @@ app = typer.Typer()
 @app.command()
 def candidates(
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
+    token: Annotated[str, typer.Option("--token")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
     ranking_criteria_file: Annotated[str, typer.Option("--ranking-criteria-file")],
     run_ids: Annotated[Optional[str], typer.Option("--run-ids", callback=empty_string_to_none)] = None,
     run_name: Annotated[Optional[str], typer.Option("--run-name", callback=empty_string_to_none)] = None,
     child_run_name: Annotated[Optional[str], typer.Option("--child-run-name", callback=empty_string_to_none)] = None,
-    token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
 ):
     """
     Compare and rank training run candidates by weighted metrics (US2 — Candidate Comparison).
 
-    Queries the MLFlow proxy for runs in the experiment (or a specified subset),
+    Queries MLFlow for runs in the experiment (or a specified subset),
     scores each run according to a weighted ranking criteria YAML, and outputs
     the best run ID together with a ranked comparison table as a GitHub step summary.
 
@@ -90,9 +90,8 @@ def candidates(
     if child_run_name:
         typer.echo(f"[compare candidates] Scoped to child run name: {child_run_name!r}")
 
-    expires_on_int = int(expires_on) if expires_on else None
-    credential = get_credential(token, expires_on_int)
-    client = create_mlflow_client(mlflow_url, credential)
+    bearer = require_bearer_token(token, expires_on, "[compare candidates]")
+    client = create_mlflow_client(mlflow_url, bearer)
 
     runs = client.compare_runs(
         experiment_name,

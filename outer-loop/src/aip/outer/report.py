@@ -12,9 +12,9 @@ import typer
 from .util import (
     create_mlflow_client,
     empty_string_to_none,
-    get_credential,
     github_output,
     github_step_summary,
+    require_bearer_token,
 )
 
 app = typer.Typer()
@@ -23,14 +23,14 @@ app = typer.Typer()
 @app.command()
 def experiment(
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
+    token: Annotated[str, typer.Option("--token")],
     experiment_name: Annotated[str, typer.Option("--experiment-name")],
-    token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
 ):
     """
     Generate an experiment summary and post it as a GitHub step summary (US3 — Experiment Tracking).
 
-    Fetches the most recent runs from the MLFlow proxy, computes a run count and
+    Fetches the most recent runs from MLFlow, computes a run count and
     metric trend (latest run vs. the run before it), and renders a Markdown report.
     """
     if not mlflow_url:
@@ -42,9 +42,8 @@ def experiment(
 
     typer.echo(f"[report experiment] Experiment: {experiment_name}")
 
-    expires_on_int = int(expires_on) if expires_on else None
-    credential = get_credential(token, expires_on_int)
-    client = create_mlflow_client(mlflow_url, credential)
+    bearer = require_bearer_token(token, expires_on, "[report experiment]")
+    client = create_mlflow_client(mlflow_url, bearer)
 
     runs = client.get_experiment_runs(experiment_name, max_results=20)
     typer.echo(f"[report experiment] Found {len(runs)} recent runs")

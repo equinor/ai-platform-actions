@@ -126,7 +126,7 @@ weights:
 
 ## `policy.yaml` — used by `evaluate policy`
 
-Defines thresholds for monitoring signals and the action to recommend when each threshold is breached. The policy is evaluated against the latest monitoring run fetched from the MLFlow proxy.
+Defines thresholds for monitoring signals and the action to recommend when each threshold is breached. The policy is evaluated against the latest monitoring run fetched from MLFlow.
 
 ### Structure
 

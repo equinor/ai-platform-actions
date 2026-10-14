@@ -2,7 +2,7 @@
 Check commands for Outer Loop Action.
 
 Verbs:
-  check monitoring — read latest drift / quality signals from MLFlow proxy and emit a report
+  check monitoring — read latest drift / quality signals from MLFlow and emit a report
 """
 
 import json
@@ -15,9 +15,9 @@ from .evidence import validate_monitoring_evidence
 from .util import (
     create_mlflow_client,
     empty_string_to_none,
-    get_credential,
     github_output,
     github_step_summary,
+    require_bearer_token,
 )
 
 app = typer.Typer()
@@ -35,6 +35,7 @@ KNOWN_SIGNALS = {
 @app.command()
 def monitoring(
     mlflow_url: Annotated[str, typer.Option("--mlflow-url")],
+    token: Annotated[str, typer.Option("--token")],
     model_name: Annotated[Optional[str], typer.Option("--model-name", callback=empty_string_to_none)] = None,
     experiment_name: Annotated[Optional[str], typer.Option("--experiment-name", callback=empty_string_to_none)] = None,
     model_version: Annotated[Optional[str], typer.Option("--model-version", callback=empty_string_to_none)] = None,
@@ -42,11 +43,10 @@ def monitoring(
     deployment_name: Annotated[Optional[str], typer.Option("--deployment-name", callback=empty_string_to_none)] = None,
     max_evidence_age_minutes: Annotated[int, typer.Option("--max-evidence-age-minutes", min=1)] = 1440,
     min_sample_count: Annotated[int, typer.Option("--min-sample-count", min=1)] = 1,
-    token: Annotated[Optional[str], typer.Option("--token", callback=empty_string_to_none)] = None,
     expires_on: Annotated[Optional[str], typer.Option("--expires-on", callback=empty_string_to_none)] = None,
 ):
     """
-    Read latest monitoring signals from the MLFlow proxy and emit a drift/quality report (US8).
+    Read latest monitoring signals from MLFlow and emit a drift/quality report (US8).
 
     Monitoring signals are stored as metrics in a dedicated monitoring experiment
     named ``monitoring-<model-name>`` (or the experiment name supplied directly).
@@ -63,9 +63,8 @@ def monitoring(
 
     typer.echo(f"[check monitoring] Monitoring experiment: {monitoring_experiment}")
 
-    expires_on_int = int(expires_on) if expires_on else None
-    credential = get_credential(token, expires_on_int)
-    client = create_mlflow_client(mlflow_url, credential)
+    bearer = require_bearer_token(token, expires_on, "[check monitoring]")
+    client = create_mlflow_client(mlflow_url, bearer)
 
     monitoring_run = client.get_monitoring_run(monitoring_experiment)
 

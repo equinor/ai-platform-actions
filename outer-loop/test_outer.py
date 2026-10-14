@@ -29,15 +29,33 @@ sys.modules["azure.identity"] = MagicMock()
 sys.modules["azure.ai"] = MagicMock()
 sys.modules["azure.ai.ml"] = MagicMock()
 
+import jwt
 import pytest
 from typer.testing import CliRunner
 
 from aip.outer.compare import _compute_score
 from aip.outer.evaluate import _apply_policy, _matching_policy_rules, app as evaluate_app
 from aip.outer.main import app as outer_app
-from aip.outer.util import AzureMLBackend, MLFlowProxyClient, create_mlflow_client
+from aip.outer.util import (
+    BearerToken,
+    MLflowRestBackend,
+    TokenError,
+    create_mlflow_client,
+    resolve_bearer_token,
+)
 
 runner = CliRunner(mix_stderr=False)
+
+
+def _make_jwt(exp: int | None) -> str:
+    claims = {"aud": "api://example-app", "sub": "tester"}
+    if exp is not None:
+        claims["exp"] = exp
+    return jwt.encode(claims, "test-signing-key-of-sufficient-length-32b", algorithm="HS256")
+
+
+VALID_TOKEN = _make_jwt(int(datetime.now(timezone.utc).timestamp()) + 3600)
+FAR_FUTURE = BearerToken(value="test-token", expires_on=9999999999)
 
 
 # =============================================================================
@@ -256,13 +274,13 @@ class TestPolicyEvaluation:
             mock_client.get_monitoring_run.return_value = monitoring_run
             with (
                 patch("aip.outer.evaluate.create_mlflow_client", return_value=mock_client),
-                patch("aip.outer.evaluate.get_credential", return_value=MagicMock()),
             ):
                 result = runner.invoke(
                     evaluate_app,
                     [
                         "policy",
-                        "--mlflow-url", "https://proxy.example.com",
+                        "--mlflow-url", "https://mlflow.example.com",
+                        "--token", VALID_TOKEN,
                         "--policy-config-file", tmp_path,
                         "--model-name", "fraud-model",
                         "--model-version", "7",
@@ -371,14 +389,14 @@ class TestMonitoringCheck:
         mock_client.get_monitoring_run.return_value = monitoring_run
         with (
             patch("aip.outer.check.create_mlflow_client", return_value=mock_client),
-            patch("aip.outer.check.get_credential", return_value=MagicMock()),
         ):
             return runner.invoke(
                 outer_app,
                 [
                     "check",
                     "monitoring",
-                    "--mlflow-url", "https://proxy.example.com",
+                    "--mlflow-url", "https://mlflow.example.com",
+                    "--token", VALID_TOKEN,
                     "--model-name", "fraud-model",
                     "--model-version", "7",
                     "--endpoint-name", "fraud-batch",
@@ -421,8 +439,7 @@ class TestMonitoringCheck:
 class TestGateEvaluation:
     """Integration-style tests for the evaluate gate command.
 
-    The MLFlowProxyClient and get_credential are mocked so no network calls
-    are made.
+    The MLflow backend factory is mocked so no network calls are made.
     """
 
     @staticmethod
@@ -436,13 +453,13 @@ class TestGateEvaluation:
             mock_client.get_run_metrics.return_value = metrics
             with (
                 patch("aip.outer.evaluate.create_mlflow_client", return_value=mock_client),
-                patch("aip.outer.evaluate.get_credential", return_value=MagicMock()),
             ):
                 result = runner.invoke(
                     evaluate_app,
                     [
                         "gate",
-                        "--mlflow-url", "https://proxy.example.com",
+                        "--mlflow-url", "https://mlflow.example.com",
+                        "--token", VALID_TOKEN,
                         "--experiment-name", "test-exp",
                         "--thresholds-file", tmp_path,
                         "--run-id", run_id,
@@ -520,47 +537,178 @@ class TestGateEvaluation:
 class TestMLFlowClientFactory:
     """Tests for the backend factory function in util.py."""
 
-    def test_https_url_returns_proxy_client(self):
-        cred = MagicMock()
-        with patch("aip.outer.util.MLFlowProxyClient.__init__", return_value=None):
-            client = create_mlflow_client("https://proxy.example.com", cred)
-        assert isinstance(client, MLFlowProxyClient)
+    AZUREML_URI = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
 
-    def test_http_url_returns_proxy_client(self):
-        cred = MagicMock()
-        with patch("aip.outer.util.MLFlowProxyClient.__init__", return_value=None):
-            client = create_mlflow_client("http://localhost:5000", cred)
-        assert isinstance(client, MLFlowProxyClient)
+    def test_https_url_returns_rest_backend_with_url_unchanged(self):
+        client = create_mlflow_client("https://mlflow.example.com/team-mlflow/", FAR_FUTURE)
+        assert isinstance(client, MLflowRestBackend)
+        assert client.base_url == "https://mlflow.example.com/team-mlflow"
 
-    def test_azureml_uri_returns_azureml_backend(self):
-        cred = MagicMock()
-        uri = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
-        with patch("aip.outer.util._make_requests_session"):
-            client = create_mlflow_client(uri, cred)
-        assert isinstance(client, AzureMLBackend)
+    def test_http_url_returns_rest_backend(self):
+        client = create_mlflow_client("http://localhost:5000", FAR_FUTURE)
+        assert isinstance(client, MLflowRestBackend)
+        assert client.base_url == "http://localhost:5000"
+
+    def test_azureml_uri_is_rewritten_to_https(self):
+        client = create_mlflow_client(self.AZUREML_URI, FAR_FUTURE)
+        assert isinstance(client, MLflowRestBackend)
+        assert client.base_url == "https://" + self.AZUREML_URI[len("azureml://"):]
 
     def test_unknown_scheme_raises_value_error(self):
         with pytest.raises(ValueError, match="mlflow-url must be"):
-            create_mlflow_client("ftp://something.example.com", MagicMock())
+            create_mlflow_client("ftp://something.example.com", FAR_FUTURE)
 
 
 # =============================================================================
-# AzureMLBackend
+# Bearer token resolution
 # =============================================================================
 
-class TestAzureMLBackend:
-    """Tests for AzureMLBackend — uses HTTP mocks; no mlflow SDK dependency."""
+class TestResolveBearerToken:
+    """Tests for caller-supplied token validation and effective expiry."""
+
+    NOW = int(datetime.now(timezone.utc).timestamp())
+
+    def test_jwt_exp_is_used_when_expires_on_is_omitted(self):
+        token = _make_jwt(self.NOW + 3600)
+        bearer = resolve_bearer_token(token)
+        assert bearer.value == token
+        assert bearer.expires_on == self.NOW + 3600
+
+    def test_earlier_expires_on_takes_precedence_over_jwt_exp(self):
+        bearer = resolve_bearer_token(_make_jwt(self.NOW + 3600), str(self.NOW + 600))
+        assert bearer.expires_on == self.NOW + 600
+
+    def test_later_expires_on_does_not_extend_jwt_exp(self):
+        bearer = resolve_bearer_token(_make_jwt(self.NOW + 600), str(self.NOW + 3600))
+        assert bearer.expires_on == self.NOW + 600
+
+    def test_expired_jwt_fails_early(self):
+        with pytest.raises(TokenError, match="expired"):
+            resolve_bearer_token(_make_jwt(self.NOW - 10))
+
+    def test_past_expires_on_fails_early_even_if_jwt_is_valid(self):
+        with pytest.raises(TokenError, match="expired"):
+            resolve_bearer_token(_make_jwt(self.NOW + 3600), str(self.NOW - 10))
+
+    def test_token_expiring_within_margin_fails_early(self):
+        with pytest.raises(TokenError, match="expired"):
+            resolve_bearer_token(_make_jwt(self.NOW + 30))
+
+    def test_opaque_token_requires_expires_on(self):
+        with pytest.raises(TokenError, match="supply --expires-on"):
+            resolve_bearer_token("opaque-token")
+
+    def test_opaque_token_with_expires_on_is_accepted(self):
+        bearer = resolve_bearer_token("opaque-token", str(self.NOW + 3600))
+        assert bearer.expires_on == self.NOW + 3600
+
+    def test_jwt_without_exp_requires_expires_on(self):
+        with pytest.raises(TokenError, match="supply --expires-on"):
+            resolve_bearer_token(_make_jwt(None))
+
+    def test_missing_token_is_rejected(self):
+        with pytest.raises(TokenError, match="--token is required"):
+            resolve_bearer_token("  ")
+
+    def test_non_numeric_expires_on_is_rejected(self):
+        with pytest.raises(TokenError, match="epoch seconds"):
+            resolve_bearer_token(_make_jwt(self.NOW + 3600), "tomorrow")
+
+    def test_error_messages_and_repr_do_not_expose_the_token(self):
+        token = _make_jwt(self.NOW - 10)
+        with pytest.raises(TokenError) as error:
+            resolve_bearer_token(token)
+        assert token not in str(error.value)
+        assert "test-token" not in repr(FAR_FUTURE)
+
+
+class TestCommandTokenValidation:
+    """Commands fail before contacting MLflow when the token is unusable."""
+
+    def test_expired_token_exits_before_creating_client(self):
+        expired = _make_jwt(int(datetime.now(timezone.utc).timestamp()) - 10)
+        with patch("aip.outer.report.create_mlflow_client") as factory:
+            result = runner.invoke(
+                outer_app,
+                [
+                    "report", "experiment",
+                    "--mlflow-url", "https://mlflow.example.com",
+                    "--token", expired,
+                    "--experiment-name", "my-exp",
+                ],
+            )
+        assert result.exit_code == 1
+        assert "token expired" in result.stderr
+        assert expired not in result.stderr
+        factory.assert_not_called()
+
+    def test_missing_token_is_rejected_by_cli(self):
+        result = runner.invoke(
+            outer_app,
+            [
+                "report", "experiment",
+                "--mlflow-url", "https://mlflow.example.com",
+                "--experiment-name", "my-exp",
+            ],
+        )
+        assert result.exit_code == 2
+        assert "--token" in result.stderr
+
+
+# =============================================================================
+# MLflowRestBackend
+# =============================================================================
+
+class TestMLflowRestBackend:
+    """Tests for MLflowRestBackend — uses HTTP mocks; no mlflow SDK dependency."""
 
     AZUREML_URI = "azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
-    BASE_URL = "https://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/sub/resourceGroups/rg/providers/Microsoft.MachineLearningServices/workspaces/ws"
 
-    def _make_backend(self):
-        cred = MagicMock()
-        cred.get_token.return_value = MagicMock(token="test-token", expires_on=9999999999)
+    def _make_backend(self, url: str = AZUREML_URI, token: BearerToken = FAR_FUTURE):
         with patch("aip.outer.util._make_requests_session") as mock_session_factory:
             mock_session_factory.return_value = MagicMock()
-            backend = AzureMLBackend(self.AZUREML_URI, cred)
+            backend = create_mlflow_client(url, token)
         return backend
+
+    def test_requests_use_prefixed_base_url_and_bearer_token(self):
+        backend = self._make_backend("https://mlflow.example.com/team-mlflow/")
+        backend._session.get.return_value = MagicMock(
+            raise_for_status=lambda: None,
+            json=lambda: {"run": {"data": {"metrics": [{"key": "accuracy", "value": 0.9}]}}},
+        )
+
+        metrics = backend.get_run_metrics("r1")
+
+        assert metrics == {"accuracy": 0.9}
+        url = backend._session.get.call_args[0][0]
+        headers = backend._session.get.call_args[1]["headers"]
+        assert url == "https://mlflow.example.com/team-mlflow/api/2.0/mlflow/runs/get"
+        assert headers["Authorization"] == "Bearer test-token"
+
+    def test_request_fails_when_token_expires_during_run(self):
+        expired = BearerToken(value="test-token", expires_on=int(datetime.now(timezone.utc).timestamp()))
+        backend = self._make_backend(token=expired)
+
+        with pytest.raises(TokenError, match="expired"):
+            backend.get_run_metrics("r1")
+        backend._session.get.assert_not_called()
+
+    def test_child_runs_resolved_from_parent_run_id_tag(self):
+        backend = self._make_backend("https://mlflow.example.com")
+        backend.get_experiment_runs = MagicMock(return_value=[
+            MLflowRestBackend._normalize_run({
+                "info": {"run_id": "evaluate-1", "run_name": "evaluate_test"},
+                "data": {"tags": [{"key": "mlflow.parentRunId", "value": "pipeline-1"}]},
+            }),
+            MLflowRestBackend._normalize_run({
+                "info": {"run_id": "evaluate-2", "run_name": "evaluate_test"},
+                "data": {"tags": [{"key": "mlflow.parentRunId", "value": "pipeline-2"}]},
+            }),
+        ])
+
+        result = backend.get_child_runs("my-exp", "pipeline-1", child_run_name="evaluate_test")
+
+        assert [run["run_id"] for run in result] == ["evaluate-1"]
 
     def test_get_experiment_runs_returns_normalized_dicts(self):
         backend = self._make_backend()
@@ -868,7 +1016,7 @@ class TestAzureMLBackend:
         assert [run["run_id"] for run in result] == ["evaluate-1"]
 
     def test_normalize_run_preserves_azureml_parent_run_id(self):
-        normalized = AzureMLBackend._normalize_run({
+        normalized = MLflowRestBackend._normalize_run({
             "info": {
                 "run_id": "evaluate-1",
                 "status": "FINISHED",
@@ -894,90 +1042,6 @@ class TestAzureMLBackend:
 
 
 # =============================================================================
-# MLFlowProxyClient — run_name client-side filter
-# =============================================================================
-
-class TestMLFlowProxyClientRunNameFilter:
-    """Tests for client-side run_name filtering in MLFlowProxyClient."""
-
-    def _make_client(self):
-        cred = MagicMock()
-        cred.get_token.return_value = MagicMock(token="tok", expires_on=9999999999)
-        with patch("aip.outer.util._make_requests_session") as mock_factory:
-            mock_factory.return_value = MagicMock()
-            client = MLFlowProxyClient("https://proxy.example.com", cred)
-        return client
-
-    def test_get_experiment_runs_filters_by_run_name(self):
-        client = self._make_client()
-        client._session.get.return_value = MagicMock(
-            raise_for_status=lambda: None,
-            json=lambda: {"runs": [
-                {"run_id": "r1", "tags": {"mlflow.runName": "baseline-v2"}},
-                {"run_id": "r2", "tags": {"mlflow.runName": "experiment-x"}},
-                {"run_id": "r3", "tags": {"mlflow.runName": "baseline-v2"}},
-            ]},
-        )
-
-        runs = client.get_experiment_runs("my-exp", run_name="baseline-v2")
-
-        assert [r["run_id"] for r in runs] == ["r1", "r3"]
-
-    def test_get_experiment_runs_no_run_name_returns_all(self):
-        client = self._make_client()
-        client._session.get.return_value = MagicMock(
-            raise_for_status=lambda: None,
-            json=lambda: {"runs": [
-                {"run_id": "r1", "tags": {"mlflow.runName": "a"}},
-                {"run_id": "r2", "tags": {"mlflow.runName": "b"}},
-            ]},
-        )
-
-        runs = client.get_experiment_runs("my-exp")
-
-        assert len(runs) == 2
-
-    def test_compare_runs_filters_by_run_name_when_no_run_ids(self):
-        client = self._make_client()
-        client._session.get.return_value = MagicMock(
-            raise_for_status=lambda: None,
-            json=lambda: {"runs": [
-                {"run_id": "r1", "tags": {"mlflow.runName": "target"}},
-                {"run_id": "r2", "tags": {"mlflow.runName": "other"}},
-            ]},
-        )
-
-        runs = client.compare_runs("my-exp", run_name="target")
-
-        assert [r["run_id"] for r in runs] == ["r1"]
-
-    def test_get_child_runs_selects_named_children_of_parent(self):
-        client = self._make_client()
-        client._session.get.return_value = MagicMock(
-            raise_for_status=lambda: None,
-            json=lambda: {"runs": [
-                {"run_id": "pipeline-1", "tags": {"mlflow.runName": "daily-pipeline"}},
-                {"run_id": "evaluate-1", "tags": {
-                    "mlflow.runName": "evaluate_test",
-                    "mlflow.parentRunId": "pipeline-1",
-                }},
-                {"run_id": "train-1", "tags": {
-                    "mlflow.runName": "train",
-                    "mlflow.parentRunId": "pipeline-1",
-                }},
-                {"run_id": "evaluate-2", "tags": {
-                    "mlflow.runName": "evaluate_test",
-                    "mlflow.parentRunId": "pipeline-2",
-                }},
-            ]},
-        )
-
-        runs = client.get_child_runs("my-exp", "pipeline-1", child_run_name="evaluate_test")
-
-        assert [r["run_id"] for r in runs] == ["evaluate-1"]
-
-
-# =============================================================================
 # compare candidates CLI — run-name option
 # =============================================================================
 
@@ -996,14 +1060,14 @@ class TestCompareCandidatesRunName:
             mock_client.compare_runs.return_value = mock_runs
             with (
                 patch("aip.outer.compare.create_mlflow_client", return_value=mock_client),
-                patch("aip.outer.compare.get_credential", return_value=MagicMock()),
             ):
                 result = runner.invoke(
                     outer_app,
                     [
                         "compare",
                         "candidates",
-                        "--mlflow-url", "https://proxy.example.com",
+                        "--mlflow-url", "https://mlflow.example.com",
+                        "--token", VALID_TOKEN,
                         "--experiment-name", "my-exp",
                         "--ranking-criteria-file", tmp,
                     ] + extra_args,
@@ -1086,13 +1150,13 @@ class TestGateChildRunResolution:
             mock_client.get_run_metrics.return_value = metrics or {"accuracy": 0.9}
             with (
                 patch("aip.outer.evaluate.create_mlflow_client", return_value=mock_client),
-                patch("aip.outer.evaluate.get_credential", return_value=MagicMock()),
             ):
                 result = runner.invoke(
                     evaluate_app,
                     [
                         "gate",
-                        "--mlflow-url", "https://proxy.example.com",
+                        "--mlflow-url", "https://mlflow.example.com",
+                        "--token", VALID_TOKEN,
                         "--experiment-name", "my-exp",
                         "--thresholds-file", tmp,
                     ] + extra_args,
