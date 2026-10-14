@@ -42,6 +42,7 @@ UNSUPPORTED_INPUTS = frozenset({
 })
 
 COMMON_OPTIONS = ("token", "expires-on", "mlflow-url")
+COMMON_REQUIRED_INPUTS = ("token", "mlflow-url")
 MONITORING_OPTIONS = (
     "experiment-name",
     "model-name",
@@ -82,7 +83,7 @@ def _spec(
     options = COMMON_OPTIONS + option_inputs
     return CommandSpec(
         option_inputs=options,
-        required_inputs=frozenset({"verb", "subject", *required_inputs}),
+        required_inputs=frozenset({"verb", "subject", *COMMON_REQUIRED_INPUTS, *required_inputs}),
         required_alternatives=tuple(
             frozenset(alternatives) for alternatives in required_alternatives
         ),
@@ -95,12 +96,12 @@ COMMAND_SPECS = {
         "run-id",
         "child-run-name",
         "thresholds-file",
-        required_inputs=("mlflow-url", "experiment-name", "thresholds-file"),
+        required_inputs=("experiment-name", "thresholds-file"),
     ),
     ("evaluate", "policy"): _spec(
         *MONITORING_OPTIONS,
         "policy-config-file",
-        required_inputs=("mlflow-url", "policy-config-file"),
+        required_inputs=("policy-config-file",),
         required_alternatives=(("experiment-name", "model-name"),),
     ),
     ("compare", "candidates"): _spec(
@@ -109,15 +110,15 @@ COMMAND_SPECS = {
         "run-name",
         "child-run-name",
         "ranking-criteria-file",
-        required_inputs=("mlflow-url", "experiment-name", "ranking-criteria-file"),
+        required_inputs=("experiment-name", "ranking-criteria-file"),
     ),
     ("report", "experiment"): _spec(
         "experiment-name",
-        required_inputs=("mlflow-url", "experiment-name"),
+        required_inputs=("experiment-name",),
     ),
     ("check", "monitoring"): _spec(
         *MONITORING_OPTIONS,
-        required_inputs=("mlflow-url",),
+        required_inputs=(),
         required_alternatives=(("experiment-name", "model-name"),),
     ),
 }

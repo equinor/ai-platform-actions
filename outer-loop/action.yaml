@@ -13,18 +13,27 @@ inputs:
 
   # --- Authentication ---
   token:
-    description: "Access token from azLogin action. Required unless running locally."
-    required: false
+    description: |
+      Bearer token sent as "Authorization: Bearer <token>" on every MLflow request.
+      Its audience/content depends on mlflow-url: for azureml:// tracking URIs a token
+      from `az account get-access-token` (e.g. --resource https://ml.azure.com) is used;
+      for an https:// MLflow server behind an Entra ID app registration, request a token
+      for that application (e.g. scope api://<app-id>/.default).
+    required: true
   expires-on:
-    description: "Token expiry epoch seconds from azLogin action."
+    description: |
+      Optional token expiry as epoch seconds. When the token is a JWT its "exp" claim is used;
+      if expires-on is earlier, it takes precedence. Required only for non-JWT tokens.
     required: false
 
   # --- MLFlow backend ---
   mlflow-url:
     description: |
-      MLFlow backend URL or AzureML tracking URI.
-      Accepts an https:// proxy URL (e.g. https://mlflow-proxy.cluster.aurora.equinor.com)
-      or an azureml:// tracking URI from an AzureML workspace
+      MLflow tracking URL or AzureML tracking URI. All URLs are accessed through the standard
+      MLflow REST API (<mlflow-url>/api/2.0/mlflow/...).
+      Accepts an https:// MLflow tracking server URL, optionally with a path prefix
+      (e.g. https://mlflow.example.com/my-mlflow), or an azureml:// tracking URI from an AzureML
+      workspace, which is rewritten to https://
       (e.g. azureml://swedencentral.api.azureml.ms/mlflow/v1.0/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>).
     required: true
 
